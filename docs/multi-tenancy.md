@@ -120,12 +120,14 @@ autorizados mediante `scopeWithoutTenantScope()`.
 
 ### 3.4 Policies
 
-`app/Policies/TenantPolicy.php` (se refuerza el scope, nunca al revés):
+`app/Policies/TenantPolicy.php` (capa programática: `authorize()` y `can:viewAny` del index;
+**las rutas no usan policies** para show/update/switch, el enforcement efectivo lo hacen los
+Application Services + controller → **404/409**, ver §4):
 
 ```php
 viewAny(User $user): bool                       // true (la lista se filtra por membresía)
-view(User $user, Tenant $tenant): bool          // belongsToTenant (404 si no)
-update(User $user, Tenant $tenant): bool        // belongsToTenant (404 si no)
+view(User $user, Tenant $tenant): bool          // belongsToTenant
+update(User $user, Tenant $tenant): bool        // belongsToTenant
 switch(User $user, Tenant $tenant): bool        // belongsToTenant && isActive
 ```
 
@@ -142,10 +144,11 @@ Nunca se acepta `tenant_id` desde el request (se ignora o se rechaza — test
 
 - **Lectura de entidad de otro tenant**: el scope la excluye → `ModelNotFoundException` → **404**.
 - **Escritura/update sobre entidad de otro tenant**: 404 (no existe desde la perspectiva del tenant).
-- **Policies**: retorno `403` cuando aplique (p. ej. `switch` de un tenant inactivo → 409).
+- **Recurso raíz `tenants`**: `show`/`update`/`switch` NO usan policy en la ruta; el controller
+  valida via `TenantService`/`SwitchTenant` (`belongsToTenant` + tenant activo). No-miembro /
+  no-activo → **404** (oculta existencia, nunca 403); miembro de tenant suspendido → **409**.
+- **Policies**: quedan como capa programática (`authorize()`); no producen oráculo 403 en rutas.
 - **Regla**: nunca revelar la existencia de datos ajenos. Preferir **404** en lecturas.
-- El recurso raíz `tenants` (sin scope propio): el controller valida SIEMPRE que el usuario
-  pertenezca a ese tenant vía `tenant_users` (policy + servicio) antes de devolver nada.
 - **Switch** (ADR-023): no-miembro → 404; miembro de tenant suspendido → 409 `TENANT_NOT_ACTIVE`.
 
 ## 5. Aislamiento en colas, eventos y notificaciones

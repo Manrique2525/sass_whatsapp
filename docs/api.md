@@ -82,9 +82,9 @@ Todos los recursos de negocio operan sobre el **tenant activo** del usuario. Las
 | Método | Ruta | Descripción | Detalle |
 |---|---|---|---|
 | GET | `/api/v1/tenants` | Tenants disponibles (solo activos) + actual | `{tenants: TenantResource[], current_tenant_id}`. `can:viewAny` (filtra por membresía) |
-| GET | `/api/v1/tenants/{tenant}` | Perfil del tenant activo | Middleware `tenant` + `can:view`. Solo el tenant activo es visible (otro tenant al que se pertenezca requiere `switch`); no-miembro/no-activo → **404** |
-| PUT | `/api/v1/tenants/{tenant}` | Actualiza `name/timezone/locale` | Middleware `tenant` + `can:update`. Solo tenant activo → 404 en otro caso. Audita `tenant.updated`. Body: `{name, timezone, locale}` |
-| POST | `/api/v1/tenants/{tenant}/switch` | Cambia el tenant activo | `can:switch` (membresía + activo). No-miembro → **404**; tenant suspendido → **409** `TENANT_NOT_ACTIVE`. Audita `tenant.switched` + evento `TenantSwitched`. Respuesta: `{message, current_tenant, current_tenant_id}` |
+| GET | `/api/v1/tenants/{tenant}` | Perfil del tenant activo | Middleware `tenant`. Enforcement vía `TenantService` + controller. Solo el tenant activo es visible (otro tenant al que se pertenezca requiere `switch`); no-miembro/no-activo → **404** |
+| PUT | `/api/v1/tenants/{tenant}` | Actualiza `name/timezone/locale` | Middleware `tenant`. Enforcement vía `TenantService` + controller. Solo tenant activo → 404 en otro caso. Audita `tenant.updated`. Body: `{name, timezone, locale}` |
+| POST | `/api/v1/tenants/{tenant}/switch` | Cambia el tenant activo | Enforcement vía `SwitchTenant` + controller. No-miembro → **404**; tenant suspendido → **409** `TENANT_NOT_ACTIVE`. Audita `tenant.switched` + evento `TenantSwitched`. Respuesta: `{message, current_tenant, current_tenant_id}` |
 
 `TenantResource`: `{id, name, slug, status, timezone, locale, role (rol del usuario en el
 pivot, si aplica), created_at}`.

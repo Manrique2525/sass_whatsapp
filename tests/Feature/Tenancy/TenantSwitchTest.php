@@ -13,9 +13,10 @@ test('TEST 4: un usuario no puede cambiar a un tenant del que no es miembro', fu
     $tenant = Tenant::factory()->create();
     $user = User::factory()->create();
 
+    // 404 (no 403): no se revela la existencia del tenant (ADR-010).
     $this->actingAs($user)
         ->postJson('/api/v1/tenants/'.$tenant->id.'/switch')
-        ->assertStatus(403);
+        ->assertStatus(404);
 
     expect($user->fresh()->current_tenant_id)->toBeNull();
 });
@@ -60,9 +61,11 @@ test('el switch sobre un tenant suspendido es rechazado', function (): void {
     $user = User::factory()->create();
     $user->tenants()->attach($tenant, ['role' => 'owner']);
 
+    // El miembro conoce su propio tenant suspendido: 409, no 404 (ADR-023).
     $this->actingAs($user)
         ->postJson('/api/v1/tenants/'.$tenant->id.'/switch')
-        ->assertStatus(403);
+        ->assertStatus(409)
+        ->assertJson(['code' => 'TENANT_NOT_ACTIVE']);
 
     expect($user->fresh()->current_tenant_id)->toBeNull();
 });

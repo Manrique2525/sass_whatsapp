@@ -29,16 +29,17 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/', [TenantController::class, 'index'])
                 ->middleware('can:viewAny,'.Tenant::class);
 
-            Route::post('{tenant}/switch', [TenantController::class, 'switch'])
-                ->middleware('can:switch,tenant');
+            // La autorización efectiva la aplican los Application Services +
+            // controller: no-miembro/no-activo -> 404; suspendido -> 409
+            // (ocultar existencia, ver ADR-010/023). Las policies quedan como
+            // capa programática (authorize()) y para el index.
+            Route::post('{tenant}/switch', [TenantController::class, 'switch']);
 
             // Recursos del tenant bajo contexto `tenant`.
             Route::middleware('tenant')->group(function (): void {
-                Route::get('{tenant}', [TenantController::class, 'show'])
-                    ->middleware('can:view,tenant');
+                Route::get('{tenant}', [TenantController::class, 'show']);
 
-                Route::put('{tenant}', [TenantController::class, 'update'])
-                    ->middleware('can:update,tenant');
+                Route::put('{tenant}', [TenantController::class, 'update']);
             });
         });
     });
