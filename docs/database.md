@@ -37,8 +37,8 @@ tenants
 |---|---|---|
 | `users` | Usuarios globales | email único; `password`, `email_verified_at`, `current_tenant_id` nullable FK→tenants (tenant activo) |
 | `tenants` | Negocios | `name`, `slug` único, `status`, `plan_id`, `timezone`, `locale` |
-| `tenant_users` | Relación user-tenant | `tenant_id`, `user_id`, `role` (owner/admin/agent), `status` (active/invited/disabled); UNIQUE `(tenant_id, user_id)` |
-| `tenant_invitations` | Invitaciones a un tenant | `tenant_id`, `email`, `role`, `token` único, `expires_at`, `status` |
+| `tenant_users` | Relación user-tenant | `tenant_id`, `user_id`, `role` (owner/admin/agent), `status` (active/invited/disabled), `invited_at`/`joined_at`; UNIQUE `(tenant_id, user_id)` |
+| `tenant_invitations` | Invitaciones a un tenant (FASE 4, ADR-027) | `tenant_id`, `email`, `role`, `token_hash` (sha256, único; nunca el token plano), `invited_by`, `status` (pending/accepted/revoked/expired), `expires_at` (7 días), `accepted_at` |
 | `plans` | Planes (FREE/PRO/BUSINESS) | límites en `limits` JSON |
 | `webhook_events` | Eventos crudos recibidos de Meta | Nivel plataforma: `provider_event_id` UNIQUE (id global de Meta), `tenant_id` nullable (se resuelve por phone_number_id), `status` (received/enqueued/processed/failed) |
 | `audit_logs` | Auditoría | `tenant_id` nullable, `actor_id`, `action`, `payload` |

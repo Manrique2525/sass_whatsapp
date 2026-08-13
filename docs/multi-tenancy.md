@@ -1,6 +1,6 @@
 # Multi-tenancy
 
-Estado: **implementado en FASE 3**. Este documento describe el diseño y cómo quedó
+Estado: **implementado en FASE 3 + FASE 4**. Este documento describe el diseño y cómo quedó
 materializado en código (rutas, clases y semántica HTTP reales).
 
 ## 1. Estrategia
@@ -24,9 +24,20 @@ y tiene un **tenant activo** seleccionable:
 - `tenant_users`: pivot `tenant_id + user_id + role + status`. `role` ∈
   {`owner`, `admin`, `agent`}; `status` ∈ {`active`, `invited`, `disabled`}.
   UNIQUE `(tenant_id, user_id)`. **FK→tenants `cascadeOnDelete`** desde FASE 3.
+- `tenant_invitations` (FASE 4, ADR-027): invitación por email con `token_hash` (sha256),
+  `status` ∈ {`pending`, `accepted`, `revoked`, `expired`} y `expires_at` (7 días). Solo se
+  persiste el hash; el token plano viaja solo en el enlace `/invitations/{token}`.
 - Roles por tenant: se implementa con **spatie/laravel-permission en modo `teams`**
   (`team_id = tenant_id`). Así `owner/admin/agent` se asignan por tenant. `super_admin` es un
-  rol global de plataforma (sin team). Ver ADR-012 y ADR-018.
+  rol global de plataforma (sin team). Ver ADR-012, ADR-018 y ADR-025 (migración de
+  `tenant_id` de spatie a UUID). El team lo resuelve `TenantTeamResolver`
+  (`app/Infrastructure/Tenancy/TenantTeamResolver.php`): override explícito →
+  `TenantContext::id()` → `users.current_tenant_id` → `null` (roles globales).
+- La autorización por tenant (FASE 4, ADR-026) exige SIEMPRE tres condiciones:
+  `current_tenant_id == tenant` (tenant activo) + `tenant_users.status = active` + permiso en la
+  matriz de código `TenantPermission::permissionsForRole(rol)` (11 permisos). Sin membresía o
+  inactivo → **404**; sin permiso → **403** `PERMISSION_DENIED`. Los roles spatie se mantienen
+  como espejo de `tenant_users.role` vía `TenantRoleManager` (`syncRoles` reemplaza, nunca suma).
 - Cambio de tenant activo: `POST /api/v1/tenants/{tenant}/switch` (valida membresía en
   `tenant_users` + tenant activo), actualiza `users.current_tenant_id`, audita y dispara
   `TenantSwitched`. El cliente Reverb debe re-suscribirse a los canales del nuevo tenant.
@@ -150,6 +161,13 @@ Nunca se acepta `tenant_id` desde el request (se ignora o se rechaza — test
 - **Policies**: quedan como capa programática (`authorize()`); no producen oráculo 403 en rutas.
 - **Regla**: nunca revelar la existencia de datos ajenos. Preferir **404** en lecturas.
 - **Switch** (ADR-023): no-miembro → 404; miembro de tenant suspendido → 409 `TENANT_NOT_ACTIVE`.
+- **Usuarios/roles (FASE 4)**: los endpoints `/tenants/{tenant}/users*` exigen que `{tenant}`
+  sea el tenant **activo** y el permiso correspondiente. Otro tenant al que se pertenezca (o
+  ajeno) → **404** (no revela existencia); tenant activo sin permiso → **403**
+  `PERMISSION_DENIED`; invitación ajena al tenant o token inexistente → **404**; token de
+  invitación aceptado → 409, revocado/expirado → 410, email del usuario distinto al invitado →
+  403 `INVITATION_EMAIL_MISMATCH`. Aceptar una invitación NO cambia el tenant activo (no da
+  acceso hasta `switch`).
 
 ## 5. Aislamiento en colas, eventos y notificaciones
 
@@ -204,3 +222,9 @@ tenant distinto del propietario:
 7. Un objeto de Storage del Tenant A no es accesible por el Tenant B.
 8. Un canal Reverb del Tenant B rechaza la suscripción de un usuario del Tenant A
    (`ReverbChannelAuthTest`).
+9. (FASE 4) Los permisos dependen del rol en el tenant **activo**, no del usuario: el mismo
+   usuario ve `agent` en A y `admin` en B según `current_tenant_id` (`MT-22`).
+10. (FASE 4) Aceptar una invitación a B no da acceso a B sin `switch` previo (`MT-23`, crítico X).
+11. (FASE 4) `super_admin` global no gestiona usuarios de tenants sin membresía activa (403
+    `NO_TENANT`), y un admin en A pierde al instante el acceso a usuarios al operar en B como
+    agent (403 `PERMISSION_DENIED`) — test CRITICO.

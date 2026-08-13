@@ -44,23 +44,30 @@ test('los roles por tenant se materializan en spatie modo teams', function (): v
     $this->seed(RolesAndPermissionsSeeder::class);
 
     $user = User::factory()->create();
+    $tenantA = Tenant::factory()->create();
+    $tenantB = Tenant::factory()->create();
+    $tenantC = Tenant::factory()->create();
 
     expect(Role::query()->where('name', 'owner')->exists())->toBeTrue();
 
-    app(PermissionRegistrar::class)->setPermissionsTeamId(100);
+    app(PermissionRegistrar::class)->setPermissionsTeamId($tenantA->id);
     $user->assignRole('owner');
 
-    app(PermissionRegistrar::class)->setPermissionsTeamId(200);
+    app(PermissionRegistrar::class)->setPermissionsTeamId($tenantB->id);
     $user->assignRole('admin');
 
-    app(PermissionRegistrar::class)->setPermissionsTeamId(100);
+    app(PermissionRegistrar::class)->setPermissionsTeamId($tenantA->id);
     $user->unsetRelation('roles');
     expect($user->getRoleNames()->all())->toBe(['owner']);
 
-    app(PermissionRegistrar::class)->setPermissionsTeamId(200);
+    app(PermissionRegistrar::class)->setPermissionsTeamId($tenantB->id);
     $user->unsetRelation('roles');
     expect($user->getRoleNames()->all())->toBe(['admin']);
 
+    app(PermissionRegistrar::class)->setPermissionsTeamId($tenantC->id);
     $user->unsetRelation('roles');
     expect($user->hasRole('owner'))->toBeFalse();
+
+    // Restablece el override para no contaminar el resto del test.
+    app(PermissionRegistrar::class)->setPermissionsTeamId(null);
 });

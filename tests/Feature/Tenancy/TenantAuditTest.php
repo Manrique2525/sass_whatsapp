@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Domain\Tenants\Exceptions\TenantContextMissingException;
 use App\Domain\Tenants\Models\Tenant;
+use App\Domain\Users\Enums\UserRole;
 use App\Domain\Users\Models\User;
 use App\Infrastructure\Tenancy\TenantContext;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -111,8 +112,9 @@ test('REG: un super_admin no accede a datos de tenants vía controllers normales
     $tenantB = Tenant::factory()->create();
 
     $admin = User::factory()->create();
-    app(PermissionRegistrar::class)->setPermissionsTeamId(0);
+    app(PermissionRegistrar::class)->setPermissionsTeamId(UserRole::GLOBAL_TEAM_ID);
     $admin->assignRole('super_admin');
+    app(PermissionRegistrar::class)->setPermissionsTeamId(null);
 
     // Sin membresías: el index solo muestra sus propios tenants (ninguno).
     $this->actingAs($admin)

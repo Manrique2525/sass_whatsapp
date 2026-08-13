@@ -34,7 +34,7 @@
 | POST | `/api/v1/auth/logout` | Revoca el token actual | Requiere `auth:sanctum` |
 | POST | `/api/v1/auth/forgot-password` | Solicita reset | 200 con mensaje genérico (nunca revela si el email existe) |
 | POST | `/api/v1/auth/reset-password` | Confirma reset | Token inválido → 422 `INVALID_RESET_TOKEN`. Revoca tokens del usuario |
-| GET  | `/api/v1/auth/me` | Usuario + tenants + rol activo | Requiere `auth:sanctum`. Devuelve `{user, tenants[], current_tenant, current_tenant_id, roles[]}` |
+| GET  | `/api/v1/auth/me` | Usuario + tenants + rol activo | Requiere `auth:sanctum`. Devuelve `{user, tenants[], current_tenant, current_tenant_id, roles[], current_role, permissions[], is_super_admin}` |
 | POST | `/api/v1/tenants/{tenant}/switch` | Cambia `users.current_tenant_id` (valida membresía) | **FASE 3**. Implementado en el recurso `tenants`, ver §3.1 |
 
 ### Rate limits (FASE 2)
@@ -76,6 +76,9 @@ Todos los errores de `/api/v1/*` usan `{message, code, errors}`:
 
 Todos los recursos de negocio operan sobre el **tenant activo** del usuario. Las rutas NO llevan
 `{tenantId}` en el path (evita confusión cross-tenant): el tenant lo decide el middleware.
+Excepción: los endpoints de **usuarios/roles** (FASE 4) llevan `{tenant}` en el path por claridad
+REST, pero el enforcement sigue exigiendo que `{tenant}` sea el tenant activo del usuario (otro
+tenant al que se pertenezca → **404**; ver §3.2).
 
 ### 3.1 Tenants (implementado en FASE 3)
 
@@ -89,10 +92,35 @@ Todos los recursos de negocio operan sobre el **tenant activo** del usuario. Las
 `TenantResource`: `{id, name, slug, status, timezone, locale, role (rol del usuario en el
 pivot, si aplica), created_at}`.
 
+### 3.2 Usuarios y roles (implementado en FASE 4)
+
+Todos los endpoints exigen `auth:sanctum` + middleware `tenant` + **membresía activa** y evalúan
+los permisos con `AuthorizationService` (matriz de código, ADR-026): `{tenant}` debe ser el
+tenant **activo** del usuario; otro tenant → **404**; sin permiso → **403** `PERMISSION_DENIED`.
+
+| Método | Ruta | Permiso | Descripción |
+|---|---|---|---|
+| GET | `/api/v1/tenants/{tenant}/users` | `users.view` | Miembros del tenant (status activo) → `{data: MemberResource[]}`. `MemberResource`: `{id, user{id,name,email}, role, status, joined_at, invited_at}` |
+| PATCH | `/api/v1/tenants/{tenant}/users/{user}` | `users.update` + `roles.assign` | Cambia el rol. Body `{role: owner|admin|agent}`. Owner puede cambiar admin↔agent; admin no asigna roles (403); quitar el último owner → **422** `ROLE_CHANGE_NOT_ALLOWED`. Audita `user.role_changed` |
+| DELETE | `/api/v1/tenants/{tenant}/users/{user}` | `users.remove` | Remueve del tenant (y de spatie). Owner remueve no-owners u otro owner si quedan más; admin solo agents (422 para owner/admin). Audita `user.removed`. Si el miembro tenía este tenant activo, `current_tenant_id` se pone a null |
+| GET | `/api/v1/tenants/{tenant}/users/invitations` | `users.invite` | Invitaciones del tenant (todas). `MemberInvitationResource`: `{id, email, role, status, invited_by, expires_at, created_at}` |
+| POST | `/api/v1/tenants/{tenant}/users/invitations` | `users.invite` | Crea invitación → **201**. Body `{email, role: owner|admin|agent}`. Email ya miembro → **422** `INVITATION_NOT_ALLOWED`; pendiente duplicada → **409** `INVITATION_ALREADY_PENDING`. Expira a los 7 días. Audita `user.invited`. Notificación por email con enlace `/invitations/{token}` |
+| POST | `/api/v1/tenants/{tenant}/users/invitations/{invitation}/revoke` | `users.invite` | Revoca una invitación **pending** → **200**. No pending → **409** `INVITATION_NOT_PENDING`; ajena al tenant → 404. Audita `user.invitation_revoked` |
+| POST | `/api/v1/tenants/{tenant}/users/invitations/{invitation}/resend` | `users.invite` | Reenvía el email con **nuevo token** (rota el anterior) → **200**. Mismas reglas que revoke. Audita `user.invitation_resent` |
+| GET | `/api/v1/invitations/{token}` | Público (el enlace es la credencial) | Estado de la invitación: `{tenant{id,name}, email, role, expires_at}`. Aceptada → **409** `INVITATION_ALREADY_ACCEPTED`; revocada/expirada → **410** `INVITATION_REVOKED`/`INVITATION_EXPIRED`; inexistente → **404** |
+| POST | `/api/v1/invitations/{token}/accept` | `auth:sanctum` + email del usuario == email invitado | Acepta → **200** `{tenant_id, role}`. Email distinto → **403** `INVITATION_EMAIL_MISMATCH`. Crea/reactiva la membresía activa + materializa el rol en spatie. Audita `user.invitation_accepted` |
+
+`GET /api/v1/auth/me` se amplía en FASE 4: `current_role` (rol en el tenant activo o `null`),
+`permissions` (matriz de permisos del rol activo) e `is_super_admin`.
+
+Roles por tenant (matriz ADR-026): `owner` = todos los permisos; `admin` = gestión operativa y de
+agentes (sin `roles.assign`); `agent` = solo lectura (`tenants.view`). `super_admin` es global de
+plataforma (sin permisos de tenant).
+
 | Recurso | Endpoints principales |
 |---|---|
 | Tenants | Ver §3.1: `GET/PUT /api/v1/tenants/{tenant}` (solo el activo), `POST /api/v1/tenants/{tenant}/switch`. La creación de tenants y el business-profile se añaden en fases posteriores |
-| Users/Agents | `GET/POST /api/v1/users`, `POST /api/v1/users/invitations`, `PATCH/DELETE /api/v1/users/{id}` (siempre dentro del tenant activo) |
+| Users/Agents | Ver §3.2: `GET/PATCH/DELETE /api/v1/tenants/{tenant}/users`, `GET/POST .../users/invitations`, `POST .../invitations/{id}/revoke|resend`, `GET /api/v1/invitations/{token}`, `POST /api/v1/invitations/{token}/accept` |
 | Business profile | `GET/PUT /api/v1/tenants/current/business-profile` |
 | WhatsApp | `POST /api/v1/whatsapp/connect`, `GET /api/v1/whatsapp/accounts`, `POST /api/v1/whatsapp/accounts/{id}/verify` |
 | Contacts | `GET/POST /api/v1/contacts`, `PATCH/DELETE /api/v1/contacts/{id}`, `POST /api/v1/contacts/import` |

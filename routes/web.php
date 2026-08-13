@@ -11,11 +11,15 @@ use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HealthController;
+use App\Http\Controllers\Invitations\InvitationWebController;
+use App\Http\Controllers\Settings\UserSettingsController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/login');
 
 Route::get('/health', HealthController::class);
+
+Route::get('invitations/{token}', [InvitationWebController::class, 'show'])->name('invitations.show');
 
 Route::middleware('guest')->group(function (): void {
     Route::get('login', [AuthenticatedSessionController::class, 'create'])->name('login');
@@ -54,4 +58,8 @@ Route::middleware('auth')->group(function (): void {
     Route::get('dashboard', DashboardController::class)
         ->middleware('verified')
         ->name('dashboard');
+
+    Route::get('settings/users', [UserSettingsController::class, 'show'])
+        ->middleware(['verified', 'tenant'])
+        ->name('settings.users');
 });

@@ -21,13 +21,15 @@ final class AuditLogger
     public function record(
         string $action,
         ?array $data = null,
-        ?string $subjectType = null,
-        ?string $subjectId = null,
+        string|int|null $subjectType = null,
+        string|int|null $subjectId = null,
+        ?int $actorUserId = null,
+        ?string $tenantId = null,
     ): AuditLog {
         $audit = new AuditLog;
 
-        $audit->actor_user_id = Auth::id();
-        $audit->tenant_id = TenantContext::id();
+        $audit->actor_user_id = $actorUserId ?? Auth::id();
+        $audit->tenant_id = $tenantId ?? TenantContext::id();
         $audit->action = $action;
         $audit->subject_type = $subjectType;
         $audit->subject_id = $subjectId;

@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 3 COMPLETADA** (tenants y aislamiento multi-tenant). Solo se trabaja sobre la fase activa.
+Estado general: **FASE 4 COMPLETADA** (usuarios y roles). Solo se trabaja sobre la fase activa.
 
 ## Fases
 
@@ -10,7 +10,7 @@ Estado general: **FASE 3 COMPLETADA** (tenants y aislamiento multi-tenant). Solo
 | 1 | Infraestructura (Laravel, Docker, health check) | COMPLETADA |
 | 2 | Autenticación (Sanctum, roles iniciales) | COMPLETADA |
 | 3 | Tenants (TenantContext, aislamiento) | COMPLETADA |
-| 4 | Usuarios y roles (invitaciones, agentes) | PENDIENTE |
+| 4 | Usuarios y roles (invitaciones, agentes) | COMPLETADA |
 | 5 | Business profile | PENDIENTE |
 | 6 | WhatsApp (webhooks, provider) | PENDIENTE |
 | 7 | Contactos | PENDIENTE |
@@ -197,3 +197,35 @@ COMPLETADO / BLOQUEADO
       `api.md` (§3.1 tenants), `decisions.md` (ADRs 020–024)
 - [x] Revisión de seguridad FASE 3: IDOR, tampering `tenant_id`, enumeración, fuga cross-tenant
       (colas/Reverb/webhooks), determinismo de tests
+
+## Fase 4 — Usuarios y roles (estado)
+
+- [x] Migración de spatie a UUID (`tenant_id` en roles/model_has_roles/model_has_permissions,
+      driver-aware pgsql/sqlite, ADR-025) + `tenant_users.status` (active/invited/disabled) +
+      `tenant_invitations` (token_hash sha256, ADR-027)
+- [x] Enums: `UserRole` (con `GLOBAL_TEAM_ID`), `TenantPermission` (11 permisos + matriz),
+      `TenantMembershipStatus`, `InvitationStatus`
+- [x] `TenantTeamResolver` (override → TenantContext → current_tenant_id → null) + `team_resolver`
+      en config/permission.php
+- [x] `AuthorizationService` (matriz como fuente de verdad, spatie como espejo, ADR-026):
+      tenant activo + membresía activa + permiso → 403 `PERMISSION_DENIED` / 404 no-miembro /
+      409 `TENANT_NOT_ACTIVE`
+- [x] `TenantRoleManager` (syncRoles reemplaza, revokeRoles, assignGlobalRole) +
+      `MemberService` (list/changeRole/remove con reglas owner/admin) + `InvitationService`
+      (invite/accept/revoke/resend, estados 201/200/409/410/403/422/404)
+- [x] Endpoints API `/api/v1/tenants/{tenant}/users` (GET/PATCH/DELETE), `/users/invitations`
+      (GET/POST) y `/users/invitations/{invitation}/revoke|resend`; públicos
+      `GET /api/v1/invitations/{token}` y `POST .../accept`; web `invitations/{token}` y
+      `settings/users`
+- [x] Auth: `me()` con `current_role`/`permissions`/`is_super_admin`; audit `user.login/logout`;
+      Inertia comparte `auth.current_role`/`permissions`/`is_super_admin`
+- [x] Frontend: `Settings/Users.vue` (miembros, invitaciones, roles) e
+      `Invitations/Accept.vue` (aceptar por enlace) + tipos TS
+- [x] Seeder `RolesAndPermissionsSeeder` actualizado: 11 permisos + `syncPermissions` por rol
+- [x] Tests (25 nuevos en FASE 4 → 123 total, 428 assertions): AUTH-1..8, INV-9..14,
+      ROLES-15..20, MT-21..24 + crítico X (invitación a B no da acceso sin switch)
+- [x] Pint + PHPStan (nivel 6, larastan) + `vue-tsc` + `vite build` sin errores
+- [x] Regresión Docker: migraciones aplicadas en postgres (uuid incluida), suite completa verde
+      en el contenedor, seeder re-ejecutado en dev
+- [x] Documentación: `multi-tenancy.md`, `security.md`, `api.md` (§3.3), `roadmap.md`,
+      `decisions.md` (ADRs 025–027)

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domain\Users\Models;
 
 use App\Domain\Tenants\Models\Tenant;
+use App\Domain\Users\Enums\TenantMembershipStatus;
+use App\Domain\Users\Enums\UserRole;
 use App\Domain\Users\Notifications\ResetPasswordNotification;
 use Database\Factories\Domain\Users\Models\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -14,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
@@ -75,7 +78,7 @@ class User extends Authenticatable implements MustVerifyEmail
     public function tenants(): BelongsToMany
     {
         return $this->belongsToMany(Tenant::class, 'tenant_users')
-            ->withPivot('role')
+            ->withPivot('role', 'status')
             ->withTimestamps();
     }
 
@@ -90,11 +93,15 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
-     * ¿El usuario es miembro del tenant? (validación SIEMPRE vía `tenant_users`).
+     * ¿El usuario es miembro ACTIVO del tenant? (validación SIEMPRE vía
+     * `tenant_users`; los `invited`/`disabled` no cuentan como miembros).
      */
     public function belongsToTenant(Tenant $tenant): bool
     {
-        return $this->tenantUsers()->where('tenant_id', $tenant->id)->exists();
+        return $this->tenantUsers()
+            ->where('tenant_id', $tenant->id)
+            ->where('status', TenantMembershipStatus::Active)
+            ->exists();
     }
 
     /**
@@ -102,7 +109,10 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function belongsToTenantById(string $tenantId): bool
     {
-        return $this->tenantUsers()->where('tenant_id', $tenantId)->exists();
+        return $this->tenantUsers()
+            ->where('tenant_id', $tenantId)
+            ->where('status', TenantMembershipStatus::Active)
+            ->exists();
     }
 
     /**
@@ -115,11 +125,40 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
-     * Rol global de plataforma (fuera de cualquier tenant).
+     * Rol del usuario en un tenant (membresía activa) o null si no pertenece.
+     */
+    public function roleForTenant(string $tenantId): ?UserRole
+    {
+        $pivot = $this->tenantUsers()
+            ->where('tenant_id', $tenantId)
+            ->where('status', TenantMembershipStatus::Active)
+            ->first();
+
+        return $pivot?->role;
+    }
+
+    /**
+     * Rol global de plataforma (fuera de cualquier tenant). Se evalúa contra el
+     * pivot `model_has_roles` con el team sentinel GLOBAL (NUNCA `hasRole`, que
+     * es team-scoped y no ve roles asignados con otro tenant_id) (ADR-025/026).
      */
     public function isSuperAdmin(): bool
     {
-        return $this->hasRole('super_admin');
+        return $this->hasGlobalRole(UserRole::SuperAdmin->value);
+    }
+
+    /**
+     * ¿El usuario tiene el rol global de plataforma indicado?
+     */
+    public function hasGlobalRole(string $role): bool
+    {
+        return DB::table('model_has_roles')
+            ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+            ->where('model_has_roles.model_id', $this->id)
+            ->where('model_has_roles.model_type', static::class)
+            ->where('model_has_roles.tenant_id', UserRole::GLOBAL_TEAM_ID)
+            ->where('roles.name', $role)
+            ->exists();
     }
 
     /**

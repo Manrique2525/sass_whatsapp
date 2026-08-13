@@ -20,6 +20,9 @@ declare module '@inertiajs/core' {
             user: AuthUser | null;
             tenants: TenantOption[];
             current_tenant_id: string | null;
+            current_role: 'owner' | 'admin' | 'agent' | null;
+            permissions: string[];
+            is_super_admin: boolean;
         };
         flash: {
             status?: string;

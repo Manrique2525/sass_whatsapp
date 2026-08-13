@@ -33,7 +33,10 @@ final class TenantService
      */
     public function availableForUser(User $user): Collection
     {
-        return $user->tenants()->where('status', TenantStatus::Active)->orderBy('name')->get();
+        return $user->tenants()
+            ->where('tenants.status', TenantStatus::Active)
+            ->orderBy('name')
+            ->get();
     }
 
     public function currentForUser(User $user): ?Tenant

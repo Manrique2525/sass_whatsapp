@@ -59,6 +59,33 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
   `tenant_id`, enumeración de tenants, fuga cross-tenant en colas/webhooks/Reverb, y
   determinismo de tests en Docker (ADR-024).
 
+### Autorización por tenant (FASE 4 — usuarios y roles)
+- **`AuthorizationService`** (ADR-026): la matriz `TenantPermission::permissionsForRole()` es la
+  fuente de verdad. Toda operación exige: (1) el recurso es el tenant **activo**
+  (`isCurrentTenant`), (2) membresía con `status = active`, (3) permiso en la matriz. Sin
+  membresía/no-activa → 404 (no revela existencia); sin permiso → 403 `PERMISSION_DENIED`;
+  tenant suspendido → 409 `TENANT_NOT_ACTIVE`.
+- **11 permisos granulares** (`tenants.view/update`, `users.view/invite/update/remove`,
+  `roles.view/assign`, `agents.view/manage`, `audit.view`). Matriz: owner = todos; admin =
+  operativo sin `roles.assign`; agent = solo `tenants.view`; `super_admin` = global (sin
+  permisos de tenant).
+- **Roles espejo en spatie**: `TenantRoleManager` sincroniza spatie con `tenant_users.role`
+  usando `syncRoles` (reemplaza, no acumula) con el team del `TenantTeamResolver`
+  (override → `TenantContext` → `current_tenant_id` → null). Cambiar de tenant activo cambia
+  los permisos efectivos al instante (test CRITICO de FASE 4).
+- **Invitaciones (ADR-027)**: el token plano solo viaja en el email (`/invitations/{token}`);
+  en BD solo `token_hash` sha256. Máquina de estados `pending → accepted/revoked/expired` con
+  `expires_at` a 7 días. Endpoints: `show` público (el enlace es la credencial), `accept` exige
+  sesión con email == email invitado. Códigos: 409 `INVITATION_ALREADY_ACCEPTED` /
+  `INVITATION_ALREADY_PENDING` / `INVITATION_NOT_PENDING`, 410 `INVITATION_REVOKED` /
+  `INVITATION_EXPIRED`, 403 `INVITATION_EMAIL_MISMATCH`, 422 `INVITATION_NOT_ALLOWED` /
+  `ROLE_CHANGE_NOT_ALLOWED`, 404 no encontrada/ajena.
+- **Reglas de negocio críticas**: el último owner no puede degradarse/removerse (422); admin no
+  asigna roles ni gestiona owners; remover al miembro que tiene el tenant como activo pone
+  `current_tenant_id` a null; aceptar una invitación NO cambia el tenant activo.
+- **Auditoría FASE 4**: `user.login`, `user.logout`, `user.invited`, `user.invitation_accepted`,
+  `user.invitation_revoked`, `user.invitation_resent`, `user.role_changed`, `user.removed`.
+
 ### Inyección SQL
 - Eloquent/Query Builder con bindings. Sin concatenación de SQL.
 - `phpstan` + revisión en code review.

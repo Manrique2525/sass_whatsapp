@@ -284,6 +284,63 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
 - **Consecuencias**: la misma suite es verde local y en el contenedor (93 tests). Regla: la
   configuración crítica de tests se declara con `<server>`, no `<env>`.
 
+## ADR-025 · Migración de spatie teams de `unsignedBigInteger` a UUID para `tenant_id`
+
+- **Estado**: Aceptado · FASE 4
+- **Contexto**: Los roles/permisos spatie en modo teams se crearon en FASE 2 con
+  `team_foreign_key = tenant_id`, pero las columnas `tenant_id` de `roles`,
+  `model_has_roles` y `model_has_permissions` eran `unsignedBigInteger`, incompatibles con
+  `tenants.id` (UUID). No hay FK reales entre spatie y `tenants`.
+- **Decisión**: Migración `2026_08_13_210000` convierte esas tres columnas a UUID: se dropean
+  PK (`model_has_roles_role_model_type_primary`, `model_has_permissions_permission_model_type_primary`)
+  e índices (`roles_team_foreign_key_index`, `model_has_roles_team_foreign_key_index`,
+  `model_has_permissions_team_foreign_key_index`) y se recrean tras el cambio. `roles.tenant_id`
+  queda nullable (los roles globales viven con NULL); las de `model_has_*` NOT NULL. Las tablas
+  spatie están vacías en el estado documentado, por lo que es seguro.
+- **Consecuencias**: PostgreSQL no castea bigint→uuid automáticamente: la conversión usa
+  `USING tenant_id::text::uuid` (NULL → NULL); SQLite no lo necesita y usa `->change()`. La
+  migración es driver-aware (pgsql vs. resto). Al no existir FK real, la coherencia la
+  garantizan `TenantRoleManager`/el resolver, no la base de datos.
+
+## ADR-026 · Autorización por tenant: matriz de código como fuente de verdad, spatie como espejo
+
+- **Estado**: Aceptado · FASE 4
+- **Contexto**: La autorización debe ser por rol DENTRO del tenant activo, no por el usuario
+  global. Los permisos spatie se mantienen materializados por tenant (asignación real en
+  `model_has_permissions`), pero una matriz en código es más legible, testeable y centralizada
+  que depender de filas sincronizadas.
+- **Decisión**: El enum `TenantPermission` (11 permisos) expone `permissionsForRole()` con la
+  matriz owner/admin/agent (owner = todos; admin = gestión operativa sin `roles.assign`; agent =
+  solo lectura). `AuthorizationService` exige SIEMPRE: tenant activo (`isCurrentTenant`),
+  membresía activa (`tenant_users.status = active`) y permiso en la matriz; sin membresía/no
+  activo → `TenantMembershipException` → 404; sin permiso → `PermissionDeniedException` → 403
+  `PERMISSION_DENIED`. `super_admin` es rol global (spatie sin team) y se autoriza aparte; la
+  matriz le devuelve `[]`. Los roles spatie se mantienen como espejo de `tenant_users.role`
+  mediante `TenantRoleManager` (que usa `syncRoles`, no `assignRole`, para reemplazar). El
+  resolver `TenantTeamResolver` (override → `TenantContext` → `current_tenant_id` → null) fija el
+  team en cada operación.
+- **Consecuencias**: una sola fuente de verdad (el código), policies finas como wrappers
+  (`TenantUserPolicy`, `TenantInvitationPolicy`), y los registros spatie solo como espejo. Los
+  permisos de dominios futuros (whatsapp, contacts, chatbots, billing) se añaden en sus fases.
+
+## ADR-027 · Invitaciones a tenant: token de un solo uso, solo se persiste el hash
+
+- **Estado**: Aceptado · FASE 4
+- **Contexto**: Agregar miembros requiere un flujo de invitación por email con expiración y
+  no-reutilización, sin exponer datos sensibles en la base de datos.
+- **Decisión**: Tabla `tenant_invitations` (UUID PK, `tenant_id`, `email`, `role`,
+  `token_hash` sha256 único, `invited_by`, `status` enum pending/accepted/revoked/expired,
+  `expires_at` a 7 días, `accepted_at`). Solo se persiste el hash; el token plano viaja solo en
+  el enlace `/invitations/{token}` del email. El status es máquina de estados: pending es la
+  única transición válida hacia accepted/revoked/expired (409 `INVITATION_ALREADY_ACCEPTED`,
+  410 `INVITATION_REVOKED`/`INVITATION_EXPIRED`, 403 `INVITATION_EMAIL_MISMATCH`, 404 no
+  encontrada). `accept` crea o reactiva la membresía (`tenant_users` activa) y materializa el rol
+  en spatie. El web (`Invitations/Accept.vue`) consulta la invitación sin autenticación (el
+  enlace ES la credencial) y solo acepta con sesión cuyo email coincide.
+- **Consecuencias**: sin lista de tokens en claro en BD; no-reutilización garantizada por
+  transición de status; invitaciones a email sin cuenta requieren registro previo (no se crean
+  usuarios en el acto).
+
 ## Pendientes de decisión
 
 - Proveedor de email en producción (mailpit en dev; SES/Resend/SMTP en prod) → FASE 22.
