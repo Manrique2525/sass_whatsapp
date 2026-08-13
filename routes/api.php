@@ -10,7 +10,14 @@ use App\Http\Controllers\Api\V1\InvitationController;
 use App\Http\Controllers\Api\V1\MemberController;
 use App\Http\Controllers\Api\V1\MemberInvitationController;
 use App\Http\Controllers\Api\V1\TenantController;
+use App\Http\Controllers\Api\V1\WhatsAppController;
+use App\Http\Controllers\Api\Webhooks\WhatsAppWebhookController;
 use Illuminate\Support\Facades\Route;
+
+// Webhooks de WhatsApp (públicos, sin auth Bearer): autenticados por
+// verificación GET (hub.verify_token) y firma X-Hub-Signature-256.
+Route::get('webhooks/whatsapp', [WhatsAppWebhookController::class, 'verify']);
+Route::post('webhooks/whatsapp', [WhatsAppWebhookController::class, 'handle']);
 
 Route::prefix('v1')->group(function (): void {
     Route::post('auth/register', [AuthController::class, 'register'])
@@ -63,6 +70,11 @@ Route::prefix('v1')->group(function (): void {
                 // FASE 5 — perfil de negocio.
                 Route::get('{tenant}/business-profile', [BusinessProfileController::class, 'show']);
                 Route::put('{tenant}/business-profile', [BusinessProfileController::class, 'update']);
+
+                // FASE 6 — conexión de WhatsApp.
+                Route::get('{tenant}/whatsapp', [WhatsAppController::class, 'show']);
+                Route::post('{tenant}/whatsapp/connect', [WhatsAppController::class, 'connect']);
+                Route::post('{tenant}/whatsapp/disconnect', [WhatsAppController::class, 'disconnect']);
             });
         });
     });

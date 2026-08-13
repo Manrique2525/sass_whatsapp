@@ -11,11 +11,14 @@ namespace App\Domain\Users\Enums;
  * La matriz rol → permisos vive en `permissionsForRole()`; es la fuente de
  * verdad de autorización (los registros spatie se mantienen como espejo).
  *
- * No se crean permisos de dominios futuros (whatsapp, contacts, conversations,
+ * No se crean permisos de dominios futuros (contacts, conversations,
  * chatbots, billing) — corresponden a fases posteriores.
  *
  * FASE 5 añade el dominio business_profile (view para todos los roles del
  * tenant; update solo owner/admin).
+ *
+ * FASE 6 añade el dominio whatsapp: `whatsapp.view` (todos los roles, estado de
+ * la conexión) y `whatsapp.manage` (owner/admin: conectar/desconectar y enviar).
  */
 enum TenantPermission: string
 {
@@ -38,6 +41,9 @@ enum TenantPermission: string
     case ViewBusinessProfile = 'business_profile.view';
     case UpdateBusinessProfile = 'business_profile.update';
 
+    case ViewWhatsApp = 'whatsapp.view';
+    case ManageWhatsApp = 'whatsapp.manage';
+
     /**
      * Todos los permisos de la plataforma (para el seeder).
      *
@@ -59,6 +65,8 @@ enum TenantPermission: string
             self::ViewAudit,
             self::ViewBusinessProfile,
             self::UpdateBusinessProfile,
+            self::ViewWhatsApp,
+            self::ManageWhatsApp,
         ];
     }
 
@@ -69,6 +77,8 @@ enum TenantPermission: string
      * - admin: gestión operativa y de agentes; NO asigna roles ni audita.
      * - agent: solo lectura del tenant (operativo).
      * - business_profile: view para todos; update solo owner/admin.
+     * - whatsapp: view para todos (estado); manage solo owner/admin
+     *   (conectar/desconectar y envío).
      *
      * @return list<TenantPermission>
      */
@@ -87,10 +97,13 @@ enum TenantPermission: string
                 self::ViewAudit,
                 self::ViewBusinessProfile,
                 self::UpdateBusinessProfile,
+                self::ViewWhatsApp,
+                self::ManageWhatsApp,
             ],
             UserRole::Agent => [
                 self::ViewTenants,
                 self::ViewBusinessProfile,
+                self::ViewWhatsApp,
             ],
             // super_admin es rol global de plataforma (spatie, sin team):
             // no obtiene permisos de tenant, se autoriza aparte.

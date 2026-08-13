@@ -1,5 +1,9 @@
 # WhatsApp (Meta Cloud API)
 
+Estado: **FASE 6 COMPLETADA** (provider, webhook, conexión y envío). Lo pendiente de diseño
+(media, outbox sweeper, plantillas, contactos/conversaciones/mensajes, rate limits, lock de
+conversación) se detalla abajo con su fase de implementación.
+
 ## 1. Regla
 
 Solo **Meta WhatsApp Cloud API** oficial. No se usan librerías no oficiales ni Web APIs
@@ -27,21 +31,40 @@ Meta Business Portfolio / Business Manager   (organización)
 ```php
 interface WhatsAppProviderInterface
 {
-    public function sendText(string $phoneId, string $to, string $text, array $context = []): MessageSendResult;
-    public function sendTemplate(string $phoneId, string $to, string $templateName, string $language, array $params = []): MessageSendResult;
-    public function sendImage(string $phoneId, string $to, string $mediaUrl, string $caption = ''): MessageSendResult;
-    public function sendDocument(string $phoneId, string $to, string $mediaUrl, string $filename = ''): MessageSendResult;
-    public function sendInteractiveMessage(string $phoneId, string $to, InteractiveMessage $message): MessageSendResult;
-    public function markAsRead(string $phoneId, string $messageId): void;
+    public function sendText(string $accessToken, string $phoneId, string $to, string $text, array $context = []): MessageSendResult;
+    public function sendTemplate(string $accessToken, string $phoneId, string $to, string $templateName, string $language, array $params = []): MessageSendResult;
+    public function sendImage(string $accessToken, string $phoneId, string $to, string $mediaUrl, string $caption = ''): MessageSendResult;
+    public function sendDocument(string $accessToken, string $phoneId, string $to, string $mediaUrl, string $filename = ''): MessageSendResult;
+    public function sendInteractiveMessage(string $accessToken, string $phoneId, string $to, InteractiveMessage $message): MessageSendResult;
+    public function markAsRead(string $accessToken, string $phoneId, string $messageId): void;
+    public function getPhoneNumberInfo(string $accessToken, string $phoneId): PhoneNumberInfo;
+    public function subscribeToWebhooks(string $accessToken, string $wabaId): bool;
+    public function unsubscribeFromWebhooks(string $accessToken, string $wabaId): bool;
     public function validateWebhookSignature(string $signature, string $rawBody): bool;
     public function verifyWebhook(array $query): array; // verificación GET (challenge)
 }
 ```
 
-Implementación: `MetaWhatsAppProvider` (Laravel HTTP Client, base
-`https://graph.facebook.com/v21.0/`). **El token de autenticación de cada llamada se obtiene de
-`whatsapp_accounts.access_token` del tenant** (nunca de `.env`). El resultado normaliza
-`provider_message_id`, estado y errores (`MessageSendResult`).
+Implementación: `MetaWhatsAppProvider` (Laravel HTTP Client, base `https://graph.facebook.com/v26.0/`,
+configurable vía `WHATSAPP_GRAPH_URL`/`WHATSAPP_GRAPH_VERSION`). **El `access_token` se pasa en
+CADA llamada**: es el token del WABA del tenant (cifrado en `whatsapp_accounts.access_token`,
+ADR-029), nunca un token global de `.env`. El resultado normaliza `provider_message_id`, estado y
+errores (`MessageSendResult`). Los errores de Meta se mapean a excepciones de dominio
+(`WhatsAppAuthFailedException` 401/403, `WhatsAppPhoneNotFoundException` 404,
+`WhatsAppMessageFailedException` 4xx/5xx/429) con `providerErrorCode` y `retryable`
+(transitorios: timeout/5xx/429; permanentes: 4xx).
+
+### Conexión de un número (FASE 6)
+
+- `POST /api/v1/tenants/{tenant}/whatsapp/connect` (permiso `whatsapp.manage`, owner/admin):
+  valida SIEMPRE las credenciales contra Meta (`getPhoneNumberInfo`) antes de persistir; guarda el
+  token **cifrado**; crea/actualiza la cuenta y el `whatsapp_phone_numbers`; suscribe el WABA al
+  webhook (best-effort). Error de Meta → 401 `WHATSAPP_AUTH_FAILED` / 404 `WHATSAPP_PHONE_NOT_FOUND`.
+- `GET .../whatsapp` (permiso `whatsapp.view`, todos los roles): estado de la cuenta + números.
+- `POST .../whatsapp/disconnect` (permiso `whatsapp.manage`): cancela la suscripción del WABA,
+  anula el token (`access_token = null`) y marca `disconnected`; **el historial se conserva**.
+- Sin cuenta conectada: 409 `WHATSAPP_NOT_CONNECTED`; sin permiso: 403 `PERMISSION_DENIED`;
+  `{tenant}` distinto del activo: 404.
 
 ### Media (imagen/documento)
 
@@ -60,29 +83,37 @@ GET /api/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=...&hub.challenge
   responder `hub.challenge`.
 - Sino → 403. (`WHATSAPP_VERIFY_TOKEN` es global de la app.)
 
-### 4.2 Recepción (POST) — flujo del request
+### 4.2 Recepción (POST) — flujo del request (implementado en FASE 6)
 
 1. Validar firma `X-Hub-Signature-256` contra el **App Secret global** de la app:
    `HMAC-SHA256(app_secret, raw_body)` comparada con `hash_equals`. La firma se calcula sobre el
    **cuerpo crudo exacto** (`$request->getContent()`); jamás sobre un re-serializado del JSON.
+   Firma ausente/incorrecta → **401** `WHATSAPP_SIGNATURE_INVALID` (nunca procesar).
 2. Leer `entry[].changes[].value.messages[]` y `...statuses[]`. Extraer el identificador:
-   `messages[].id` para mensajes, `statuses[].id` para estados.
+   `messages[].id` para mensajes, `statuses[].id` para estados. Otros `field` se ignoran.
 3. **Dedupe**: `webhook_events` (plataforma) con UNIQUE `provider_event_id`. Insert con
-   `ON CONFLICT DO NOTHING`; si ya existía → responde `200` (duplicado) sin reprocesar. Esto
-   cubre eventos duplicados y POSTs concurrentes (la violación de unique es el dedupe).
+   `ON CONFLICT DO NOTHING`; si ya existía → responde `200` con `duplicate = true` sin reprocesar.
+   Esto cubre eventos duplicados y POSTs concurrentes (la violación de unique es el dedupe).
 4. Resolver tenant por `metadata.phone_number_id` → `whatsapp_phone_numbers.phone_id`
-   (consulta indexada). Si no se encuentra: registrar `webhook_events.status=failed` con motivo
-   "unknown_phone_number_id" (y log de alerta) pero **responder 200** igualmente (Meta no debe
+   (consulta indexada, sin scope de tenant). Si no se encuentra: registrar `webhook_events.status=failed`
+   con motivo "unknown_phone_number_id" (y log de alerta) pero **responder 200** igualmente (Meta no debe
    reintentar infinitamente).
 5. Marcar `webhook_events.status=enqueued` y despachar
-   `ProcessIncomingWhatsAppMessage` / `ProcessWhatsAppStatusUpdate` a la cola.
+   `ProcessIncomingWhatsAppMessage` / `ProcessWhatsAppStatusUpdate` a la cola
+   (`forTenant($tenantId)`, TenantAwareJob).
 6. Responder `200`. **El request del webhook nunca hace trabajo pesado.**
+
+Los jobs (FASE 6) solo marcan `processed` el evento si sigue `enqueued` + `event_type` + `tenant_id`
+coinciden (idempotencia). **TODO FASE 9**: persistir el mensaje/contacto/conversación y ejecutar el
+motor de flujos (§5).
 
 ### 4.3 Outbox (no perder eventos)
 
 `webhook_events.status` ∈ {received, enqueued, processed, failed}. Un comando programado
 (every 1 min) re-encola eventos con `status='received'` con `created_at` anterior a X minutos.
 Así, si el proceso cae entre el insert y el encolado, el evento no se pierde.
+**Pendiente**: el sweeper/outbox se implementará con la fase de mensajería (FASE 9). Hoy el
+encolado ocurre dentro del mismo request (cola `sync` en tests).
 
 ### 4.4 Idempotencia
 
@@ -110,11 +141,16 @@ ProcessIncomingWhatsAppMessage
  └─ broadcast (Reverb) + audit
 ```
 
-## 6. Envío (worker `SendWhatsAppMessage`)
+## 6. Envío (FASE 6: `WhatsAppMessagingService`; worker `SendWhatsAppMessage` en FASE 9)
 
-- Job encolado con `tenant_id`, `conversation_id`, `message_id`. Implementa `ShouldBeUnique`
-  por `message_id` (impide envíos concurrentes duplicados del mismo mensaje).
-- Worker re-valida límite de uso y permisos del tenant (nunca confiar en estado previo).
+- **FASE 6**: `WhatsAppMessagingService::sendText()` registra cada llamada al provider en
+  `message_send_attempts` (provider_message_id, status, `attempt`/`max_attempts`), persiste el
+  resultado y audita `whatsapp.message_sent`/`whatsapp.message_failed`. Un error permanente de
+  Meta → `WhatsAppMessageFailedException` con `retryable=false` (502 `WHATSAPP_MESSAGE_FAILED`);
+  timeout/5xx/429 → `retryable=true`.
+- **FASE 9**: el job `SendWhatsAppMessage` encolado con `tenant_id`, `conversation_id`,
+  `message_id` y `ShouldBeUnique` por `message_id` (impide envíos concurrentes duplicados del
+  mismo mensaje). Worker re-valida límite de uso y permisos (nunca confiar en estado previo).
 - **CAS**: el envío solo procede si `message.status === 'pending'` (update atómico
   `where status='pending'` → `sending`). Si otro proceso ya lo tomó, se ignora.
 - Llama al provider con el token del tenant → persiste `provider_message_id`, `sent`.
@@ -122,7 +158,7 @@ ProcessIncomingWhatsAppMessage
   actualizando el mensaje por `provider_message_id`). `failed` → marca `failed`, log, y la
   conversación pasa a `pending` con aviso a agentes.
 - Fallo → reintento con backoff (cola `retry`, registrado en `message_send_attempts`),
-  `failed` tras N intentos.
+  `failed` tras N intentos (`WHATSAPP_MAX_ATTEMPTS`).
 - `markAsRead` se dispara cuando un agente abre la conversación (usa el phone id del tenant).
 
 ## 7. Concurrencia en la conversación
@@ -148,31 +184,36 @@ Esto previene: doble ejecución de flow, respuestas duplicadas y carreras en `va
   `X-Business-Use-Case-Usage` y expone backoff. La cola envía por número con throttling.
 - Tests de rate limit simulados con `Http::fake`.
 
-## 10. Desconexión / estado de números
+## 10. Desconexión / estado de números (FASE 6)
 
 - `whatsapp_phone_numbers.status` (connected/disconnected/banned...). Un número desconectado
   **detiene** el envío (el engine lo comprueba) y notifica al owner.
-- Desconectar = cancelar suscripción del WABA al webhook (llamada Graph API) + revocar token;
-  los datos históricos se conservan.
+- Desconectar (FASE 6) = cancelar suscripción del WABA al webhook (llamada Graph API,
+  best-effort) + anular `access_token` + `status=disconnected`; **los datos históricos se
+  conservan** (solo se borra el secreto). Audita `whatsapp.disconnected`.
 
 ## 11. Configuración (`.env`) — solo valores de la app (globales)
 
 ```
-WHATSAPP_GRAPH_VERSION=v21.0
+WHATSAPP_GRAPH_URL=https://graph.facebook.com   # opcional (default)
+WHATSAPP_GRAPH_VERSION=v26.0
 WHATSAPP_APP_SECRET=...          # App Secret de la app (firma de webhooks, global)
 WHATSAPP_VERIFY_TOKEN=...        # verify token del webhook (global)
+WHATSAPP_MAX_ATTEMPTS=3          # reintentos de envío (FASE 9)
 ```
-El access token de cada WABA y el phone id viven en DB (cifrados); NO en `.env`.
+El access token de cada WABA y el phone id viven en DB (cifrados); NO en `.env`. La URL del
+webhook a registrar en Meta es `https://<dominio>/api/webhooks/whatsapp`.
 
-## 12. Tests (ver `testing.md` y FASE 31)
+## 12. Tests (FASE 6 implementado; ver `testing.md` y FASE 31)
 
-- Verificación GET válida/inválida.
-- Firma inválida → 401.
-- Mensaje entrante de texto/interactivo/template.
-- Status delivered/read/failed.
-- Evento duplicado (secuencial y concurrente) → no duplica `messages` ni `webhook_events`.
-- `phone_number_id` desconocido → 200 + `webhook_events.failed`.
-- Payload malformado → 200 + log (nunca 500 que provoque reenvíos).
-- Timeout/errores de Meta → reintento controlado + `message_send_attempts`.
-- Outbox: evento en `received` se re-encola por el sweeper.
-- Lock de conversación: dos mensajes concurrentes no duplican ejecución.
+- Verificación GET válida → challenge en texto plano; inválida → 403.
+- Firma inválida/ausente → 401 `WHATSAPP_SIGNATURE_INVALID`.
+- Mensaje entrante/status: ingesta + resolución de tenant por `phone_number_id` + dedupe.
+- Evento duplicado → `duplicate = true`, no se reprocesa (WHATSAPP-8).
+- `phone_number_id` desconocido → 200 + `webhook_events.failed` (WHATSAPP-10).
+- Payload malformado → 200 + log (nunca 500 que provoque reenvíos) (WHATSAPP-5).
+- Aislamiento: webhook de un número de B jamás toca datos de A (WHATSAPP-11, CRITICO).
+- Conexión: token cifrado, 401/404 en Meta, 409 sin cuenta, aislamiento A/B (WHATSAPP-15..30).
+- Provider: payload oficial, mapeo de errores retryable/no-retryable, timeout (WHATSAPP-31..40).
+- Pendiente (FASE 9): mensaje entrante crea contact+conversation+message una sola vez; status
+  delivered/read/failed actualiza mensajes; outbox sweeper; lock de conversación; rate limits.

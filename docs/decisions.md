@@ -368,6 +368,53 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   no audita `business_profile.updated` (no hay cambio); el frontend oculta el formulario a roles
   sin `business_profile.update`.
 
+## ADR-029 · WhatsApp FASE 6: provider, webhook, conexión y envío (Meta Cloud API)
+
+- **Estado**: Aceptado · FASE 6
+- **Contexto**: La fase 6 del roadmap pedía la capa de integración con Meta WhatsApp Cloud API.
+  Los docs previos definían la interfaz del provider sin el `accessToken` por llamada y con
+  Graph v21.0; la conexión no estaba especificada como endpoint REST. El entorno local no tiene
+  phpredis (la regresión se ejecuta en el contenedor Docker `whatsapp-saas-app-1`).
+- **Decisión**:
+  - **Token por llamada**: la interfaz `WhatsAppProviderInterface` recibe `$accessToken` en CADA
+    método (sendText/sendTemplate/sendImage/sendDocument/sendInteractiveMessage/markAsRead/
+    getPhoneNumberInfo/subscribeToWebhooks/unsubscribeFromWebhooks/validateWebhookSignature/
+    verifyWebhook). Es el token del WABA del tenant, cifrado en `whatsapp_accounts.access_token`
+    (atributo `encrypted`, `$hidden`, nunca expuesto por `WhatsAppAccountResource`). No existe
+    token global de `.env` para operaciones de tenant. Graph **v26.0** (`WHATSAPP_GRAPH_VERSION`).
+  - **Conexión REST** (una cuenta por tenant): `GET /api/v1/tenants/{tenant}/whatsapp`
+    (`whatsapp.view`, todos los roles), `POST .../connect` (`whatsapp.manage`, owner/admin) que
+    **valida SIEMPRE el token contra Meta** (`getPhoneNumberInfo`) antes de persistir y suscribe
+    el WABA al webhook (best-effort), y `POST .../disconnect` que cancela la suscripción, anula el
+    token y marca `disconnected` conservando el historial. Errores: 401 `WHATSAPP_AUTH_FAILED`,
+    404 `WHATSAPP_PHONE_NOT_FOUND`, 409 `WHATSAPP_NOT_CONNECTED`.
+  - **Envío**: `WhatsAppMessagingService` registra cada llamada al provider en
+    `message_send_attempts` (provider_message_id, status, attempt/max_attempts) y audita
+    `whatsapp.message_sent`/`whatsapp.message_failed`. El worker encolado `SendWhatsAppMessage`
+    con backoff/CAS llega en FASE 9.
+  - **Webhook**: público en `/api/webhooks/whatsapp`; GET de verificación con `hash_equals` del
+    `hub.verify_token` (403 `WHATSAPP_WEBHOOK_INVALID` si no) y fallback a claves
+    `hub.mode`/`hub.verify_token`/`hub.challenge` por el underscore de PHP; POST valida
+    `X-Hub-Signature-256 = sha256=HMAC-SHA256(app_secret, body_crudo)` con `hash_equals` (401
+    `WHATSAPP_SIGNATURE_INVALID`). Dedupe por `webhook_events.provider_event_id` UNIQUE con
+    `ON CONFLICT DO NOTHING` (evento duplicado/concurrente → `duplicate=true`, 200, no reprocesa).
+    El tenant se resuelve por `metadata.phone_number_id` (consulta sin scope, indexada) y los jobs
+    `ProcessIncomingWhatsAppMessage` / `ProcessWhatsAppStatusUpdate` son `TenantAwareJob`. Payload
+    malformado o `phone_number_id` desconocido → `webhook_events.failed` + **200** (Meta no
+    reintenta en bucle). Los jobs de FASE 6 solo marcan `processed` (guard de estado+event_type+
+    tenant_id); la persistencia de contactos/conversaciones/mensajes llega en FASE 7-9 (TODO).
+  - **Testing**: `Http::fake` de Laravel matchea contra la URL **con query string** (p. ej.
+    `?fields=...` de `getPhoneNumberInfo`), por lo que los patrones deben absorber el query
+    (`graph.facebook.com/*/phone-1*`); los `Http::fake` se registran en UNA sola llamada (los
+    callbacks se acumulan, no se reemplazan) y los no matcheados con `preventStrayRequests=false`
+    van a la red real.
+- **Consecuencias**: 15 permisos en la matriz ADR-026 (FASE 6 añade `whatsapp.view` y
+  `whatsapp.manage`); 4 migraciones nuevas (whatsapp_accounts, whatsapp_phone_numbers,
+  webhook_events, message_send_attempts); 42 tests WHATSAPP-1..40 (+37b/39b) → suite 177 tests /
+  597 assertions; PHPStan necesita `--memory-limit=1G` (128M por defecto no basta); el trait
+  `Illuminate\Foundation\Bus\Queueable`/`Illuminate\Queue\Queueable` no existe en esta versión de
+  Laravel (se usa solo Dispatchable/InteractsWithQueue/SerializesModels + TenantAwareJob).
+
 ## Pendientes de decisión
 
 - Proveedor de email en producción (mailpit en dev; SES/Resend/SMTP en prod) → FASE 22.

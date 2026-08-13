@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Domain\Tenants\Models\Tenant;
+use App\Domain\WhatsApp\Contracts\WhatsAppProviderInterface;
+use App\Infrastructure\WhatsApp\MetaWhatsAppProvider;
 use App\Policies\TenantPolicy;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -20,7 +22,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(WhatsAppProviderInterface::class, function (): MetaWhatsAppProvider {
+            return new MetaWhatsAppProvider(
+                graphUrl: (string) config('whatsapp.graph_url'),
+                graphVersion: (string) config('whatsapp.graph_version'),
+                appSecret: (string) config('whatsapp.app_secret'),
+                verifyToken: (string) config('whatsapp.verify_token'),
+            );
+        });
     }
 
     /**

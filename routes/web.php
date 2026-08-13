@@ -14,6 +14,7 @@ use App\Http\Controllers\HealthController;
 use App\Http\Controllers\Invitations\InvitationWebController;
 use App\Http\Controllers\Settings\BusinessProfileSettingsController;
 use App\Http\Controllers\Settings\UserSettingsController;
+use App\Http\Controllers\Settings\WhatsAppSettingsController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/login');
@@ -67,4 +68,8 @@ Route::middleware('auth')->group(function (): void {
     Route::get('settings/business-profile', [BusinessProfileSettingsController::class, 'show'])
         ->middleware(['verified', 'tenant'])
         ->name('settings.business-profile');
+
+    Route::get('settings/whatsapp', [WhatsAppSettingsController::class, 'show'])
+        ->middleware(['verified', 'tenant'])
+        ->name('settings.whatsapp');
 });

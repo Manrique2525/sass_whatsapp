@@ -76,9 +76,10 @@ Todos los errores de `/api/v1/*` usan `{message, code, errors}`:
 
 Todos los recursos de negocio operan sobre el **tenant activo** del usuario. Las rutas NO llevan
 `{tenantId}` en el path (evita confusión cross-tenant): el tenant lo decide el middleware.
-Excepción: los endpoints de **usuarios/roles** (FASE 4) y **business profile** (FASE 5) llevan
-`{tenant}` en el path por claridad REST, pero el enforcement sigue exigiendo que `{tenant}` sea
-el tenant activo del usuario (otro tenant al que se pertenezca → **404**; ver §3.2 y §3.3).
+Excepción: los endpoints de **usuarios/roles** (FASE 4), **business profile** (FASE 5) y
+**WhatsApp** (FASE 6) llevan `{tenant}` en el path por claridad REST, pero el enforcement sigue
+exigiendo que `{tenant}` sea el tenant activo del usuario (otro tenant al que se pertenezca →
+**404**; ver §3.2, §3.3 y §3.4).
 
 ### 3.1 Tenants (implementado en FASE 3)
 
@@ -138,7 +139,7 @@ pendiente de la fase de storage).
 | Tenants | Ver §3.1: `GET/PUT /api/v1/tenants/{tenant}` (solo el activo), `POST /api/v1/tenants/{tenant}/switch`. La creación de tenants se añade en una fase posterior |
 | Users/Agents | Ver §3.2: `GET/PATCH/DELETE /api/v1/tenants/{tenant}/users`, `GET/POST .../users/invitations`, `POST .../invitations/{id}/revoke|resend`, `GET /api/v1/invitations/{token}`, `POST /api/v1/invitations/{token}/accept` |
 | Business profile | Ver §3.3: `GET/PUT /api/v1/tenants/{tenant}/business-profile` |
-| WhatsApp | `POST /api/v1/whatsapp/connect`, `GET /api/v1/whatsapp/accounts`, `POST /api/v1/whatsapp/accounts/{id}/verify` |
+| WhatsApp | Ver §3.4: `GET /api/v1/tenants/{tenant}/whatsapp`, `POST .../connect`, `POST .../disconnect` |
 | Contacts | `GET/POST /api/v1/contacts`, `PATCH/DELETE /api/v1/contacts/{id}`, `POST /api/v1/contacts/import` |
 | Tags | `GET/POST /api/v1/tags`, `PATCH/DELETE /api/v1/tags/{id}` |
 | Conversations | `GET /api/v1/conversations`, `GET/PATCH /api/v1/conversations/{id}`, `POST /api/v1/conversations/{id}/assign`, `POST .../transfer`, `POST .../close`, `POST .../reopen`, `POST .../resume-bot` |
@@ -155,12 +156,31 @@ pendiente de la fase de storage).
 | Notifications | `GET /api/v1/notifications`, `PATCH /api/v1/notifications/{id}/read` |
 | Audit | `GET /api/v1/audit-logs` (solo owner/admin) |
 
+### 3.4 WhatsApp (implementado en FASE 6)
+
+Cuenta de WhatsApp Business del tenant (una por tenant, ADR-029). Mismas reglas de enforcement
+que §3.2/§3.3: `{tenant}` debe ser el **activo**; otro tenant → **404**; sin permiso → **403**
+`PERMISSION_DENIED`. El `access_token` **jamás** se devuelve (atributo `hidden` + resource que no
+lo incluye). El `tenant_id` nunca se acepta del frontend (`BelongsToTenant`).
+
+| Método | Ruta | Permiso | Descripción |
+|---|---|---|---|
+| GET | `/api/v1/tenants/{tenant}/whatsapp` | `whatsapp.view` (todos los roles) | Estado de la cuenta: `{whatsapp_account: {id, whatsapp_business_account_id, display_name, status, phone_numbers[]} \| null}`. `phone_numbers[]`: `{id, phone_id, display_phone_number, verified_name, quality_rating, status, is_default}` |
+| POST | `/api/v1/tenants/{tenant}/whatsapp/connect` | `whatsapp.manage` (owner/admin) | Conecta una WABA. Valida SIEMPRE el token contra Meta (`GET /{phone_number_id}`) antes de persistir. Body: `{whatsapp_business_account_id, phone_number_id, access_token}` (+ `phone_number`, `display_name` opcionales). Token guardado **cifrado**. Respuesta: `{message, whatsapp_account, webhook_subscribed}` |
+| POST | `/api/v1/tenants/{tenant}/whatsapp/disconnect` | `whatsapp.manage` (owner/admin) | Desconecta: cancela suscripción del WABA (best-effort), anula el token y marca `disconnected`. Conserva el historial. Sin cuenta → **409** `WHATSAPP_NOT_CONNECTED` |
+
+Códigos de error WhatsApp (HTTP + `code`): **401** `WHATSAPP_AUTH_FAILED` (token inválido en Meta),
+**404** `WHATSAPP_PHONE_NOT_FOUND` (phone_number_id inexistente), **409** `WHATSAPP_NOT_CONNECTED`
+(sin cuenta), **502** `WHATSAPP_MESSAGE_FAILED` (fallo permanente en envío; `retryable` indica si
+es reintentable). Verificación GET webhook: 403 `WHATSAPP_WEBHOOK_INVALID`; firma POST: 401
+`WHATSAPP_SIGNATURE_INVALID`.
+
 ## 4. Webhooks (sin auth Bearer; autenticados por firma y dedupe)
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/api/webhooks/whatsapp` | Verificación de Meta (`hub.mode`, `hub.verify_token`, `hub.challenge`) |
-| POST | `/api/webhooks/whatsapp` | Evento de mensaje/estado. Valida `X-Hub-Signature-256` + dedupe por `provider_event_id` |
+| GET | `/api/webhooks/whatsapp` | Verificación de Meta (`hub.mode`, `hub.verify_token`, `hub.challenge`). Token correcto → 200 con el challenge en **texto plano**; inválido → 403 (FASE 6) |
+| POST | `/api/webhooks/whatsapp` | Evento de mensaje/estado. Valida `X-Hub-Signature-256` (HMAC-SHA256 sobre el body crudo) → 401 si falla; dedupe por `provider_event_id`; resuelve tenant por `metadata.phone_number_id` y encola el job. Respuesta **siempre 200** para eventos válidos/duplicados/desconocidos (nunca 500) (FASE 6) |
 | POST | `/api/webhooks/stripe` | Eventos de Stripe (invoice, subscription). Firma `Stripe-Signature` + dedupe por `event id` |
 
 ## 5. Errores

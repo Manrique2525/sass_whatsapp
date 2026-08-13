@@ -101,15 +101,19 @@ puede probar sin HTTP ni red.
 
 Flujo del mensaje entrante (WhatsApp → Inbox):
 
-1. Meta envía webhook a `POST /api/webhooks/whatsapp`.
+1. Meta envía webhook a `POST /api/webhooks/whatsapp`. **Implementado en FASE 6.**
 2. El controller valida firma `X-Hub-Signature-256` (App Secret global de la app) sobre el
    **cuerpo crudo**, y hace **dedupe** insertando `webhook_events` con UNIQUE `provider_event_id`
    (`ON CONFLICT DO NOTHING`). Resuelve el tenant por `metadata.phone_number_id`.
-3. Responde `200` de inmediato y despacha `ProcessIncomingWhatsAppMessage` a la cola.
-   Un **sweeper (outbox)** re-encola eventos huérfanos para no perder ninguno.
+   **Implementado en FASE 6.**
+3. Responde `200` de inmediato y despacha `ProcessIncomingWhatsAppMessage` a la cola
+   (`forTenant($tenantId)`). Un **sweeper (outbox)** re-encola eventos huérfanos para no perder
+   ninguno. **FASE 6**: ingestión + acuse (jobs marcan `processed`) y encolado en el mismo
+   request; el sweeper llega con la fase de mensajería (FASE 9).
 4. El worker (con `TenantContext` propio): localiza número → busca o crea Contact → crea
    Conversation si aplica → guarda Message → ejecuta el motor de flujos **bajo lock de Redis
    por conversación** o notifica a agentes → emite eventos/broadcasts.
+   **FASE 9+** (contactos/conversaciones/mensajes/engine en fases 7-12).
 
 Autenticación (dos modos, ADR-011):
 

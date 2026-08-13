@@ -5,6 +5,9 @@ declare(strict_types=1);
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Models\User;
 use App\Domain\Users\Notifications\InvitationNotification;
+use App\Domain\WhatsApp\Models\WhatsAppAccount;
+use App\Domain\WhatsApp\Models\WhatsAppPhoneNumber;
+use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
@@ -82,4 +85,38 @@ function invitation_token(Closure $operation): string
     }
 
     return $token;
+}
+
+/**
+ * Crea la cuenta de WhatsApp + número de un tenant con el TenantContext activo
+ * (igual que en producción lo haría un request autorizado). Devuelve ambos.
+ *
+ * @param  array<string, mixed>  $accountAttributes
+ * @return array{account: WhatsAppAccount, phone: WhatsAppPhoneNumber}
+ */
+function make_whatsapp_setup(Tenant $tenant, array $accountAttributes = []): array
+{
+    TenantContext::setId($tenant->id);
+
+    try {
+        $account = $tenant->whatsappAccount()->create(array_merge([
+            'whatsapp_business_account_id' => 'waba-1',
+            'access_token' => 'token-del-tenant',
+            'status' => 'connected',
+        ], $accountAttributes));
+
+        $phone = $tenant->whatsappPhoneNumbers()->create([
+            'whatsapp_account_id' => $account->id,
+            'phone_id' => 'phone-1',
+            'display_phone_number' => '15550000002',
+            'verified_name' => 'Negocio Central',
+            'quality_rating' => 'GREEN',
+            'status' => 'connected',
+            'is_default' => true,
+        ]);
+    } finally {
+        TenantContext::clear();
+    }
+
+    return ['account' => $account, 'phone' => $phone];
 }

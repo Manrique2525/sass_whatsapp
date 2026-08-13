@@ -36,13 +36,25 @@ Pirámide de tests con prioridad en lo crítico:
 - Ídem para contacts, messages, flows, chunks KB, leads, analytics.
 - `it('job does not leak tenant context between executions')`.
 
-### WhatsApp (crítico)
-- Verificación GET (token correcto/incorrecto).
-- Firma `X-Hub-Signature-256` válida/inválida → 200/401.
-- Mensaje entrante crea contact+conversation+message una sola vez (duplicado idempotente).
-- Status delivered/read/failed.
-- Payload malformado → 200 (no reenvío infinito).
-- Rate limit de Meta → backoff.
+### WhatsApp (crítico — FASE 6, 42 tests WHATSAPP-1..40 + 37b/39b)
+- Verificación GET: token correcto → challenge en texto plano; incorrecto → 403.
+- Firma `X-Hub-Signature-256` ausente/incorrecta → 401 `WHATSAPP_SIGNATURE_INVALID`.
+- Mensaje/status entrante: ingesta + dedupe + resolución de tenant por `phone_number_id` +
+  dispatch del job correcto (`WHATSAPP-6/7/12`).
+- Evento duplicado → `duplicate = true`, no se reprocesa (`WHATSAPP-8`).
+- `phone_number_id` desconocido / payload malformado → **200** + `webhook_events.failed`
+  (nunca 500; sin reintentos en bucle de Meta) (`WHATSAPP-5/9/10`).
+- Aislamiento CRITICO: webhook de un número de B no toca datos de A (`WHATSAPP-11`); Tenant A no
+  ve/desconecta la cuenta de B (`WHATSAPP-20`).
+- Conexión/envío: token cifrado en reposo (`WHATSAPP-15`), 401/404/409 en Meta, 403 sin permiso,
+  404 no-miembro, el token nunca se expone por API (`WHATSAPP-29`), error permanente vs.
+  transitorio (`WHATSAPP-26/28`), registro en `message_send_attempts` (`WHATSAPP-25`).
+- Provider unit: firma HMAC, payload oficial de sendText, mapeo de errores retryable/no-retryable,
+  timeout, `subscribed_apps` (`WHATSAPP-31..40`).
+- `Http::fake` con patrones por URL: el matcher de Laravel compara contra la URL **con query
+  string** (p. ej. `?fields=...` en `getPhoneNumberInfo`), así que los patrones absorben el query
+  (`graph.facebook.com/*/phone-1*`); los `Http::fake` se registran en UNA sola llamada (los
+  callbacks se acumulan, no se reemplazan).
 
 ### Chatbot engine (crítico)
 - Secuencia lineal, ramas condition, question→variable, delay, human, end.

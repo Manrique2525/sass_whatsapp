@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 5 COMPLETADA** (business profile). Solo se trabaja sobre la fase activa.
+Estado general: **FASE 6 COMPLETADA** (WhatsApp). Solo se trabaja sobre la fase activa.
 
 ## Fases
 
@@ -12,7 +12,7 @@ Estado general: **FASE 5 COMPLETADA** (business profile). Solo se trabaja sobre 
 | 3 | Tenants (TenantContext, aislamiento) | COMPLETADA |
 | 4 | Usuarios y roles (invitaciones, agentes) | COMPLETADA |
 | 5 | Business profile | COMPLETADA |
-| 6 | WhatsApp (webhooks, provider) | PENDIENTE |
+| 6 | WhatsApp (webhooks, provider) | COMPLETADA |
 | 7 | Contactos | PENDIENTE |
 | 8 | Conversaciones | PENDIENTE |
 | 9 | Mensajes (jobs async) | PENDIENTE |
@@ -254,3 +254,52 @@ COMPLETADO / BLOQUEADO
       contenedor, `health:check` ok
 - [x] Documentación: `api.md` (§3.3), `security.md`, `multi-tenancy.md`, `database.md`,
       `roadmap.md`, `decisions.md` (ADR-028)
+
+## Fase 6 — WhatsApp (estado)
+
+- [x] Provider `MetaWhatsAppProvider` implementando `WhatsAppProviderInterface` (Graph **v26.0**,
+      ADR-029): sendText/sendTemplate/sendImage/sendDocument/sendInteractiveMessage/markAsRead,
+      getPhoneNumberInfo (valida credenciales antes de persistir), subscribe/unsubscribe de
+      webhooks, `validateWebhookSignature` (HMAC-SHA256 + `hash_equals` sobre el body crudo) y
+      `verifyWebhook` (GET challenge, fallback a claves `hub.mode`/`hub.verify_token`/`hub.challenge`
+      por el underscore de PHP). El `access_token` se pasa POR LLAMADA (token del WABA del tenant,
+      nunca global). Errores de Meta normalizados en excepciones de dominio con `providerErrorCode`
+      + `retryable` (timeout/5xx/429 transitorios; 4xx permanentes).
+- [x] Migraciones (4): `whatsapp_accounts` (1 por tenant, `access_token` CIFRADO `encrypted`,
+      `status` string+cast), `whatsapp_phone_numbers` (`phone_id` UNIQUE = clave de resolución de
+      tenant del webhook, `whatsapp_account_id` FK `nullOnDelete`), `webhook_events` (PLATAFORMA,
+      `provider_event_id` UNIQUE = dedupe, `tenant_id` nullable, `status`/`event_type`/`duplicate`),
+      `message_send_attempts` (cada llamada al provider; intentos/backoff real en FASE 9)
+- [x] Modelos en `app/Domain/WhatsApp/Models` con enums (WhatsAppAccountStatus, PhoneNumberStatus,
+      WebhookEventStatus, WebhookEventType, WhatsAppErrorCode) y VOs (`MessageSendResult`,
+      `PhoneNumberInfo`, `InteractiveMessage`)
+- [x] `WhatsAppWebhookService` (Application): firma → parseo → dedupe (`ON CONFLICT DO NOTHING`) →
+      resolución de tenant por `phone_number_id` → `enqueued` + dispatch de jobs. Payload
+      malformado/desconocido → `failed` + **200** (nunca 500; Meta no reintenta infinitamente)
+- [x] Jobs `ProcessIncomingWhatsAppMessage` / `ProcessWhatsAppStatusUpdate` (TenantAwareJob +
+      ShouldQueue): guard de estado `Enqueued` + `event_type` + `tenant_id`, `markProcessed()`.
+      La persistencia de mensajes/conversaciones llega en FASE 7-9 (TODO marcado)
+- [x] HTTP: webhook público `GET/POST /api/webhooks/whatsapp` (verify 403/200, handle 401/200/200),
+      `WhatsAppController` (`GET/POST /api/v1/tenants/{tenant}/whatsapp[\/connect|\/disconnect]`),
+      `ConnectWhatsAppRequest`, `WhatsAppAccountResource` (jamás expone `access_token`)
+- [x] `WhatsAppConnectionService` (conectar valida SIEMPRE contra Meta antes de persistir; el token
+      se guarda cifrado; desconectar anula token + status + suscripción WABA, conserva historial;
+      auditoría `whatsapp.connected/disconnected/webhook_configured/message_sent/message_failed`)
+      y `WhatsAppMessagingService` (envío registrando `message_send_attempts`)
+- [x] Permisos `whatsapp.view` (todos) / `whatsapp.manage` (owner/admin) en la matriz ADR-026 →
+      15 permisos; seeder actualizado
+- [x] Frontend `Settings/WhatsApp.vue` (estado de conexión, conectar con token tipo password,
+      desconectar con confirmación, `can('whatsapp.manage')`) + ruta web `settings/whatsapp` +
+      nav en `AppLayout`
+- [x] Tests (42 nuevos en FASE 6 → **177 total, 597 assertions**): WHATSAPP-1..14 webhook
+      (firma, verify, duplicados, aislamiento CRITICO por phone_id, jobs por tipo, payload
+      malformado, matriz permisos), WHATSAPP-15..30 conexión/envío (token cifrado, 401/404/409,
+      aislamiento CRITICO A/B, errores permanentes/transitorios), WHATSAPP-31..40 provider unit
+      (firma, verify, payload oficial, mapeo de errores, subscribed_apps)
+- [x] Pint + PHPStan (nivel 6, larastan) + `vue-tsc` + `vite build` sin errores; exclusión
+      `trait.unused` de phpstan.neon eliminada (TenantAwareJob ya tiene consumidores de producción)
+- [x] Regresión Docker: `migrate:fresh --seed` en postgres sin errores, suite completa verde en el
+      contenedor (177), `health:check` ok
+- [x] Documentación: `whatsapp.md`, `api.md` (§3.4 + webhooks), `database.md`, `security.md`,
+      `multi-tenancy.md` (aislamiento webhook), `testing.md`, `deployment.md`, `roadmap.md`,
+      `decisions.md` (ADR-029)

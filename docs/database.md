@@ -41,7 +41,7 @@ tenants
 | `tenant_invitations` | Invitaciones a un tenant (FASE 4, ADR-027) | `tenant_id`, `email`, `role`, `token_hash` (sha256, único; nunca el token plano), `invited_by`, `status` (pending/accepted/revoked/expired), `expires_at` (7 días), `accepted_at` |
 | `business_profiles` | Perfil de negocio 1:1 (FASE 5, ADR-028) | `tenant_id` UNIQUE FK→tenants `cascadeOnDelete`; `name`, `description`, `category`, `address`, `website`, `email`, `phone`, `working_hours` (JSON). Se crea bajo demanda en la primera lectura |
 | `plans` | Planes (FREE/PRO/BUSINESS) | límites en `limits` JSON |
-| `webhook_events` | Eventos crudos recibidos de Meta | Nivel plataforma: `provider_event_id` UNIQUE (id global de Meta), `tenant_id` nullable (se resuelve por phone_number_id), `status` (received/enqueued/processed/failed) |
+| `webhook_events` | Eventos crudos recibidos de Meta (FASE 6, ADR-029) | Nivel plataforma: `provider_event_id` UNIQUE (id global de Meta), `tenant_id` nullable (se resuelve por phone_number_id), `status` (received/enqueued/processed/failed), `event_type` (message/status), `duplicate` |
 | `audit_logs` | Auditoría | `tenant_id` nullable, `actor_id`, `action`, `payload` |
 | `failed_jobs`, `cache`, `sessions`, `personal_access_tokens`, `password_reset_tokens` | Framework | estándar |
 
@@ -67,7 +67,7 @@ tenants
 | Analytics | `analytics_daily`, `conversation_metrics` |
 | Variables | `conversation_context` (JSON dentro de `conversations`) |
 
-### `webhook_events` (plataforma, ver arriba)
+### `webhook_events` (plataforma, ver arriba) — FASE 6
 
 ```
 id uuid PK
@@ -75,10 +75,15 @@ provider_event_id varchar(255) UNIQUE   → id de Meta: messages[].id o statuses
 tenant_id FK → tenants (nullable, se resuelve por metadata.phone_number_id)
 payload JSONB                            → crudo (mínimo necesario)
 status enum(received, enqueued, processed, failed)
-event_type enum(message, status)
-duplicate boolean
-created_at / processed_at nullable
+event_type enum(message, status) nullable → qué job procesa el evento
+duplicate boolean                        → true si Meta re-envió un evento ya registrado
+error_code varchar(100) nullable         → motivo de fallo (unknown_phone_number_id, ...)
+processed_at timestamp nullable
+created_at / updated_at
 ```
+
+Índices: `webhook_events_provider_event_id_unique` (UNIQUE) + `(status, created_at)` para el
+sweeper/outbox (FASE 9).
 
 ## 4. Columnas críticas
 
@@ -174,12 +179,19 @@ period_start / period_end timestamp
 Constraint: UNIQUE `(tenant_id, subscription_id, feature, period_start)` → el contador del
 período se actualiza con UPSERT atómico (`quantity = quantity + N`), nunca con filas duplicadas.
 
-### `whatsapp_accounts` / `whatsapp_phone_numbers`
+### `whatsapp_accounts` / `whatsapp_phone_numbers` / `message_send_attempts` (FASE 6, ADR-029)
 
-- `whatsapp_accounts`: `tenant_id`, `waba_id` UNIQUE por tenant, `access_token` **cifrado**
-  (atributo `encrypted`), `status`. Un tenant puede tener varios WABA (uno por número conectado).
-- `whatsapp_phone_numbers`: `tenant_id`, `account_id`, `phone_id` UNIQUE (id de Meta, clave de
-  resolución del webhook), `phone_number` E.164, `verified`, `quality_rating`, `status`.
+- `whatsapp_accounts` (1 por tenant): `tenant_id` UNIQUE FK `cascadeOnDelete`,
+  `whatsapp_business_account_id` (waba_id, nullable), `display_name`, `access_token` **cifrado**
+  (atributo `encrypted`), `status` (`connected`/`disconnected`). Un tenant = una WABA en esta fase.
+- `whatsapp_phone_numbers`: `tenant_id` FK `cascadeOnDelete`, `whatsapp_account_id` FK
+  `nullOnDelete`, `phone_id` UNIQUE (id de Meta, **clave de resolución del webhook**),
+  `display_phone_number` E.164, `verified_name`, `quality_rating`, `status`, `is_default`.
+- `message_send_attempts`: `tenant_id` FK, `whatsapp_phone_number_id` FK `cascadeOnDelete`,
+  `provider_message_id`, `to`, `type`, `payload` (sin secretos), `status`
+  (pending/sent/failed), `error_code` (`WHATSAPP_*`), `error_message`, `attempt`/`max_attempts`,
+  `attempted_at`. Registra CADA llamada al provider; el backoff de cola real llega en FASE 9.
+  Índice `(tenant_id, status)`.
 
 ## 5. Índices y constraints recomendados
 

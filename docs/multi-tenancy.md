@@ -1,6 +1,6 @@
 # Multi-tenancy
 
-Estado: **implementado en FASE 3 + FASE 4 + FASE 5**. Este documento describe el diseño y cómo
+Estado: **implementado en FASE 3 + FASE 4 + FASE 5 + FASE 6**. Este documento describe el diseño y cómo
 quedó materializado en código (rutas, clases y semántica HTTP reales).
 
 ## 1. Estrategia
@@ -30,6 +30,12 @@ y tiene un **tenant activo** seleccionable:
 - `business_profiles` (FASE 5, ADR-028): perfil 1:1 del negocio (`tenant_id` UNIQUE, FK
   `cascadeOnDelete`). Modelo con trait `BelongsToTenant` (`app/Domain/Business/Models/
   BusinessProfile.php`). Se crea bajo demanda en la primera lectura.
+- `whatsapp_accounts` / `whatsapp_phone_numbers` / `message_send_attempts` (FASE 6, ADR-029):
+  modelos con trait `BelongsToTenant` en `app/Domain/WhatsApp/Models`. Una cuenta por tenant con
+  el `access_token` cifrado; `whatsapp_phone_numbers.phone_id` (id de Meta) es la **clave de
+  resolución del webhook**. `webhook_events` es tabla de **plataforma** (sin scope): un evento de
+  Meta es único a nivel global y llega sin tenant resuelto; el `tenant_id` se rellena al
+  resolver el `metadata.phone_number_id`.
 - Roles por tenant: se implementa con **spatie/laravel-permission en modo `teams`**
   (`team_id = tenant_id`). Así `owner/admin/agent` se asignan por tenant. `super_admin` es un
   rol global de plataforma (sin team). Ver ADR-012, ADR-018 y ADR-025 (migración de
@@ -38,8 +44,9 @@ y tiene un **tenant activo** seleccionable:
   `TenantContext::id()` → `users.current_tenant_id` → `null` (roles globales).
 - La autorización por tenant (FASE 4, ADR-026) exige SIEMPRE tres condiciones:
   `current_tenant_id == tenant` (tenant activo) + `tenant_users.status = active` + permiso en la
-  matriz de código `TenantPermission::permissionsForRole(rol)` (13 permisos; FASE 5 añade
-  `business_profile.view/update`). Sin membresía o inactivo → **404**; sin permiso → **403**
+  matriz de código   `TenantPermission::permissionsForRole(rol)` (15 permisos; FASE 5 añade
+  `business_profile.view/update`; FASE 6 añade `whatsapp.view`/`whatsapp.manage`). Sin membresía
+  o inactivo → **404**; sin permiso → **403**
   `PERMISSION_DENIED`. Los roles spatie se mantienen como espejo de `tenant_users.role` vía
   `TenantRoleManager` (`syncRoles` reemplaza, nunca suma).
 - Cambio de tenant activo: `POST /api/v1/tenants/{tenant}/switch` (valida membresía en
@@ -179,6 +186,14 @@ Nunca se acepta `tenant_id` desde el request (se ignora o se rechaza — test
   `business_profile.view` → 403; `update` solo owner/admin. Creado bajo demanda en la primera
   lectura (invariante 1:1). Aislamiento CRITICO (BP-6): el tenant A no lee ni modifica el perfil
   de B.
+- **WhatsApp (FASE 6)**: `whatsapp_accounts`/`whatsapp_phone_numbers`/`message_send_attempts`
+  con trait `BelongsToTenant`; los endpoints `/tenants/{tenant}/whatsapp*` exigen `{tenant}`
+  activo (otro → 404) y permiso `whatsapp.view` (lectura) / `whatsapp.manage` (owner/admin).
+  El `access_token` viaja cifrado y nunca se expone. El **webhook** es la excepción deliberada:
+  es público (autenticado por firma) y escribe en `webhook_events` (plataforma) + resuelve el
+  tenant por `phone_id` sin contexto; los jobs `ProcessIncomingWhatsAppMessage` /
+  `ProcessWhatsAppStatusUpdate` usan `TenantAwareJob` con el tenant resuelto (aislamiento
+  garantizado por diseño).
 
 ## 5. Aislamiento en colas, eventos y notificaciones
 
@@ -242,3 +257,6 @@ tenant distinto del propietario:
 12. (FASE 5) Tenant A NO lee ni modifica el perfil de negocio de Tenant B: 404 en GET y PUT, y el
     perfil de B queda intacto (`BP-6`, CRITICO). El `tenant_id` enviado en el body es ignorado
     (`BP-8`).
+13. (FASE 6) El webhook de un número del tenant B jamás escribe en datos del tenant A: resuelve el
+    tenant por `phone_id` y encola un job con `forTenant(B)` (`WHATSAPP-11`, CRITICO); Tenant A no
+    ve ni desconecta la cuenta de B (404 en GET/POST, `WHATSAPP-20`).

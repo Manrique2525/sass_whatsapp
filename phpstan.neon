@@ -6,12 +6,3 @@ parameters:
     paths:
         - app
         - healthcheck.php
-
-    ignoreErrors:
-        # TenantAwareJob es una abstracción real y testeada (tests/Support/{WriteWidgetJob,FailingWidgetJob}.php
-        # la consumen y la suite de tests verifica su aislamiento), pero su primer consumidor de producción llega
-        # en FASE 26 (procesamiento asíncrono de mensajes). Sin ella, los tests de aislamiento de jobs no existen.
-        # TODO(fase-26): eliminar esta exclusión cuando el primer job de producción use el trait.
-        -
-            identifier: trait.unused
-            path: app/Jobs/Concerns/TenantAwareJob.php

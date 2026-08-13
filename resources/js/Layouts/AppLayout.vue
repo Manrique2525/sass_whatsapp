@@ -85,6 +85,7 @@ const logout = (): void => {
                 <div class="mx-auto flex max-w-4xl gap-6 px-4 py-2 text-sm">
                     <Link href="/settings/users" class="text-zinc-600 hover:text-zinc-900">Usuarios</Link>
                     <Link href="/settings/business-profile" class="text-zinc-600 hover:text-zinc-900">Perfil de negocio</Link>
+                    <Link href="/settings/whatsapp" class="text-zinc-600 hover:text-zinc-900">WhatsApp</Link>
                 </div>
             </nav>
         </header>

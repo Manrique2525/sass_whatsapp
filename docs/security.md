@@ -101,6 +101,32 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - **Auditoría FASE 5**: `business_profile.created` (primera lectura, invariante 1:1) y
   `business_profile.updated` (con `changed` y `tenant_id`).
 
+### WhatsApp (FASE 6)
+- **Webhook público pero autenticado por diseño**: el GET de verificación exige
+  `hub.verify_token` global (hash_equals) → 403 `WHATSAPP_WEBHOOK_INVALID` si no; el POST valida
+  SIEMPRE `X-Hub-Signature-256 = sha256=HMAC-SHA256(WHATSAPP_APP_SECRET, body_crudo)` con
+  `hash_equals` → 401 `WHATSAPP_SIGNATURE_INVALID`. La firma se calcula sobre el **body crudo
+  exacto** (`$request->getContent()`), jamás sobre un JSON re-serializado (test WHATSAPP-3/4/31).
+- **Idempotencia**: `webhook_events.provider_event_id` UNIQUE + insert `ON CONFLICT DO NOTHING`;
+  eventos duplicados (secuenciales o concurrentes) se marcan `duplicate` y no se reprocesan.
+  Los jobs solo marcan `processed` eventos `enqueued` + `event_type` + `tenant_id` coincidentes.
+- **Aislamiento**: la resolución de tenant del webhook consulta `whatsapp_phone_numbers.phone_id`
+  sin scope y escribe en `webhook_events` (tabla de plataforma) — un webhook de un número del
+  tenant B jamás toca datos del tenant A (test WHATSAPP-11 CRITICO). Los modelos
+  `whatsapp_accounts`/`whatsapp_phone_numbers`/`message_send_attempts` usan `BelongsToTenant`.
+- **Credenciales**: el `access_token` de la WABA se guarda **cifrado** (atributo `encrypted` con
+  la `APP_KEY`), es `$hidden` y el `WhatsAppAccountResource` no lo incluye nunca (test
+  WHATSAPP-15/29). Se usa solo para llamadas de ese tenant (token por llamada, nunca global).
+- **Autorización**: `whatsapp.view` (todos los roles) y `whatsapp.manage` (owner/admin) en la
+  matriz ADR-026 (→ 15 permisos). Sin permiso → 403 `PERMISSION_DENIED`; `{tenant}` distinto del
+  activo → 404; conectar sin credenciales válidas en Meta → 401 `WHATSAPP_AUTH_FAILED`.
+- **Nunca confiar en el frontend**: `ConnectWhatsAppRequest` valida los campos; el token se
+  valida contra Meta antes de persistir; `tenant_id` nunca se acepta (BelongsToTenant).
+- **Auditoría FASE 6**: `whatsapp.connected`, `whatsapp.disconnected`, `whatsapp.webhook_configured`,
+  `whatsapp.message_sent`, `whatsapp.message_failed`.
+- **DoS**: los payloads de webhook se procesan en la cola (nunca trabajo pesado en el request);
+  eventos desconocidos/malformados responden 200 (Meta no reintenta en bucle).
+
 ### Inyección SQL
 - Eloquent/Query Builder con bindings. Sin concatenación de SQL.
 - `phpstan` + revisión en code review.
@@ -146,9 +172,11 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 
 ### Secreto de tokens de WhatsApp
 - El `access_token` de cada WABA se guarda **cifrado** en `whatsapp_accounts.access_token`
-  (atributo `encrypted`, cifrado con la `APP_KEY`). Nunca se devuelve en respuestas API.
-  Cada tenant usa su propio token para envío; el `App Secret` y el `verify token` de los
-  webhooks son globales de la app y viven solo en `.env`. Rotación de tokens de números.
+  (atributo `encrypted`, cifrado con la `APP_KEY`). Nunca se devuelve en respuestas API (hidden
+  + resource). Cada tenant usa su propio token para envío; el `App Secret` y el `verify token` de
+  los webhooks son globales de la app y viven solo en `.env`. Rotación de tokens de números.
+- El webhook solo existe en `api/webhooks/whatsapp` (público pero firmado); ningún otro endpoint
+  expone datos de WhatsApp sin auth + permiso + tenant activo.
 
 ### Seguridad de archivos
 - Uploads a S3 con ACLs privadas, URLs firmadas, validación MIME real + tamaño.

@@ -8,6 +8,8 @@ use App\Domain\Business\Models\BusinessProfile;
 use App\Domain\Tenants\Enums\TenantStatus;
 use App\Domain\Users\Models\TenantUser;
 use App\Domain\Users\Models\User;
+use App\Domain\WhatsApp\Models\WhatsAppAccount;
+use App\Domain\WhatsApp\Models\WhatsAppPhoneNumber;
 use Database\Factories\Domain\Tenants\Models\TenantFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -93,5 +95,25 @@ class Tenant extends Model
     public function businessProfile(): HasOne
     {
         return $this->hasOne(BusinessProfile::class);
+    }
+
+    /**
+     * Cuenta de WhatsApp Business conectada (FASE 6, 1:1).
+     *
+     * @return HasOne<WhatsAppAccount, $this>
+     */
+    public function whatsappAccount(): HasOne
+    {
+        return $this->hasOne(WhatsAppAccount::class);
+    }
+
+    /**
+     * Números de WhatsApp conectados (FASE 6).
+     *
+     * @return HasMany<WhatsAppPhoneNumber, $this>
+     */
+    public function whatsappPhoneNumbers(): HasMany
+    {
+        return $this->hasMany(WhatsAppPhoneNumber::class);
     }
 }
