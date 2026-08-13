@@ -76,9 +76,9 @@ Todos los errores de `/api/v1/*` usan `{message, code, errors}`:
 
 Todos los recursos de negocio operan sobre el **tenant activo** del usuario. Las rutas NO llevan
 `{tenantId}` en el path (evita confusión cross-tenant): el tenant lo decide el middleware.
-Excepción: los endpoints de **usuarios/roles** (FASE 4) llevan `{tenant}` en el path por claridad
-REST, pero el enforcement sigue exigiendo que `{tenant}` sea el tenant activo del usuario (otro
-tenant al que se pertenezca → **404**; ver §3.2).
+Excepción: los endpoints de **usuarios/roles** (FASE 4) y **business profile** (FASE 5) llevan
+`{tenant}` en el path por claridad REST, pero el enforcement sigue exigiendo que `{tenant}` sea
+el tenant activo del usuario (otro tenant al que se pertenezca → **404**; ver §3.2 y §3.3).
 
 ### 3.1 Tenants (implementado en FASE 3)
 
@@ -114,14 +114,30 @@ tenant **activo** del usuario; otro tenant → **404**; sin permiso → **403** 
 `permissions` (matriz de permisos del rol activo) e `is_super_admin`.
 
 Roles por tenant (matriz ADR-026): `owner` = todos los permisos; `admin` = gestión operativa y de
-agentes (sin `roles.assign`); `agent` = solo lectura (`tenants.view`). `super_admin` es global de
-plataforma (sin permisos de tenant).
+agentes (sin `roles.assign`); `agent` = solo lectura (`tenants.view` + `business_profile.view`).
+`super_admin` es global de plataforma (sin permisos de tenant).
+
+### 3.3 Business profile (implementado en FASE 5)
+
+El perfil de negocio es 1:1 con el tenant (invariante de `BusinessProfileService`: se crea bajo
+demanda en la primera lectura, ADR-028). Mismas reglas de enforcement que §3.2: `{tenant}` debe
+ser el **activo**; otro tenant → **404**; sin permiso → **403** `PERMISSION_DENIED`. El
+`tenant_id` nunca se acepta del frontend (TenantContext + `BelongsToTenant` lo deciden).
+
+| Método | Ruta | Permiso | Descripción |
+|---|---|---|---|
+| GET | `/api/v1/tenants/{tenant}/business-profile` | `business_profile.view` (todos los roles) | Perfil del tenant activo. Si no existe, se crea (audita `business_profile.created`). `BusinessProfileResource`: `{id, name, description, category, address, website, email, phone, working_hours, updated_at}` |
+| PUT | `/api/v1/tenants/{tenant}/business-profile` | `business_profile.update` (owner/admin) | Actualización **parcial** de cualquier campo (todos opcionales). Body: `{name, description, category, address, website, email, phone, working_hours}`. `working_hours`: `[{day: mon..sun, open: 'HH:mm', close: 'HH:mm', closed: bool}]` (máx 7 días). Valida email/url/formatos. Audita `business_profile.updated` |
+
+Campos: `name` (255), `description` (5000), `category` (100), `address` (255), `website` (URL),
+`email`, `phone` (40), `working_hours` (JSON). `logo` no existe aún (requiere upload/media;
+pendiente de la fase de storage).
 
 | Recurso | Endpoints principales |
 |---|---|
-| Tenants | Ver §3.1: `GET/PUT /api/v1/tenants/{tenant}` (solo el activo), `POST /api/v1/tenants/{tenant}/switch`. La creación de tenants y el business-profile se añaden en fases posteriores |
+| Tenants | Ver §3.1: `GET/PUT /api/v1/tenants/{tenant}` (solo el activo), `POST /api/v1/tenants/{tenant}/switch`. La creación de tenants se añade en una fase posterior |
 | Users/Agents | Ver §3.2: `GET/PATCH/DELETE /api/v1/tenants/{tenant}/users`, `GET/POST .../users/invitations`, `POST .../invitations/{id}/revoke|resend`, `GET /api/v1/invitations/{token}`, `POST /api/v1/invitations/{token}/accept` |
-| Business profile | `GET/PUT /api/v1/tenants/current/business-profile` |
+| Business profile | Ver §3.3: `GET/PUT /api/v1/tenants/{tenant}/business-profile` |
 | WhatsApp | `POST /api/v1/whatsapp/connect`, `GET /api/v1/whatsapp/accounts`, `POST /api/v1/whatsapp/accounts/{id}/verify` |
 | Contacts | `GET/POST /api/v1/contacts`, `PATCH/DELETE /api/v1/contacts/{id}`, `POST /api/v1/contacts/import` |
 | Tags | `GET/POST /api/v1/tags`, `PATCH/DELETE /api/v1/tags/{id}` |

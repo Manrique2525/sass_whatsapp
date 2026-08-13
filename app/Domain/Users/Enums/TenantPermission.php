@@ -13,6 +13,9 @@ namespace App\Domain\Users\Enums;
  *
  * No se crean permisos de dominios futuros (whatsapp, contacts, conversations,
  * chatbots, billing) — corresponden a fases posteriores.
+ *
+ * FASE 5 añade el dominio business_profile (view para todos los roles del
+ * tenant; update solo owner/admin).
  */
 enum TenantPermission: string
 {
@@ -31,6 +34,9 @@ enum TenantPermission: string
     case ManageAgents = 'agents.manage';
 
     case ViewAudit = 'audit.view';
+
+    case ViewBusinessProfile = 'business_profile.view';
+    case UpdateBusinessProfile = 'business_profile.update';
 
     /**
      * Todos los permisos de la plataforma (para el seeder).
@@ -51,6 +57,8 @@ enum TenantPermission: string
             self::ViewAgents,
             self::ManageAgents,
             self::ViewAudit,
+            self::ViewBusinessProfile,
+            self::UpdateBusinessProfile,
         ];
     }
 
@@ -60,6 +68,7 @@ enum TenantPermission: string
      * - owner: administración completa del tenant (incluye assign roles y audit).
      * - admin: gestión operativa y de agentes; NO asigna roles ni audita.
      * - agent: solo lectura del tenant (operativo).
+     * - business_profile: view para todos; update solo owner/admin.
      *
      * @return list<TenantPermission>
      */
@@ -76,9 +85,12 @@ enum TenantPermission: string
                 self::ViewAgents,
                 self::ManageAgents,
                 self::ViewAudit,
+                self::ViewBusinessProfile,
+                self::UpdateBusinessProfile,
             ],
             UserRole::Agent => [
                 self::ViewTenants,
+                self::ViewBusinessProfile,
             ],
             // super_admin es rol global de plataforma (spatie, sin team):
             // no obtiene permisos de tenant, se autoriza aparte.

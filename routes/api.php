@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Domain\Tenants\Models\Tenant;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\PasswordController;
+use App\Http\Controllers\Api\V1\BusinessProfileController;
 use App\Http\Controllers\Api\V1\InvitationController;
 use App\Http\Controllers\Api\V1\MemberController;
 use App\Http\Controllers\Api\V1\MemberInvitationController;
@@ -58,6 +59,10 @@ Route::prefix('v1')->group(function (): void {
                 Route::post('{tenant}/users/invitations', [MemberInvitationController::class, 'store']);
                 Route::post('{tenant}/users/invitations/{invitation}/revoke', [MemberInvitationController::class, 'revoke']);
                 Route::post('{tenant}/users/invitations/{invitation}/resend', [MemberInvitationController::class, 'resend']);
+
+                // FASE 5 — perfil de negocio.
+                Route::get('{tenant}/business-profile', [BusinessProfileController::class, 'show']);
+                Route::put('{tenant}/business-profile', [BusinessProfileController::class, 'update']);
             });
         });
     });

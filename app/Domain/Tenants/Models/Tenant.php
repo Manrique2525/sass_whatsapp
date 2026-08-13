@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Tenants\Models;
 
+use App\Domain\Business\Models\BusinessProfile;
 use App\Domain\Tenants\Enums\TenantStatus;
 use App\Domain\Users\Models\TenantUser;
 use App\Domain\Users\Models\User;
@@ -13,6 +14,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 
 /**
@@ -80,5 +82,16 @@ class Tenant extends Model
     public function isActive(): bool
     {
         return $this->status === TenantStatus::Active;
+    }
+
+    /**
+     * Perfil de negocio 1:1 (FASE 5). El perfil se crea bajo demanda desde
+     * `BusinessProfileService` en la primera lectura.
+     *
+     * @return HasOne<BusinessProfile, $this>
+     */
+    public function businessProfile(): HasOne
+    {
+        return $this->hasOne(BusinessProfile::class);
     }
 }

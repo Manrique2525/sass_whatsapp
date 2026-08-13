@@ -15,11 +15,3 @@ parameters:
         -
             identifier: trait.unused
             path: app/Jobs/Concerns/TenantAwareJob.php
-
-        # BelongsToTenant es la infraestructura central del aislamiento (fail-safe de escritura + scope de lectura),
-        # probada mediante tests/Support/ScopedWidget.php. Ningún modelo del dominio tenant existe aún (se crean en
-        # fases posteriores: conversaciones, flujos, leads...), por eso hoy no hay consumidor en app/.
-        # TODO(fase-4+): eliminar esta exclusión cuando el primer modelo del dominio tenant use el trait.
-        -
-            identifier: trait.unused
-            path: app/Domain/Tenants/Traits/BelongsToTenant.php

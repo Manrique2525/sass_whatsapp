@@ -41,6 +41,9 @@ trait BelongsToTenant
 
     /**
      * Lecturas cross-tenant SOLO para servicios de aplicación autorizados.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
      */
     public function scopeWithoutTenantScope(Builder $query): Builder
     {

@@ -86,6 +86,21 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - **Auditoría FASE 4**: `user.login`, `user.logout`, `user.invited`, `user.invitation_accepted`,
   `user.invitation_revoked`, `user.invitation_resent`, `user.role_changed`, `user.removed`.
 
+### Perfil de negocio (FASE 5)
+- **Autorización**: `business_profile.view` (todos los roles del tenant) y
+  `business_profile.update` (solo owner/admin) en la matriz ADR-026. Agent → lectura
+  únicamente (403 `PERMISSION_DENIED` en PUT).
+- **Aislamiento**: `business_profiles` usa el trait `BelongsToTenant` (scope global + forzado de
+  `tenant_id` por `TenantContext` en creación). El `tenant_id` NO es fillable y NO existe regla
+  de validación para él: un `tenant_id` enviado en el body se ignora (test BP-8). El perfil de
+  otro tenant es **404** (no revela existencia, ADR-010/023).
+- **Validación (backend)**: `UpdateBusinessProfileRequest` valida email, URL (`website`),
+  longitudes (`name` 255, `description` 5000, `category` 100, `address` 255, `phone` 40),
+  `working_hours` (array máx 7, días en `mon..sun`, horas `HH:mm` 24h, `closed` booleano).
+  Nada se confía al frontend.
+- **Auditoría FASE 5**: `business_profile.created` (primera lectura, invariante 1:1) y
+  `business_profile.updated` (con `changed` y `tenant_id`).
+
 ### Inyección SQL
 - Eloquent/Query Builder con bindings. Sin concatenación de SQL.
 - `phpstan` + revisión en code review.

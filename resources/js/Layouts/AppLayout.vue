@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { router, usePage } from '@inertiajs/vue3';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import type { AuthUser } from '@/types/inertia';
 
@@ -78,6 +78,15 @@ const logout = (): void => {
             <p v-if="error" class="border-t border-zinc-200 bg-red-50 px-4 py-2 text-sm text-red-600">
                 {{ error }}
             </p>
+            <nav
+                v-if="currentTenantId !== null"
+                class="border-t border-zinc-200 bg-white"
+            >
+                <div class="mx-auto flex max-w-4xl gap-6 px-4 py-2 text-sm">
+                    <Link href="/settings/users" class="text-zinc-600 hover:text-zinc-900">Usuarios</Link>
+                    <Link href="/settings/business-profile" class="text-zinc-600 hover:text-zinc-900">Perfil de negocio</Link>
+                </div>
+            </nav>
         </header>
 
         <main class="mx-auto max-w-4xl px-4 py-8">

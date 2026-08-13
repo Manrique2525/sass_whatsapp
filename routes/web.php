@@ -12,6 +12,7 @@ use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\Invitations\InvitationWebController;
+use App\Http\Controllers\Settings\BusinessProfileSettingsController;
 use App\Http\Controllers\Settings\UserSettingsController;
 use Illuminate\Support\Facades\Route;
 
@@ -62,4 +63,8 @@ Route::middleware('auth')->group(function (): void {
     Route::get('settings/users', [UserSettingsController::class, 'show'])
         ->middleware(['verified', 'tenant'])
         ->name('settings.users');
+
+    Route::get('settings/business-profile', [BusinessProfileSettingsController::class, 'show'])
+        ->middleware(['verified', 'tenant'])
+        ->name('settings.business-profile');
 });

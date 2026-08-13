@@ -39,6 +39,7 @@ tenants
 | `tenants` | Negocios | `name`, `slug` único, `status`, `plan_id`, `timezone`, `locale` |
 | `tenant_users` | Relación user-tenant | `tenant_id`, `user_id`, `role` (owner/admin/agent), `status` (active/invited/disabled), `invited_at`/`joined_at`; UNIQUE `(tenant_id, user_id)` |
 | `tenant_invitations` | Invitaciones a un tenant (FASE 4, ADR-027) | `tenant_id`, `email`, `role`, `token_hash` (sha256, único; nunca el token plano), `invited_by`, `status` (pending/accepted/revoked/expired), `expires_at` (7 días), `accepted_at` |
+| `business_profiles` | Perfil de negocio 1:1 (FASE 5, ADR-028) | `tenant_id` UNIQUE FK→tenants `cascadeOnDelete`; `name`, `description`, `category`, `address`, `website`, `email`, `phone`, `working_hours` (JSON). Se crea bajo demanda en la primera lectura |
 | `plans` | Planes (FREE/PRO/BUSINESS) | límites en `limits` JSON |
 | `webhook_events` | Eventos crudos recibidos de Meta | Nivel plataforma: `provider_event_id` UNIQUE (id global de Meta), `tenant_id` nullable (se resuelve por phone_number_id), `status` (received/enqueued/processed/failed) |
 | `audit_logs` | Auditoría | `tenant_id` nullable, `actor_id`, `action`, `payload` |

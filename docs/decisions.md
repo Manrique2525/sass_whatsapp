@@ -341,6 +341,33 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   transición de status; invitaciones a email sin cuenta requieren registro previo (no se crean
   usuarios en el acto).
 
+## ADR-028 · Business profile: invariante 1:1 con lazy-create y permisos granulares
+
+- **Estado**: Aceptado · FASE 5
+- **Contexto**: El chatbot necesita datos públicos del negocio (variables `{{business.*}}`), y
+  el ERD define `business_profiles` 1:1 con `tenants`. Los docs no fijan campos ni ruta; la ruta
+  documentada (`/tenants/current/business-profile`) contradecía la convención REST de FASE 4
+  (`/tenants/{tenant}/...` con enforcement del activo), por lo que se unificó con §3.2.
+- **Decisión**:
+  - Ruta `GET/PUT /api/v1/tenants/{tenant}/business-profile` (mismas reglas que usuarios:
+    `{tenant}` = activo, otro → 404). Se corrigió `api.md`.
+  - Tabla `business_profiles` (UUID PK, `tenant_id` UNIQUE FK `cascadeOnDelete`). Campos:
+    `name`, `description`, `category`, `address`, `website`, `email`, `phone`,
+    `working_hours` (JSON). **Sin `logo`**: requiere upload/media, se añade con la fase de
+    storage (evitar campos muertos).
+  - **Lazy-create**: `BusinessProfileService::getOrCreateFor()` crea el perfil bajo demanda en la
+    primera lectura para sostener el invariante 1:1 sin depender de la creación de tenants (que
+    llega en fase posterior). La creación se audita (`business_profile.created`).
+  - Permisos granulares en la matriz ADR-026: `business_profile.view` (todos los roles) y
+    `business_profile.update` (owner/admin). El agente lee pero no escribe.
+  - `tenant_id` no es fillable y no hay regla de validación para él (TenantContext + trait
+    `BelongsToTenant` deciden la pertenencia; test BP-8).
+  - Validación 100% backend en `UpdateBusinessProfileRequest` (email, URL, longitudes, formato de
+    `working_hours`); actualización parcial por `fill()`.
+- **Consecuencias**: un GET que crea es una escritura (auditada); la actualización con body vacío
+  no audita `business_profile.updated` (no hay cambio); el frontend oculta el formulario a roles
+  sin `business_profile.update`.
+
 ## Pendientes de decisión
 
 - Proveedor de email en producción (mailpit en dev; SES/Resend/SMTP en prod) → FASE 22.

@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 4 COMPLETADA** (usuarios y roles). Solo se trabaja sobre la fase activa.
+Estado general: **FASE 5 COMPLETADA** (business profile). Solo se trabaja sobre la fase activa.
 
 ## Fases
 
@@ -11,7 +11,7 @@ Estado general: **FASE 4 COMPLETADA** (usuarios y roles). Solo se trabaja sobre 
 | 2 | Autenticación (Sanctum, roles iniciales) | COMPLETADA |
 | 3 | Tenants (TenantContext, aislamiento) | COMPLETADA |
 | 4 | Usuarios y roles (invitaciones, agentes) | COMPLETADA |
-| 5 | Business profile | PENDIENTE |
+| 5 | Business profile | COMPLETADA |
 | 6 | WhatsApp (webhooks, provider) | PENDIENTE |
 | 7 | Contactos | PENDIENTE |
 | 8 | Conversaciones | PENDIENTE |
@@ -229,3 +229,28 @@ COMPLETADO / BLOQUEADO
       en el contenedor, seeder re-ejecutado en dev
 - [x] Documentación: `multi-tenancy.md`, `security.md`, `api.md` (§3.3), `roadmap.md`,
       `decisions.md` (ADRs 025–027)
+
+## Fase 5 — Business profile (estado)
+
+- [x] Migración `business_profiles` (1:1 con `tenants`: `tenant_id` UNIQUE FK `cascadeOnDelete`;
+      campos `name/description/category/address/website/email/phone/working_hours` JSON; sin logo
+      — requiere media/storage en fase posterior, ADR-028)
+- [x] `BusinessProfile` (`app/Domain/Business/Models`): trait `BelongsToTenant` (scope + forzado
+      de `tenant_id` por TenantContext; `tenant_id` no fillable) + `Tenant::businessProfile()`
+      (hasOne)
+- [x] `TenantPermission`: +`business_profile.view` (todos los roles) y
+      `business_profile.update` (owner/admin) → 13 permisos; matriz y seeder actualizados
+- [x] `BusinessProfileService` (show auto-create con invariante 1:1 + update parcial con
+      autorización y auditoría `business_profile.created/updated`)
+- [x] HTTP: `UpdateBusinessProfileRequest` (validación completa), `BusinessProfileResource`,
+      `BusinessProfileController` (GET/PUT `/api/v1/tenants/{tenant}/business-profile`, 404/403/409),
+      web `settings/business-profile`
+- [x] Frontend: `Settings/BusinessProfile.vue` (formulario completo + horarios dinámicos, oculto
+      para agent) y nav de Settings en `AppLayout.vue`
+- [x] Tests (12 nuevos en FASE 5 → 135 total, 475 assertions): BP-1..12 (CRUD, aislamiento
+      CRITICO BP-6, rol activo, tampering BP-8, auditoría BP-9, validación, matriz)
+- [x] Pint + PHPStan (nivel 6, larastan) + `vue-tsc` + `vite build` sin errores
+- [x] Regresión Docker: `migrate:fresh --seed` en postgres sin errores, suite completa verde en el
+      contenedor, `health:check` ok
+- [x] Documentación: `api.md` (§3.3), `security.md`, `multi-tenancy.md`, `database.md`,
+      `roadmap.md`, `decisions.md` (ADR-028)
