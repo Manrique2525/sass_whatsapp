@@ -11,8 +11,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Pivot usuario <-> tenant con rol por tenant.
  *
- * `tenant_id` referencia `tenants.id` (la FK se añade en FASE 3 cuando exista
- * la tabla `tenants`). `role` es uno de los roles específicos de tenant.
+ * `tenant_id` es un UUID que referencia `tenants.id`. `role` es uno de los
+ * roles específicos de tenant (owner/admin/agent).
  */
 class TenantUser extends Model
 {
@@ -30,7 +30,7 @@ class TenantUser extends Model
     protected function casts(): array
     {
         return [
-            'tenant_id' => 'integer',
+            'tenant_id' => 'string',
             'role' => UserRole::class,
         ];
     }

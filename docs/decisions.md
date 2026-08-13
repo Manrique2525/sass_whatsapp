@@ -214,6 +214,76 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   con formato estándar `{message, code, errors}` (`VALIDATION_ERROR`, `UNAUTHENTICATED`,
   `RATE_LIMITED`) vía renderers en `bootstrap/app.php`.
 
+## ADR-020 · TenantContext fail-safe: lecturas vacías y escrituras con excepción sin contexto
+
+- **Estado**: Aceptado · FASE 3
+- **Contexto**: Un bug que consultara modelos tenant sin `TenantContext` activo (p. ej. en un
+  worker tras un `finally` mal puesto) podría devolver datos de un tenant equivocado o todos.
+- **Decisión**: `TenantScope::apply()` sin contexto añade `whereRaw('1 = 0')` (devuelve vacío,
+  jamás expone datos) y `BelongsToTenant::creating` sin contexto lanza
+  `TenantContextMissingException` (toda escritura requiere contexto). El middleware `tenant`
+  y `TenantAwareJob` garantizan el contexto en HTTP/cola; las lecturas cross-tenant de soporte
+  pasan SOLO por `scopeWithoutTenantScope()` dentro de servicios de aplicación autorizados.
+- **Consecuencias**: dos capas de fallo seguro sin filtraciones; los tests verifican que sin
+  contexto no hay fuga y que las escrituras fallan con error claro.
+
+## ADR-021 · Jobs tenant-aware: `tenant_id` explícito en el payload (`TenantAwareJob`)
+
+- **Estado**: Aceptado · FASE 3
+- **Contexto**: Los workers son procesos de larga duración: el contexto de un job podía fugar al
+  siguiente, y confiar en el tenant de quien encola es incorrecto si el usuario cambió de tenant.
+- **Decisión**: Trait `TenantAwareJob` en `app/Jobs/Concerns`. El job transporta `tenantId`
+  (setter encadenable `forTenant()`), `handle()` (final) establece `TenantContext::setId()` y lo
+  libera en `finally`; la lógica vive en `executeInTenantContext()`. El job usa SIEMPRE su propio
+  tenant, nunca el contexto existente al encolarse.
+- **Consecuencias**: aislamiento por job garantizado y testeado (jobs de A y B en el mismo
+  proceso, contexto limpio tras ejecución y ante excepción). Regla: TODO job de dominio tenant
+  debe usar el trait.
+
+## ADR-022 · Canales Reverb: sin comodín `*`, patrón explícito `tenant.{tenantId}.<recurso>.{recursoId}`
+
+- **Estado**: Aceptado · FASE 3 (corrige diseño previo)
+- **Contexto**: El diseño inicial usaba `private-tenant.{tenant_id}.conversations`. Al
+  implementar `channels.php` se descubrió que Laravel
+  (`Broadcaster::channelNameMatchesPattern`) escapa los puntos ANTES de evaluar, por lo que
+  `tenant.{tenantId}.*` se convierte en `tenant\.([^\.]+)\.*` = "cero o más puntos" y NUNCA casa
+  con `tenant.UUID.conversations.1`. No existe wildcard `*`.
+- **Decisión**: Un patrón explícito por recurso: `tenant.{tenantId}.conversations.{conversationId}`.
+  El callback valida siempre la pertenencia del usuario al tenant (`belongsToTenantById`); estar
+  autenticado no basta. Todo nuevo canal del tenant sigue este patrón.
+- **Consecuencias**: suscripciones correctas con auth real; test que verifica que un usuario del
+  tenant A recibe `false` en canales del tenant B (con `TestAuthBroadcaster`).
+
+## ADR-023 · Switch de tenant como caso de uso con semántica 404/409 + auditoría
+
+- **Estado**: Aceptado · FASE 3
+- **Contexto**: Cambiar el tenant activo debe validar membresía, no filtrar existencia, registrar
+  la acción y notificar al resto de servicios.
+- **Decisión**: `SwitchTenant` (Application service) valida `tenant_users` (si no es miembro →
+  `TenantMembershipException` → el controller devuelve 404), valida `status === Active` (inactivo
+  → 409 `TENANT_NOT_ACTIVE`), persiste `current_tenant_id`, registra en `audit_logs`
+  (`tenant.switched`) y dispara `TenantSwitched`. El controller libera `TenantContext` en
+  `finally` para no dejar estado colgando (el endpoint no vive bajo el middleware `tenant`).
+- **Consecuencias**: sin enumeración de tenants ajenos (404), tenant suspendido no usable (409),
+  trazabilidad de switches y aviso a la capa de tiempo real.
+
+## ADR-024 · Tests deterministas con `<server>` en phpunit.xml (precedencia de env en Laravel 12)
+
+- **Estado**: Aceptado · FASE 3
+- **Contexto**: En Docker, la suite fallaba con 419 (CSRF) y jobs encolados sin procesar. Laravel
+  12 resuelve `env()` con la inmutabilidad de Dotenv en este orden: `$_SERVER` → `$_ENV` →
+  `getenv()`. Las variables de docker-compose (DB_CONNECTION=pgsql, QUEUE_CONNECTION=redis,
+  SESSION_DRIVER=redis, CACHE_STORE=redis...) viven en `$_SERVER` y ganaban a los `<env>` de
+  phpunit (que solo pueblan `$_ENV` y `putenv`). Consecuencia: los tests corrían contra postgres/
+  redis/smtp reales y el app env quedaba en `local` (sin bypass de CSRF).
+- **Decisión**: phpunit.xml declara la plataforma de tests con `<server>` (que escribe
+  `$_SERVER` de forma incondicional): APP_ENV=testing, DB_CONNECTION=sqlite, DB_DATABASE=:memory:,
+  CACHE_STORE=array, QUEUE_CONNECTION=sync, SESSION_DRIVER=array, MAIL_MAILER=array,
+  BROADCAST_CONNECTION=null, etc. Además se eliminó el `APP_ENV: local` redundante de
+  docker-compose (la fuente única es `.env`).
+- **Consecuencias**: la misma suite es verde local y en el contenedor (93 tests). Regla: la
+  configuración crítica de tests se declara con `<server>`, no `<env>`.
+
 ## Pendientes de decisión
 
 - Proveedor de email en producción (mailpit en dev; SES/Resend/SMTP en prod) → FASE 22.

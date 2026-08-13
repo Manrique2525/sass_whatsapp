@@ -34,8 +34,8 @@
 | POST | `/api/v1/auth/logout` | Revoca el token actual | Requiere `auth:sanctum` |
 | POST | `/api/v1/auth/forgot-password` | Solicita reset | 200 con mensaje genérico (nunca revela si el email existe) |
 | POST | `/api/v1/auth/reset-password` | Confirma reset | Token inválido → 422 `INVALID_RESET_TOKEN`. Revoca tokens del usuario |
-| GET  | `/api/v1/auth/me` | Usuario + tenants + rol activo | Requiere `auth:sanctum`. Devuelve `{user, tenants[], current_tenant_id, roles[]}` |
-| POST | `/api/v1/auth/switch-tenant` | Cambia `users.current_tenant_id` (valida membresía) | **FASE 3** (cuando exista `Tenant`) |
+| GET  | `/api/v1/auth/me` | Usuario + tenants + rol activo | Requiere `auth:sanctum`. Devuelve `{user, tenants[], current_tenant, current_tenant_id, roles[]}` |
+| POST | `/api/v1/tenants/{tenant}/switch` | Cambia `users.current_tenant_id` (valida membresía) | **FASE 3**. Implementado en el recurso `tenants`, ver §3.1 |
 
 ### Rate limits (FASE 2)
 
@@ -77,9 +77,21 @@ Todos los errores de `/api/v1/*` usan `{message, code, errors}`:
 Todos los recursos de negocio operan sobre el **tenant activo** del usuario. Las rutas NO llevan
 `{tenantId}` en el path (evita confusión cross-tenant): el tenant lo decide el middleware.
 
+### 3.1 Tenants (implementado en FASE 3)
+
+| Método | Ruta | Descripción | Detalle |
+|---|---|---|---|
+| GET | `/api/v1/tenants` | Tenants disponibles (solo activos) + actual | `{tenants: TenantResource[], current_tenant_id}`. `can:viewAny` (filtra por membresía) |
+| GET | `/api/v1/tenants/{tenant}` | Perfil del tenant activo | Middleware `tenant` + `can:view`. Solo el tenant activo es visible (otro tenant al que se pertenezca requiere `switch`); no-miembro/no-activo → **404** |
+| PUT | `/api/v1/tenants/{tenant}` | Actualiza `name/timezone/locale` | Middleware `tenant` + `can:update`. Solo tenant activo → 404 en otro caso. Audita `tenant.updated`. Body: `{name, timezone, locale}` |
+| POST | `/api/v1/tenants/{tenant}/switch` | Cambia el tenant activo | `can:switch` (membresía + activo). No-miembro → **404**; tenant suspendido → **409** `TENANT_NOT_ACTIVE`. Audita `tenant.switched` + evento `TenantSwitched`. Respuesta: `{message, current_tenant, current_tenant_id}` |
+
+`TenantResource`: `{id, name, slug, status, timezone, locale, role (rol del usuario en el
+pivot, si aplica), created_at}`.
+
 | Recurso | Endpoints principales |
 |---|---|
-| Tenants | `GET /api/v1/tenants/current` (perfil del propio tenant), `PUT /api/v1/tenants/current/business-profile`, `POST /api/v1/tenants` (crear). Cualquier `GET /api/v1/tenants/{id}` valida membresía en `tenant_users` → 404 si no pertenece |
+| Tenants | Ver §3.1: `GET/PUT /api/v1/tenants/{tenant}` (solo el activo), `POST /api/v1/tenants/{tenant}/switch`. La creación de tenants y el business-profile se añaden en fases posteriores |
 | Users/Agents | `GET/POST /api/v1/users`, `POST /api/v1/users/invitations`, `PATCH/DELETE /api/v1/users/{id}` (siempre dentro del tenant activo) |
 | Business profile | `GET/PUT /api/v1/tenants/current/business-profile` |
 | WhatsApp | `POST /api/v1/whatsapp/connect`, `GET /api/v1/whatsapp/accounts`, `POST /api/v1/whatsapp/accounts/{id}/verify` |

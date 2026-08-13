@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 2 COMPLETADA** (autenticación). Solo se trabaja sobre la fase activa.
+Estado general: **FASE 3 COMPLETADA** (tenants y aislamiento multi-tenant). Solo se trabaja sobre la fase activa.
 
 ## Fases
 
@@ -9,7 +9,7 @@ Estado general: **FASE 2 COMPLETADA** (autenticación). Solo se trabaja sobre la
 | 0 | Arquitectura y documentación | COMPLETADA |
 | 1 | Infraestructura (Laravel, Docker, health check) | COMPLETADA |
 | 2 | Autenticación (Sanctum, roles iniciales) | COMPLETADA |
-| 3 | Tenants (TenantContext, aislamiento) | PENDIENTE |
+| 3 | Tenants (TenantContext, aislamiento) | COMPLETADA |
 | 4 | Usuarios y roles (invitaciones, agentes) | PENDIENTE |
 | 5 | Business profile | PENDIENTE |
 | 6 | WhatsApp (webhooks, provider) | PENDIENTE |
@@ -163,3 +163,37 @@ COMPLETADO / BLOQUEADO
 - [x] Pint + PHPStan (nivel 6) + `vue-tsc` + `vite build` sin errores
 - [x] Verificado en Docker: `migrate:fresh --seed`, `/health` ok, flujo auth end-to-end,
       email de reset en Mailpit, páginas Inertia renderizadas
+
+## Fase 3 — Tenants y aislamiento multi-tenant (estado)
+
+- [x] Modelo `Tenant` (UUID, `name`, `slug` unique, `status` enum, `timezone`, `locale`,
+      `settings` json) + `TenantStatus` enum + factory
+- [x] Migraciones: `tenants`, `audit_logs`; `tenant_users.tenant_id` y
+      `users.current_tenant_id` → UUID con FK real (cascade/nullOnDelete)
+- [x] `TenantContext` (set/setId/tenant/id/bound/clear) + `TenantScope` fail-safe
+      (sin contexto: lecturas vacías) + trait `BelongsToTenant` (writing exige contexto,
+      `tenant_id` forzado desde contexto)
+- [x] Middleware `tenant` (403 `NO_TENANT`; valida activo + membresía real; `finally` clear)
+- [x] `TenantPolicy` (viewAny/view/update/switch) + rutas `api/v1/tenants`
+      (index/show/update/switch) con `can:*` y middleware `tenant` en recursos
+- [x] Servicios de aplicación: `TenantService` (list/available/current/show/update, solo tenant
+      activo → 404) y `SwitchTenant` (membresía → 404, inactivo → 409, audita `tenant.switched`,
+      dispara `TenantSwitched`)
+- [x] Trait `TenantAwareJob` (`forTenant()`, `handle()` con contexto propio + `finally` clear)
+- [x] Auditoría mínima: `AuditLog` + `AuditLogger` (switch/update de tenant)
+- [x] Reverb: patrón `tenant.{tenantId}.conversations.{conversationId}` (sin comodín `*`,
+      ADR-022) con autorización por pertenencia + `TestAuthBroadcaster`
+- [x] Frontend: `AppLayout` con lista de tenants y switch desde el sidebar (`Dashboard`)
+- [x] Fix suite: `beforeEach` global encadenado en `tests/Pest.php` (Pest 3.8) con limpieza de
+      `TenantContext` + rate limiters; `forgetGuards()` en tests de logout
+- [x] Fix tests en Docker: phpunit.xml con `<server>` (determinismo env, ADR-024) y
+      `APP_ENV` redundante eliminado de docker-compose
+- [x] Tests (56 nuevos en FASE 3 → 93 total, 296 assertions): aislamiento (16), tamper de
+      `tenant_id`, jobs tenant-aware (TEST 9–14), canal Reverb, switch, policy, servicios
+- [x] Pint + PHPStan (nivel 6, larastan) + `vue-tsc` + `vite build` sin errores
+- [x] Regresión Docker: `migrate:fresh --seed`, suite completa verde en el contenedor,
+      `/health` ok, flujo API register→me→tenants→logout, Reverb arriba
+- [x] Documentación: `multi-tenancy.md` (implementación real), `security.md` (controles FASE 3),
+      `api.md` (§3.1 tenants), `decisions.md` (ADRs 020–024)
+- [x] Revisión de seguridad FASE 3: IDOR, tampering `tenant_id`, enumeración, fuga cross-tenant
+      (colas/Reverb/webhooks), determinismo de tests

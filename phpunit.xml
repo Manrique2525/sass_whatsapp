@@ -18,17 +18,23 @@
         </include>
     </source>
     <php>
-        <env name="APP_ENV" value="testing"/>
-        <env name="APP_MAINTENANCE_DRIVER" value="file"/>
-        <env name="BCRYPT_ROUNDS" value="4"/>
-        <env name="CACHE_STORE" value="array"/>
-        <env name="DB_CONNECTION" value="sqlite"/>
-        <env name="DB_DATABASE" value=":memory:"/>
-        <env name="MAIL_MAILER" value="array"/>
-        <env name="PULSE_ENABLED" value="false"/>
-        <env name="QUEUE_CONNECTION" value="sync"/>
-        <env name="SESSION_DRIVER" value="array"/>
-        <env name="BROADCAST_CONNECTION" value="null"/>
-        <env name="TELESCOPE_ENABLED" value="false"/>
+        <!-- Usamos <server> en lugar de <env> para que las variables de la
+             plataforma de pruebas (sqlite/array/sync) SIEMPRE ganen frente a
+             variables de entorno reales del proceso (p. ej. docker-compose):
+             Laravel resuelve env() en este orden: $_SERVER -> $_ENV -> getenv(),
+             y <env> solo puebla $_ENV, por lo que DB_CONNECTION=pgsql etc.
+             del contenedor pisarían la config de tests. -->
+        <server name="APP_ENV" value="testing"/>
+        <server name="APP_MAINTENANCE_DRIVER" value="file"/>
+        <server name="BCRYPT_ROUNDS" value="4"/>
+        <server name="CACHE_STORE" value="array"/>
+        <server name="DB_CONNECTION" value="sqlite"/>
+        <server name="DB_DATABASE" value=":memory:"/>
+        <server name="MAIL_MAILER" value="array"/>
+        <server name="PULSE_ENABLED" value="false"/>
+        <server name="QUEUE_CONNECTION" value="sync"/>
+        <server name="SESSION_DRIVER" value="array"/>
+        <server name="BROADCAST_CONNECTION" value="null"/>
+        <server name="TELESCOPE_ENABLED" value="false"/>
     </php>
 </phpunit>

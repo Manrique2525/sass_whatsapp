@@ -28,11 +28,36 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - Error de login genérico (mismo mensaje para email inexistente o contraseña incorrecta).
 
 ### Autorización
-- `Policies` por entidad (ConversationPolicy, ContactPolicy, FlowPolicy...).
+- `Policies` por entidad (TenantPolicy, ConversationPolicy, ContactPolicy, FlowPolicy...).
 - `Middleware tenant` resuelve el tenant activo (ver `multi-tenancy.md`).
 - Roles por tenant con spatie en modo `teams` (`team_id = tenant_id`): `owner`, `admin`,
   `agent`; `super_admin` global de plataforma. Permisos: `manage_contacts`,
   `manage_chatbots`, `manage_agents`, `view_analytics`, `manage_billing`, etc. Ver ADR-012.
+
+### Aislamiento multi-tenant (FASE 3)
+- **Scope global `TenantScope`** en todo modelo de dominio tenant. Sin `TenantContext` activo,
+  las lecturas devuelven vacío (`WHERE 1 = 0`) y las escrituras lanzan
+  `TenantContextMissingException` (fail-safe, ADR-020).
+- **Escrituras**: `tenant_id` SIEMPRE se fuerza desde `TenantContext::id()` en el hook
+  `creating` de `BelongsToTenant`. El `tenant_id` enviado por el frontend se ignora/rechaza
+  (test `RequestTenantIdTamperTest`).
+- **Middlewares**: `tenant` rechaza (403) sin tenant activo válido, si el tenant está
+  suspendido o si `current_tenant_id` ya no corresponde a una membresía real (valida contra
+  `tenant_users`, nunca confía en el valor persistido).
+- **Política de no-revelación**: acceso a tenant/recurso ajeno → 404 (no 403). El `switch`
+  devuelve 404 para no-miembros y 409 `TENANT_NOT_ACTIVE` para tenants suspendidos.
+- **Policies**: `TenantPolicy::switch` exige membresía + tenant activo; `view`/`update` exigen
+  pertenencia y el servicio exige además que sea el tenant activo.
+- **Jobs**: `TenantAwareJob` (ADR-021) transporta `tenantId`, restablece su propio contexto y lo
+  libera en `finally`. Un job de A jamás contamina a un job de B en el mismo worker.
+- **Tiempo real**: canales `tenant.{tenantId}.<recurso>.{recursoId}` (sin comodín, ADR-022);
+  `routes/channels.php` autoriza con pertenencia real al tenant. Usuario de A → `false` en
+  canales de B.
+- **Auditoría**: switch y updates de tenant registrados en `audit_logs` (`tenant.switched`,
+  `tenant.updated`).
+- **Revisión de seguridad FASE 3** (ver `docs/roadmap.md` §Fase 3): IDOR, tampering de
+  `tenant_id`, enumeración de tenants, fuga cross-tenant en colas/webhooks/Reverb, y
+  determinismo de tests en Docker (ADR-024).
 
 ### Inyección SQL
 - Eloquent/Query Builder con bindings. Sin concatenación de SQL.

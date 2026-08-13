@@ -9,6 +9,7 @@ use App\Application\Users\Services\RegisterUser;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
+use App\Http\Resources\TenantResource;
 use App\Http\Resources\UserResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -63,7 +64,8 @@ final class AuthController extends Controller
 
         return response()->json([
             'user' => new UserResource($user),
-            'tenants' => $user->tenantUsers()->get(['tenant_id', 'role']),
+            'tenants' => TenantResource::collection($user->tenants()->orderBy('name')->get()),
+            'current_tenant' => $user->currentTenant !== null ? new TenantResource($user->currentTenant) : null,
             'current_tenant_id' => $user->current_tenant_id,
             'roles' => $user->getRoleNames()->all(),
         ]);

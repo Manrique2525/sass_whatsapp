@@ -1,1 +1,130 @@
-<?phpdeclare(strict_types=1);use App\Domain\Users\Models\User;use App\Domain\Users\Notifications\ResetPasswordNotification;use Illuminate\Foundation\Testing\RefreshDatabase;use Illuminate\Support\Facades\DB;use Illuminate\Support\Facades\Notification;uses(RefreshDatabase::class);function resetTokenFor(string $email): string{    $user = User::query()->where('email', $email)->firstOrFail();    $token = null;    Notification::assertSentTo($user, ResetPasswordNotification::class, function (ResetPasswordNotification $notification) use (&$token): bool {        $token = $notification->getToken();        return true;    });    expect($token)->not->toBeNull();    return (string) $token;}test('la pantalla de olvido de contraseña se renderiza', function (): void {    $this->get('/forgot-password')        ->assertOk()        ->assertInertia(fn ($page) => $page->component('Auth/ForgotPassword'));});test('la pantalla de reset se renderiza con token y email', function (): void {    $this->get('/reset-password?token=abc&email=jane@example.com')        ->assertOk()        ->assertInertia(function ($page) {            $page->component('Auth/ResetPassword')                ->where('token', 'abc')                ->where('email', 'jane@example.com');        });});test('se puede solicitar el enlace de restablecimiento y se envía la notificación', function (): void {    Notification::fake();    $user = User::factory()->create(['email' => 'jane@example.com']);    $this->post('/forgot-password', ['email' => 'jane@example.com'])        ->assertSessionHas('status');    Notification::assertSentTo($user, ResetPasswordNotification::class);    expect(DB::table('password_reset_tokens')->where('email', 'jane@example.com')->exists())->toBeTrue();});test('solicitar el enlace para un email inexistente no revela su existencia', function (): void {    Notification::fake();    $this->post('/forgot-password', ['email' => 'ghost@example.com'])        ->assertSessionHas('status');    Notification::assertNothingSent();});test('se puede restablecer la contraseña con un token válido', function (): void {    User::factory()->create(['email' => 'jane@example.com']);    Notification::fake();    $this->post('/forgot-password', ['email' => 'jane@example.com']);    $token = resetTokenFor('jane@example.com');    $this->post('/reset-password', [        'token' => $token,        'email' => 'jane@example.com',        'password' => 'nueva-password',        'password_confirmation' => 'nueva-password',    ])->assertRedirect('/login');    $this->assertGuest();    $this->post('/login', [        'email' => 'jane@example.com',        'password' => 'nueva-password',    ])->assertRedirect(route('dashboard'));    $this->post('/logout');    $this->post('/login', [        'email' => 'jane@example.com',        'password' => 'password',    ])->assertSessionHasErrors('email');});test('un token inválido no restablece la contraseña', function (): void {    $user = User::factory()->create(['email' => 'jane@example.com']);    $this->post('/forgot-password', ['email' => 'jane@example.com']);    $this->post('/reset-password', [        'token' => 'token-invalido',        'email' => 'jane@example.com',        'password' => 'nueva-password',        'password_confirmation' => 'nueva-password',    ])->assertSessionHasErrors('email');    expect($user->fresh()->password)->toBe($user->password);});test('el reset de contraseña está limitado por tasa', function (): void {    User::factory()->create(['email' => 'rate@example.com']);    for ($i = 0; $i < 3; $i++) {        $this->post('/reset-password', [            'token' => 'x',            'email' => 'rate@example.com',            'password' => 'nueva-password',            'password_confirmation' => 'nueva-password',        ]);    }    $this->post('/reset-password', [        'token' => 'x',        'email' => 'rate@example.com',        'password' => 'nueva-password',        'password_confirmation' => 'nueva-password',    ])->assertStatus(429);});
+<?php
+
+declare(strict_types=1);
+
+use App\Domain\Users\Models\User;
+use App\Domain\Users\Notifications\ResetPasswordNotification;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
+
+uses(RefreshDatabase::class);
+
+function resetTokenFor(string $email): string
+{
+    $user = User::query()->where('email', $email)->firstOrFail();
+    $token = null;
+
+    Notification::assertSentTo($user, ResetPasswordNotification::class, function (ResetPasswordNotification $notification) use (&$token): bool {
+        $token = $notification->getToken();
+
+        return true;
+    });
+
+    expect($token)->not->toBeNull();
+
+    return (string) $token;
+}
+
+test('la pantalla de olvido de contraseña se renderiza', function (): void {
+    $this->get('/forgot-password')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->component('Auth/ForgotPassword'));
+});
+
+test('la pantalla de reset se renderiza con token y email', function (): void {
+    $this->get('/reset-password?token=abc&email=jane@example.com')
+        ->assertOk()
+        ->assertInertia(function ($page) {
+            $page->component('Auth/ResetPassword')
+                ->where('token', 'abc')
+                ->where('email', 'jane@example.com');
+        });
+});
+
+test('se puede solicitar el enlace de restablecimiento y se envía la notificación', function (): void {
+    Notification::fake();
+
+    $user = User::factory()->create(['email' => 'jane@example.com']);
+
+    $this->post('/forgot-password', ['email' => 'jane@example.com'])
+        ->assertSessionHas('status');
+
+    Notification::assertSentTo($user, ResetPasswordNotification::class);
+
+    expect(DB::table('password_reset_tokens')->where('email', 'jane@example.com')->exists())->toBeTrue();
+});
+
+test('solicitar el enlace para un email inexistente no revela su existencia', function (): void {
+    Notification::fake();
+
+    $this->post('/forgot-password', ['email' => 'ghost@example.com'])
+        ->assertSessionHas('status');
+
+    Notification::assertNothingSent();
+});
+
+test('se puede restablecer la contraseña con un token válido', function (): void {
+    User::factory()->create(['email' => 'jane@example.com']);
+    Notification::fake();
+
+    $this->post('/forgot-password', ['email' => 'jane@example.com']);
+
+    $token = resetTokenFor('jane@example.com');
+
+    $this->post('/reset-password', [
+        'token' => $token,
+        'email' => 'jane@example.com',
+        'password' => 'nueva-password',
+        'password_confirmation' => 'nueva-password',
+    ])->assertRedirect('/login');
+
+    $this->assertGuest();
+
+    $this->post('/login', [
+        'email' => 'jane@example.com',
+        'password' => 'nueva-password',
+    ])->assertRedirect(route('dashboard'));
+
+    $this->post('/logout');
+
+    $this->post('/login', [
+        'email' => 'jane@example.com',
+        'password' => 'password',
+    ])->assertSessionHasErrors('email');
+});
+
+test('un token inválido no restablece la contraseña', function (): void {
+    $user = User::factory()->create(['email' => 'jane@example.com']);
+
+    $this->post('/forgot-password', ['email' => 'jane@example.com']);
+
+    $this->post('/reset-password', [
+        'token' => 'token-invalido',
+        'email' => 'jane@example.com',
+        'password' => 'nueva-password',
+        'password_confirmation' => 'nueva-password',
+    ])->assertSessionHasErrors('email');
+
+    expect($user->fresh()->password)->toBe($user->password);
+});
+
+test('el reset de contraseña está limitado por tasa', function (): void {
+    User::factory()->create(['email' => 'rate@example.com']);
+
+    for ($i = 0; $i < 3; $i++) {
+        $this->post('/reset-password', [
+            'token' => 'x',
+            'email' => 'rate@example.com',
+            'password' => 'nueva-password',
+            'password_confirmation' => 'nueva-password',
+        ]);
+    }
+
+    $this->post('/reset-password', [
+        'token' => 'x',
+        'email' => 'rate@example.com',
+        'password' => 'nueva-password',
+        'password_confirmation' => 'nueva-password',
+    ])->assertStatus(429);
+});

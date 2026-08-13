@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Enums\UserRole;
 use App\Domain\Users\Models\TenantUser;
 use App\Domain\Users\Models\User;
@@ -14,10 +15,13 @@ uses(RefreshDatabase::class);
 
 test('un usuario puede pertenecer a varios tenants con rol por tenant', function (): void {
     $user = User::factory()->create();
+    $tenantA = Tenant::factory()->create();
+    $tenantB = Tenant::factory()->create();
+    $tenantC = Tenant::factory()->create();
 
-    TenantUser::query()->create(['tenant_id' => 100, 'user_id' => $user->id, 'role' => 'owner']);
-    TenantUser::query()->create(['tenant_id' => 200, 'user_id' => $user->id, 'role' => 'admin']);
-    TenantUser::query()->create(['tenant_id' => 300, 'user_id' => $user->id, 'role' => 'agent']);
+    $user->tenants()->attach($tenantA, ['role' => 'owner']);
+    $user->tenants()->attach($tenantB, ['role' => 'admin']);
+    $user->tenants()->attach($tenantC, ['role' => 'agent']);
 
     expect($user->tenantUsers()->count())->toBe(3);
 
@@ -29,7 +33,8 @@ test('un usuario puede pertenecer a varios tenants con rol por tenant', function
 
 test('el rol del pivot se castea al enum UserRole', function (): void {
     $user = User::factory()->create();
-    $pivot = TenantUser::query()->create(['tenant_id' => 42, 'user_id' => $user->id, 'role' => 'agent']);
+    $tenant = Tenant::factory()->create();
+    $pivot = TenantUser::query()->create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'role' => 'agent']);
 
     expect($pivot->role)->toBe(UserRole::Agent)
         ->and($pivot->role->value)->toBe('agent');
