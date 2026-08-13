@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 1 en curso** (infraestructura). Solo se trabaja sobre la fase activa.
+Estado general: **FASE 2 COMPLETADA** (autenticación). Solo se trabaja sobre la fase activa.
 
 ## Fases
 
@@ -8,7 +8,7 @@ Estado general: **FASE 1 en curso** (infraestructura). Solo se trabaja sobre la 
 |---|---|---|
 | 0 | Arquitectura y documentación | COMPLETADA |
 | 1 | Infraestructura (Laravel, Docker, health check) | COMPLETADA |
-| 2 | Autenticación (Sanctum, roles iniciales) | PENDIENTE |
+| 2 | Autenticación (Sanctum, roles iniciales) | COMPLETADA |
 | 3 | Tenants (TenantContext, aislamiento) | PENDIENTE |
 | 4 | Usuarios y roles (invitaciones, agentes) | PENDIENTE |
 | 5 | Business profile | PENDIENTE |
@@ -140,3 +140,26 @@ COMPLETADO / BLOQUEADO
 - PHP 8.3.33 + Composer 2.10 + Node 24 disponibles en la máquina.
 - Docker NO instalado. PostgreSQL/Redis NO disponibles localmente. `pdo_pgsql` y `pgsql`
   habilitados en `php.ini`. Decisión (ADR-002): instalar Docker Desktop para el entorno local.
+
+## Fase 2 — Autenticación (estado)
+
+- [x] Sanctum instalado: web por sesión (Inertia, CSRF) + API por Bearer (`auth:sanctum`)
+- [x] spatie/laravel-permission instalado en modo teams (`team_foreign_key = tenant_id`)
+- [x] `User` movido a `app/Domain/Users/Models/User` (multi-tenant listo: pivot `tenant_users`,
+      `current_tenant_id` sin FK hasta FASE 3)
+- [x] Migraciones: `permission_tables`, `personal_access_tokens`, `current_tenant_id`,
+      `tenant_users` (unique user+tenant, índice tenant+role)
+- [x] Roles base (`super_admin` global; `owner`/`admin`/`agent` por tenant) via seeder
+- [x] Servicios de aplicación: RegisterUser, AuthenticateUser, SendPasswordResetLink,
+      ResetUserPassword, VerifyUserEmail
+- [x] Reset de contraseña con URL SPA (`/reset-password?token=&email=`), no filtra emails
+- [x] Verificación de email (URL firmada + reenvío con throttle `6,1`)
+- [x] API `/api/v1/auth/*` con formato de error estándar `{message, code, errors}`
+      (`VALIDATION_ERROR`, `UNAUTHENTICATED`, `RATE_LIMITED`)
+- [x] Rate limits: `auth-login` 10/min, `auth-register` 5/min, `auth-password` 3/min
+- [x] Frontend Inertia + Vue 3 + TypeScript: Login, Register, ForgotPassword, ResetPassword,
+      VerifyEmail, Dashboard (Tailwind)
+- [x] Tests (37 green): auth web + API + multi-tenant prep + unit de servicios/enums
+- [x] Pint + PHPStan (nivel 6) + `vue-tsc` + `vite build` sin errores
+- [x] Verificado en Docker: `migrate:fresh --seed`, `/health` ok, flujo auth end-to-end,
+      email de reset en Mailpit, páginas Inertia renderizadas

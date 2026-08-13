@@ -176,6 +176,44 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
 - **Consecuencias**: soporte real multi-tenant por usuario; el frontend recibe la lista de
   tenants en `/auth/me` y permite switchear (re-suscribiendo canales Reverb).
 
+## ADR-017 · Modelo de datos auth FASE 2: `tenant_users` sin FK y `current_tenant_id` sin FK
+
+- **Estado**: Aceptado · FASE 2
+- **Contexto**: La tabla `tenants` se crea en FASE 3, pero la autenticación necesita persistir
+  membresías y rol por tenant desde ya.
+- **Decisión**: `tenant_users(tenant_id, user_id, role)` y `users.current_tenant_id` se crean en
+  FASE 2 SIN foreign key (solo índice + UNIQUE `(user_id, tenant_id)`). Las FK a `tenants.id` se
+  añaden en FASE 3 vía migración cuando exista la tabla. `role` es uno de `owner/admin/agent`
+  (enum `UserRole`); `super_admin` es rol global de plataforma (sin tenant).
+- **Consecuencias**: migraciones de FASE 2 aplican sin tabla `tenants`; riesgo nulo de datos
+  huérfanos porque la escritura de membresías llega en FASE 3. Los roles se materializan con
+  spatie en modo teams (`team_id = tenant_id`).
+
+## ADR-018 · Roles iniciales: spatie en modo teams con `team_foreign_key = tenant_id`
+
+- **Estado**: Aceptado · FASE 2
+- **Contexto**: spatie/laravel-permission soporta multi-tenancy nativamente mediante "teams".
+- **Decisión**: `config/permission.php` → `teams => true`, `team_foreign_key => 'tenant_id'`.
+  Roles base (seeder `RolesAndPermissionsSeeder`): `super_admin` (global) y `owner`, `admin`,
+  `agent` (por tenant). La asignación `assignRole` requiere `setPermissionsTeamId(tenant_id)`.
+- **Consecuencias**: permisos/roles aislados por tenant de serie (la columna `tenant_id` viaja en
+  `roles`, `model_has_roles` y `model_has_permissions`). Tests que verifican que un rol asignado
+  al tenant A no aparece para el tenant B.
+
+## ADR-019 · Doble canal de auth: sesión (Inertia) + Bearer (API) con error estándar
+
+- **Estado**: Aceptado · FASE 2
+- **Contexto**: El SPA interno usa Inertia (sesión + CSRF); los clientes externos consumen la API
+  con tokens. Ambos comparten la misma lógica de negocio.
+- **Decisión**: Web = Inertia (`auth:web`, `guest`, `verified`, CSRF). API = `auth:sanctum`
+  Bearer con `EnsureFrontendRequestsAreStateful` prepended (permite cookies si el cliente es el
+  mismo origen). La lógica de autenticación vive en `app/Application/Users/Services`
+  (`AuthenticateUser`, `RegisterUser`, `SendPasswordResetLink`, `ResetUserPassword`,
+  `VerifyUserEmail`) compartida por ambos canales.
+- **Consecuencias**: un solo set de reglas de negocio; dos contratos de transporte. Errores API
+  con formato estándar `{message, code, errors}` (`VALIDATION_ERROR`, `UNAUTHENTICATED`,
+  `RATE_LIMITED`) vía renderers en `bootstrap/app.php`.
+
 ## Pendientes de decisión
 
 - Proveedor de email en producción (mailpit en dev; SES/Resend/SMTP en prod) → FASE 22.

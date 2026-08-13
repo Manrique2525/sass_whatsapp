@@ -14,11 +14,18 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 
 ### Autenticación y sesiones
 - Sanctum en modo stateful (cookies + CSRF) para el SPA interno y tokens Bearer para clientes
-  externos (ADR-011). Passwords con `bcrypt`.
-- Login rate-limit: `throttle:10,1` por email/IP.
-- Registro con verificación de email.
-- Rotación/revocación de tokens en logout.
-- Password reset con tokens de un solo uso, expiración.
+  externos (ADR-011). Passwords con `bcrypt` (cast Eloquent `hashed`, nunca en texto plano
+  ni en logs).
+- Login rate-limit: `auth-login` 10/min por email/IP.
+- Registro rate-limit: `auth-register` 5/min por IP. Con verificación de email.
+- Password reset rate-limit: `auth-password` 3/min por email/IP; tokens de un solo uso con
+  expiración (60 min); el reset **revoca todos los tokens Sanctum** del usuario.
+- **No filtración de emails**: `forgot-password` responde siempre igual (exista o no el email),
+  tanto en web como en API.
+- Rotación/revocación de tokens en logout (API revoca el token actual; web invalida sesión +
+  `regenerateToken`). Regeneración de sesión tras login.
+- Passwords mínimos: `Password::min(8)` (policy global en `AppServiceProvider`).
+- Error de login genérico (mismo mensaje para email inexistente o contraseña incorrecta).
 
 ### Autorización
 - `Policies` por entidad (ConversationPolicy, ContactPolicy, FlowPolicy...).

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\RateLimiter;
 use Tests\TestCase;
 
 /*
@@ -18,6 +19,14 @@ use Tests\TestCase;
 pest()->extend(TestCase::class)
  // ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
     ->in('Feature', 'Unit');
+
+beforeEach(function (): void {
+    RateLimiter::clear('auth-login|127.0.0.1');
+    RateLimiter::clear('auth-register|127.0.0.1');
+    RateLimiter::clear('auth-password|127.0.0.1');
+    RateLimiter::clear('auth-login|test@example.com');
+    RateLimiter::clear('auth-password|test@example.com');
+});
 
 /*
 |--------------------------------------------------------------------------

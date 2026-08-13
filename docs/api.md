@@ -25,15 +25,52 @@
 - Ambos modos pasan por el middleware `tenant` (que resuelve el tenant desde
   `users.current_tenant_id`). Ver ADR-011.
 
+### Endpoints auth (implementados en FASE 2)
+
+| Método | Ruta | Descripción | Detalle |
+|---|---|---|---|
+| POST | `/api/v1/auth/register` | Registro (web + API) | 201 + `{message, token, user}`. API no verifica email automáticamente; envía notificación de verificación |
+| POST | `/api/v1/auth/login` | Login API | 200 + `{message, token, user}`. Credenciales inválidas → 422 genérico (no revela cuál falló) |
+| POST | `/api/v1/auth/logout` | Revoca el token actual | Requiere `auth:sanctum` |
+| POST | `/api/v1/auth/forgot-password` | Solicita reset | 200 con mensaje genérico (nunca revela si el email existe) |
+| POST | `/api/v1/auth/reset-password` | Confirma reset | Token inválido → 422 `INVALID_RESET_TOKEN`. Revoca tokens del usuario |
+| GET  | `/api/v1/auth/me` | Usuario + tenants + rol activo | Requiere `auth:sanctum`. Devuelve `{user, tenants[], current_tenant_id, roles[]}` |
+| POST | `/api/v1/auth/switch-tenant` | Cambia `users.current_tenant_id` (valida membresía) | **FASE 3** (cuando exista `Tenant`) |
+
+### Rate limits (FASE 2)
+
+| Limiter | Límite | Clave |
+|---|---|---|
+| `auth-login` | 10/min | `email` o IP |
+| `auth-register` | 5/min | IP |
+| `auth-password` | 3/min | `email` o IP |
+
+Respuesta 429 con `code: "RATE_LIMITED"`.
+
+### Error estándar API (implementado en FASE 2)
+
+Todos los errores de `/api/v1/*` usan `{message, code, errors}`:
+
+| Situación | HTTP | `code` |
+|---|---|---|
+| Validación de FormRequest | 422 | `VALIDATION_ERROR` |
+| No autenticado | 401 | `UNAUTHENTICATED` |
+| Rate limit | 429 | `RATE_LIMITED` |
+
+### Rutas web (Inertia, sesión + CSRF)
+
 | Método | Ruta | Descripción |
 |---|---|---|
-| POST | `/api/v1/auth/register` | Registro (crea tenant de prueba al primer owner) |
-| POST | `/api/v1/auth/login` | Login (interno: cookie; externo: token) |
-| POST | `/api/v1/auth/logout` | Cierra sesión / revoca token |
-| POST | `/api/v1/auth/forgot-password` | Solicita reset |
-| POST | `/api/v1/auth/reset-password` | Confirma reset |
-| GET  | `/api/v1/auth/me` | Usuario + tenants a los que pertenece + tenant actual + roles/permisos |
-| POST | `/api/v1/auth/switch-tenant` | Cambia `users.current_tenant_id` (valida membresía) y devuelve el nuevo contexto |
+| GET/POST | `/login` | Iniciar sesión (throttle `auth-login`) |
+| GET/POST | `/register` | Registro (throttle `auth-register`) |
+| GET/POST | `/forgot-password` | Solicitar reset (throttle `auth-password`) |
+| GET | `/reset-password?token=&email=` | Formulario de reset (query params, no path) |
+| POST | `/reset-password` | Confirmar reset (throttle `auth-password`) |
+| GET | `/verify-email` | Aviso de verificación |
+| POST | `/email/resend` | Reenviar enlace (throttle `6,1`) |
+| GET | `/email/verify/{id}/{hash}` | Verificación (URL firmada) |
+| POST | `/logout` | Cerrar sesión |
+| GET | `/dashboard` | Panel (requiere `verified`) |
 
 ## 3. Recursos
 
