@@ -65,10 +65,12 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
   (`isCurrentTenant`), (2) membresía con `status = active`, (3) permiso en la matriz. Sin
   membresía/no-activa → 404 (no revela existencia); sin permiso → 403 `PERMISSION_DENIED`;
   tenant suspendido → 409 `TENANT_NOT_ACTIVE`.
-- **11 permisos granulares** (`tenants.view/update`, `users.view/invite/update/remove`,
-  `roles.view/assign`, `agents.view/manage`, `audit.view`). Matriz: owner = todos; admin =
-  operativo sin `roles.assign`; agent = solo `tenants.view`; `super_admin` = global (sin
-  permisos de tenant).
+- **20 permisos granulares** (`tenants.view/update`, `users.view/invite/update/remove`,
+  `roles.view/assign`, `agents.view/manage`, `audit.view`, `business_profile.view/update`,
+  `whatsapp.view/manage`, `contacts.view/manage`, `conversations.view/manage/assign`). Matriz:
+  owner = todos; admin = operativo sin `roles.assign`; agent = solo `tenants.view`,
+  `business_profile.view`, `whatsapp.view`, `contacts.view` y `conversations.view`;
+  `super_admin` = global (sin permisos de tenant).
 - **Roles espejo en spatie**: `TenantRoleManager` sincroniza spatie con `tenant_users.role`
   usando `syncRoles` (reemplaza, no acumula) con el team del `TenantTeamResolver`
   (override → `TenantContext` → `current_tenant_id` → null). Cambiar de tenant activo cambia
@@ -151,6 +153,35 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
   existir, relanza (no traga excepciones).
 - **Auditoría FASE 7**: `contact.created`, `contact.updated` (con `changed`), `contact.deleted`
   (con `phone`).
+
+### Conversaciones (FASE 8)
+- **Autorización**: `conversations.view` (todos los roles del tenant), `conversations.manage`
+  (owner/admin: crear, editar, cerrar/reabrir, pausar/reanudar bot) y `conversations.assign`
+  (owner/admin: asignar/transferir) en la matriz ADR-026 (→ 20 permisos). Agent → solo lectura;
+  cualquier mutación → 403 `PERMISSION_DENIED` (test CONV-22).
+- **Aislamiento**: `conversations`/`conversation_participants`/`conversation_assignments` usan
+  `BelongsToTenant` (scope global + forzado de `tenant_id` por `TenantContext`). El `tenant_id` no
+  es fillable ni tiene regla de validación: un `tenant_id` enviado en el body se ignora (test
+  CONV-20). El `{conversation}` del path se resuelve SIN route-model binding implícito: el
+  servicio filtra SIEMPRE por `tenant_id` del tenant autorizado; conversación ajena o inexistente
+  → **404** (no revela existencia, ADR-010/023). Crear sobre un contacto de otro tenant → 404
+  (tests CRITICOS CONV-18/19 A/B: crear sobre contacto de B y leer/modificar/asignar con usuario
+  de B).
+- **Asignación segura**: `assign`/`transfer` validan que el agente destino sea miembro del
+  tenant con `status = active` en `tenant_users` (sin confiar en el frontend). Usuario fuera del
+  tenant → 422 `AGENT_NOT_IN_TENANT`; sin permiso → 403. La transferencia cierra la asignación y
+  participación previas (`unassigned_at`/`left_at`) y registra historial acumulativo.
+- **Máquina de estados**: transiciones inválidas → 409 `CONVERSATION_INVALID_STATE` (nunca se
+  muta `status` libremente vía PATCH); mismo estado = no-op. `status` validado contra el enum.
+- **Validación (backend)**: `ConversationIndexRequest` acota `per_page` a 100 y valida
+  `status`/`agent_id`; `StoreConversationRequest` exige `contact_id` uuid; `AssignConversationRequest`
+  exige `agent_id`. `ConversationResource` jamás expone `tenant_id`.
+- **Uso interno sin auth**: `findOrCreateActiveForContact` (FASE 9) busca fuera del scope pero
+  SIEMPRE filtrando por `tenant_id`; setea y libera `TenantContext` en `finally`. Reutiliza la
+  conversación activa del contacto o crea una nueva; un contacto soft-deleted jamás se resucita.
+- **Auditoría FASE 8**: `conversation.created`, `conversation.updated`, `conversation.assigned`,
+  `conversation.transferred`, `conversation.closed`, `conversation.reopened`,
+  `conversation.bot_paused`, `conversation.bot_resumed`.
 
 ### Inyección SQL
 - Eloquent/Query Builder con bindings. Sin concatenación de SQL.

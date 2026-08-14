@@ -18,7 +18,7 @@ tenants
   ├─ users (N:M via tenant_users)
   ├─ whatsapp_accounts 1─N whatsapp_phone_numbers
   ├─ contacts 1─N tags (N:M contact_tag)
-  ├─ conversations 1─N messages · 1─N conversation_participants
+  ├─ conversations 1─N messages · 1─N conversation_participants · 1─N conversation_assignments
   ├─ chatbots 1─N flows 1─N flow_nodes 1─N flow_connections
   ├─ flow_executions
   ├─ leads
@@ -87,19 +87,45 @@ sweeper/outbox (FASE 9).
 
 ## 4. Columnas críticas
 
-### `conversations`
+### `conversations` / `conversation_participants` / `conversation_assignments` (FASE 8, ADR-031)
 ```
-id uuid PK
-tenant_id FK → tenants
-contact_id FK → contacts
-status enum(open, pending, resolved, archived)
-last_message_at timestamp
-last_interaction_at timestamp
-assignment: agent_id nullable, auto_assigned boolean
-context JSONB  → variables de conversación ({{custom.x}})
-bot_paused boolean → handoff a humano
-flow_execution_id nullable → ejecución activa
-timestamps
+conversations
+  id uuid PK
+  tenant_id FK → tenants (cascadeOnDelete)
+  contact_id FK → contacts (cascadeOnDelete)   → contacto del MISMO tenant (validado en el servicio)
+  status varchar(20) default 'open'             → open/pending/resolved/archived (máquina de estados)
+  last_message_at timestamp nullable
+  last_interaction_at timestamp nullable
+  agent_id FK → users.id (BIGINT) nullable      → asignación VIGENTE (nullOnDelete)
+  auto_assigned boolean default false           → true si la asignó el sistema (FASE 9+)
+  bot_paused boolean default false              → handoff a humano
+  context JSONB nullable                        → variables de conversación ({{custom.x}})
+  flow_execution_id uuid nullable               → ejecución activa (SIN FK hasta FASE 11)
+  created_at / updated_at / deleted_at (soft delete)
+```
+- `agent_id` referencia `users.id` (BIGINT, igual que `tenant_users.user_id`); `tenant_id`/`contact_id`
+  son UUID. El historial de asignaciones NO vive aquí: está en `conversation_assignments`.
+- Índices: `(tenant_id, status, last_message_at)`, `(tenant_id, contact_id)`,
+  `(tenant_id, agent_id)` y `(tenant_id, last_interaction_at)`.
+
+```
+conversation_participants                      → quién estuvo/está involucrado (agentes y, en el futuro, bots)
+  id bigint PK
+  conversation_id FK → conversations (cascadeOnDelete)
+  user_id FK → users (BIGINT, cascadeOnDelete)
+  role varchar(50)                             → espejo del rol del tenant al participar (owner/admin/agent)
+  joined_at / left_at timestamp nullable       → participante activo = left_at IS NULL
+  UNIQUE (conversation_id, user_id) + índice (user_id, conversation_id)
+
+conversation_assignments                       → historial acumulativo de asignaciones/transferencias
+  id bigint PK
+  conversation_id FK → conversations (cascadeOnDelete)
+  agent_id FK → users (BIGINT, cascadeOnDelete)
+  assigned_by FK → users (BIGINT) nullable     → quién realizó la asignación (nullOnDelete)
+  assigned_at timestamp                        → inicio de la asignación
+  unassigned_at timestamp nullable             → se rellena al transferir/reasignar
+  reason varchar(30) default 'manual'          → manual | transfer
+  índices (conversation_id, assigned_at) y (agent_id, assigned_at)
 ```
 
 ### `messages`
@@ -220,7 +246,10 @@ contact_tag          → PK (contact_id, tag_id), FKs cascadeOnDelete
 
 ## 5. Índices y constraints recomendados
 
-- `conversations (tenant_id, status, last_message_at DESC)` + `(tenant_id, contact_id)`
+- `conversations (tenant_id, status, last_message_at DESC)` + `(tenant_id, contact_id)` +
+  `(tenant_id, agent_id)` + `(tenant_id, last_interaction_at)` (FASE 8, ADR-031)
+- `conversation_participants (conversation_id, user_id)` UNIQUE + índice `(user_id, conversation_id)`
+- `conversation_assignments (conversation_id, assigned_at)` + `(agent_id, assigned_at)`
 - `messages (tenant_id, conversation_id, created_at DESC)`
 - `messages` UNIQUE parcial `(tenant_id, provider_message_id) WHERE provider_message_id IS NOT NULL`
 - `contacts (tenant_id, phone)` UNIQUE **parcial** `WHERE deleted_at IS NULL` (FASE 7, ADR-030)

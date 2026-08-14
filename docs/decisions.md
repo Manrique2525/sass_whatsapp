@@ -455,6 +455,67 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   y `usePage().props.auth.can` (la matriz es la fuente de verdad). Tests en SQLite in-memory: el
   filtro de email usa `like` (no `ilike`, solo postgres).
 
+## ADR-031 · Conversaciones FASE 8: inbox con estados, asignación y post de alta
+
+- **Estado**: Aceptado · FASE 8
+- **Contexto**: El roadmap pide el inbox (conversaciones) antes de la mensajería (FASE 9). El
+  usuario especificó las tablas `conversations`, `conversation_participants`,
+  `conversation_assignments`, un conjunto de endpoints (list/show/update + acciones
+  assign/transfer/close/reopen/pause-bot/resume-bot), permisos `conversations.view` (todos) /
+  `conversations.manage` (owner/admin) / `conversations.assign` (owner/admin) y auditoría de cada
+  transición. La especificación original NO listaba `POST /conversations`, pero CONV-1 y el
+  webhook de FASE 9 necesitan un punto de alta: se añadió y se flaguea en el reporte.
+- **Decisión**:
+  - **Tablas**:
+    - `conversations`: UUID PK, `tenant_id` FK `cascadeOnDelete`, `contact_id` FK→`contacts`
+      `cascadeOnDelete`, `status` (open/pending/resolved/archived, default open), `last_message_at`,
+      `last_interaction_at`, `agent_id` FK→`users.id` (**BIGINT**, no uuid) `nullOnDelete`
+      = asignación vigente, `auto_assigned`, `bot_paused`, `context` JSONB (variables
+      `{{custom.x}}`), `flow_execution_id` nullable **SIN FK** (la tabla de ejecuciones llega en
+      FASE 11), soft deletes. Índices `(tenant_id, status, last_message_at)`,
+      `(tenant_id, contact_id)`, `(tenant_id, agent_id)`, `(tenant_id, last_interaction_at)`.
+    - `conversation_participants`: `(conversation_id, user_id)` UNIQUE, `role` espejo del rol del
+      tenant, `joined_at`/`left_at` (activo = `left_at IS NULL`). Participante se re-activa si
+      vuelve a participar.
+    - `conversation_assignments`: historial acumulativo: `agent_id`, `assigned_by`, `assigned_at`,
+      `unassigned_at` (se rellena al transferir/reasignar), `reason` (manual/transfer).
+      El `agent_id` de `conversations` y la fila abierta de assignments son la fuente del estado
+      actual; la tabla entera es el historial auditable.
+  - **FK `agent_id`/`user_id` → `users.id` (BIGINT)**: igual que `tenant_users.user_id`/`assigned_by`;
+    `tenant_id`/`contact_id` siguen siendo UUID. Los participantes referencian usuarios globales
+    (un agente puede pasar de tenant).
+  - **Máquina de estados** en el enum `ConversationStatus::canTransitionTo`: open↔pending,
+    open/pending→resolved, resolved→archived, ≠open→open (reabrir). Mismo estado = no-op (200);
+    transición inválida → 409 `CONVERSATION_INVALID_STATE`. El `status` solo cambia por la máquina
+    (jamás se escribe libremente vía PATCH).
+  - **`context`**: merge por claves en PATCH (`array_replace`), `null` lo limpia. Lo gestionará el
+    motor de flujos en FASE 10+.
+  - **Sin route-model binding implícito**: igual que contactos (ADR-030): el controller recibe
+    `string $conversation` y el servicio resuelve con `withoutTenantScope()->where('tenant_id',
+    $tenant->id)->whereKey($id)`. Ajeno/inexistente → 404. Crear sobre un contacto de otro tenant →
+    404 (`ConversationContactNotFoundException`, oculta existencia, ADR-010/023).
+  - **Asignación**: `assign`/`transfer` validan que el agente destino tenga membresía ACTIVA en
+    `tenant_users` del tenant (nunca se confía en el frontend). Usuario fuera del tenant → 422
+    `AGENT_NOT_IN_TENANT`. `transfer` cierra la fila de assignment previa + `left_at` del
+    participante anterior y crea la nueva con reason `transfer`. `auto_assigned` se reserva para
+    el sistema (FASE 9+).
+  - **Permisos** en la matriz ADR-026: `conversations.view` (todos), `conversations.manage`
+    (owner/admin: crear, editar, close/reopen, pause/resume bot) y `conversations.assign`
+    (owner/admin) → **20 permisos**; el seeder se alimenta de `TenantPermission::all()`.
+  - **`findOrCreateActiveForContact(Tenant, string)`**: para los jobs del webhook (FASE 9).
+    Reutiliza la conversación activa del contacto (no resucitada si el contacto está soft-deleted)
+    o crea una; consulta sin scope filtrando SIEMPRE `tenant_id`; setea/libera `TenantContext` en
+    `finally`.
+  - **Auditoría**: `conversation.created/updated/assigned/transferred/closed/reopened/
+    bot_paused/bot_resumed`.
+- **Consecuencias**: 3 migraciones; 24 tests backend CONV-1..24 (aislamiento CRITICO CONV-18/19
+  A/B, tampering CONV-20, matriz CONV-21, agent solo lectura CONV-22) + 7 tests Vitest
+  (`resources/js/features/conversations/conversationUtils.test.ts`) → suite **220 tests / 821
+  assertions**; frontend `Conversations/Index.vue` (página de bandeja sin chat UI, el chat llega
+  en FASE 10) con `can('conversations.view'/'manage'/'assign')`; el `ConversationResource` expone
+  `agent` siempre (null si no cargado) y `participants`/`assignments` como arrays
+  (`->values()->all()`) por covarianza de PHPStan nivel 6.
+
 ## Pendientes de decisión
 
 - Proveedor de email en producción (mailpit en dev; SES/Resend/SMTP en prod) → FASE 22.

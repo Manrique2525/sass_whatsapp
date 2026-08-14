@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 7 COMPLETADA** (Contactos). Solo se trabaja sobre la fase activa.
+Estado general: **FASE 8 COMPLETADA** (Conversaciones). Solo se trabaja sobre la fase activa.
 
 ## Fases
 
@@ -14,7 +14,7 @@ Estado general: **FASE 7 COMPLETADA** (Contactos). Solo se trabaja sobre la fase
 | 5 | Business profile | COMPLETADA |
 | 6 | WhatsApp (webhooks, provider) | COMPLETADA |
 | 7 | Contactos | COMPLETADA |
-| 8 | Conversaciones | PENDIENTE |
+| 8 | Conversaciones | COMPLETADA |
 | 9 | Mensajes (jobs async) | PENDIENTE |
 | 10 | Bandeja de entrada (UI + Reverb) | PENDIENTE |
 | 11 | Chatbot engine | PENDIENTE |
@@ -351,3 +351,60 @@ COMPLETADO / BLOQUEADO
 - [x] Documentación: `database.md`, `api.md` (§3.5), `security.md`, `multi-tenancy.md`,
       `whatsapp.md` (find-or-create FASE 9), `testing.md` (vitest), `architecture.md`, `roadmap.md`,
       `decisions.md` (ADR-030)
+
+## Fase 8 — Conversaciones (estado)
+
+- [x] Migraciones (3): `conversations` (UUID, `tenant_id` FK `cascadeOnDelete`, `contact_id` UUID FK
+      `cascadeOnDelete`, `status` default `open`, `last_message_at`, `last_interaction_at`,
+      `agent_id` FK `users.id` (BIGINT) `nullOnDelete` = asignación vigente, `auto_assigned`,
+      `bot_paused`, `context` JSONB, `flow_execution_id` nullable SIN FK (la tabla de ejecuciones
+      llega en FASE 11), timestamps, softDeletes, índices `(tenant_id, status, last_message_at)`,
+      `(tenant_id, contact_id)`, `(tenant_id, agent_id)` y `(tenant_id, last_interaction_at)`),
+      `conversation_participants` (UNIQUE `(conversation_id, user_id)`, `role` espejo del rol del
+      tenant, `joined_at`/`left_at`) y `conversation_assignments` (historial acumulativo:
+      `agent_id`, `assigned_by`, `assigned_at`, `unassigned_at`, `reason` manual/transfer)
+- [x] `ConversationStatus` enum con máquina de estados (`canTransitionTo`): open↔pending,
+      open/pending→resolved, resolved→archived, ≠open→open (reabrir); mismo estado = no-op
+- [x] Modelos en `app/Domain/Conversations/Models`: `Conversation` (BelongsToTenant + HasUuids +
+      SoftDeletes, casts status/context/timestamps/booleans, relaciones contact/agent/participants/
+      assignments), `ConversationParticipant`, `ConversationAssignment`; `Tenant::conversations()`
+- [x] Excepciones de dominio: `ConversationNotFoundException` (404), `ConversationContactNotFoundException`
+      (404, oculta contacto cross-tenant), `ConversationInvalidStateException` (409,
+      `CONVERSATION_INVALID_STATE`), `ConversationAgentNotInTenantException` (422, `AGENT_NOT_IN_TENANT`)
+- [x] `ConversationService` (Application): index (filtros search sobre el contacto/status/agent_id,
+      orden `last_interaction_at` DESC nulls last), showForUser, create (valida contacto del tenant),
+      update (status con máquina de estados + merge de `context` por claves), assign/transfer
+      (valida membresía ACTIVA en `tenant_users`, cierra la asignación/participación previa,
+      registra historial, audita `conversation.assigned/transferred`), close/reopen (auditan),
+      pauseBot/resumeBot (auditan `bot_paused/bot_resumed`), `findOrCreateActiveForContact` sin
+      autorización para jobs del webhook (FASE 9)
+- [x] Permisos `conversations.view` (todos los roles) / `conversations.manage` y
+      `conversations.assign` (owner/admin) en la matriz ADR-026 → 20 permisos; seeder actualizado
+      (espejo spatie se alimenta de `all()`)
+- [x] HTTP API `/api/v1/tenants/{tenant}/conversations` (GET/POST) y `/conversations/{conversation}`
+      (GET/PATCH) + acciones `assign|transfer|close|reopen|pause-bot|resume-bot` (POST). Se añade
+      `POST /conversations` (crear) aunque la especificación de FASE 8 no lo listaba: es necesario
+      para CONV-1 y para que FASE 9 (webhook) tenga el punto de entrada de alta (ver ADR-031)
+- [x] Requests: `ConversationIndexRequest` (search/status enum/agent_id/per_page 1..100),
+      `StoreConversationRequest` (contact_id uuid + status enum opcional + bot_paused + context),
+      `UpdateConversationRequest` (status enum + context), `AssignConversationRequest` (agent_id).
+      `ConversationResource` con contacto (ContactResource), agente y detalle de participantes/
+      asignaciones `whenLoaded`; nunca expone `tenant_id`
+- [x] Web: `ConversationsController` + ruta `settings/conversations` + nav en `AppLayout`
+- [x] Frontend: `Conversations/Index.vue` (tabla responsive, filtros search/status/agente,
+      paginación, modal de detalle con contacto/estado/agente/última interacción/contexto, alta con
+      selector de contacto, asignación/transferencia por dropdown de miembros, cerrar/reabrir/
+      pausar/reanudar bot con `can('conversations.view'|'manage'|'assign')`) y
+      `features/conversations/conversationUtils.ts` (funciones puras espejo del backend)
+- [x] Vitest: `conversationUtils.test.ts` (7 tests: buildConversationQuery, formatLastInteraction,
+      canClose/canReopen)
+- [x] Tests (24 nuevos en FASE 8 → **220 total, 821 assertions**): CONV-1..24 (CRUD + 201/409/422,
+      validación, máquina de estados, context merge, assign/transfer con historial y auditoría,
+      aislamiento CRITICO CONV-18/19 A/B (crear sobre contacto de B / leer-modificar-asignar con
+      usuario de B), tampering CONV-20, matriz permisos CONV-21, agente solo lectura CONV-22,
+      no-miembro, soft delete + `findOrCreateActiveForContact`)
+- [x] Pint + PHPStan (nivel 6, larastan) + `vue-tsc` + `vite build` + `vitest` sin errores
+- [x] Regresión Docker: migraciones aplicadas y revertidas (`migrate`/`migrate:rollback --step=3`)
+      en postgres sin errores; suite completa verde; `health:check` ok
+- [x] Documentación: `database.md`, `api.md` (§3.6), `security.md`, `multi-tenancy.md`,
+      `testing.md`, `architecture.md`, `roadmap.md`, `decisions.md` (ADR-031)

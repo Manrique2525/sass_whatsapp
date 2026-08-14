@@ -73,6 +73,30 @@ Pirámide de tests con prioridad en lo crítico:
 - Frontend (Vitest): `normalizePhone`, `hasValidPhoneDigits`, `buildContactQuery`,
   `extractErrorMessage`, `parseMetadata`.
 
+### Conversaciones (FASE 8, 24 tests CONV-1..24 + 7 vitest en `conversationUtils.test.ts`)
+- CRUD por rol: agent no crea/edita/cierra/asigna (403 `PERMISSION_DENIED`), owner/admin sí
+  (`CONV-21`); agent solo lectura (`CONV-22`); no-miembro/suspendido → 404/409.
+- Crear: exige `contact_id` del MISMO tenant → 404 si ajeno (`CONV-18` CRITICO); 201 con
+  contacto válido; `context`/`bot_paused`/`status` iniciales aceptados; `tenant_id` del body
+  ignorado (`CONV-20`).
+- Máquina de estados: `open→pending→resolved→archived`, reabrir desde cualquier ≠ `open`,
+  transición inválida → 409 `CONVERSATION_INVALID_STATE`, mismo estado → no-op
+  (`CONV-6/7/14`); `context` merge por claves en PATCH (`CONV-8`).
+- Assign/transfer: asignación a miembro ACTIVO del tenant → 200 y `agent_id` actualizado;
+  agente de otro tenant → 422 `AGENT_NOT_IN_TENANT` (`CONV-9/10`); transfer cierra la
+  asignación/participación previas (`unassigned_at`/`left_at`) y crea historial con reason
+  `transfer` (`CONV-11/13`); cada transición registra `conversation_assignments` y audita
+  (`CONV-15`).
+- **Aislamiento CRITICO**: Tenant A jamás lee/modifica/asigna conversaciones de B (404 y B
+  intacto, `CONV-19`); crear sobre contacto de B → 404 (`CONV-18`); `tenant_id` del body
+  ignorado (`CONV-20`).
+- `findOrCreateActiveForContact`: reutiliza la activa del contacto o crea; con contacto
+  soft-deleted no la resucita; libera `TenantContext` en `finally` (`CONV-24`).
+- Listado: filtros search (sobre el contacto)/status/agent_id + paginación `meta`
+  (`CONV-2/5`); 404 en conversación inexistente/ajena (`CONV-3`).
+- Frontend (Vitest): `buildConversationQuery`, `formatLastInteraction`, `canClose/canReopen`,
+  `CONVERSATION_STATUS_META`, `extractErrorMessage`.
+
 ### Chatbot engine (crítico)
 - Secuencia lineal, ramas condition, question→variable, delay, human, end.
 - Loop detection / límite de pasos.

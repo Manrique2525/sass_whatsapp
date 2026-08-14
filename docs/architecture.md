@@ -1,6 +1,6 @@
 # Arquitectura
 
-Estado: **Borrador aprobado** · Última revisión: FASE 7
+Estado: **Borrador aprobado** · Última revisión: FASE 8
 
 ## 1. Objetivo
 
@@ -113,8 +113,11 @@ Flujo del mensaje entrante (WhatsApp → Inbox):
 4. El worker (con `TenantContext` propio): localiza número → busca o crea Contact → crea
    Conversation si aplica → guarda Message → ejecuta el motor de flujos **bajo lock de Redis
    por conversación** o notifica a agentes → emite eventos/broadcasts.
-   **FASE 7**: contactos implementados (el find-or-create por teléfono E.164 que usa el worker
-   ya existe, ver `ContactService::findOrCreateForPhone`). Conversation/Message/engine en FASE 9+.
+    **FASE 7**: contactos implementados (el find-or-create por teléfono E.164 que usa el worker
+    ya existe, ver `ContactService::findOrCreateForPhone`). Conversation/Message/engine en FASE 9+.
+    **FASE 8**: conversaciones implementadas (CRUD, estados, asignación/transferencia y
+    `ConversationService::findOrCreateActiveForContact` listo para el worker). Message/engine en
+    FASE 9+.
 
 Autenticación (dos modos, ADR-011):
 
@@ -135,7 +138,7 @@ Aislamiento de infraestructura compartida:
 | Users | Usuarios (multi-tenant), roles por tenant (spatie teams), invitaciones | spatie/laravel-permission |
 | WhatsApp | Cuentas/números, webhooks (dedupe + outbox), envío | `WhatsAppProviderInterface` |
 | Contacts | CRM mínimo: contactos (E.164, soft delete, unique parcial por tenant), etiquetas | — |
-| Conversations | Sesiones de chat, estados, asignaciones | — |
+| Conversations | Sesiones de chat (FASE 8): estados, asignación/transferencia, participantes, historial de asignaciones, pause/resume de bot | — |
 | Messages | Historial, estados (sent/delivered/read) | — |
 | Chatbots | Chatbots, flujos, triggers | `ChatbotEngine` |
 | Flows | Definición de nodos/conexiones (Flow Builder) | — |

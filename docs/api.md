@@ -197,6 +197,36 @@ last_interaction_at, created_at, updated_at}` (jamás incluye `tenant_id`).
 `provider_contact_id` se rellena en FASE 9 (correlación outbound con el `wa_id` de Meta);
 `findOrCreateForPhone` (uso interno, sin auth) ya está disponible para los jobs del webhook.
 
+### 3.6 Conversaciones (implementado en FASE 8)
+
+Inbox del tenant. Mismas reglas de enforcement que §3.2–§3.5: `{tenant}` debe ser el **activo**;
+otro tenant → **404**; sin permiso → **403** `PERMISSION_DENIED`. El `{conversation}` del path se
+resuelve por el servicio filtrando SIEMPRE por `tenant_id` autorizado (sin route-model binding
+implícito); conversación o contacto de otro tenant/inexistente → **404** (oculta existencia,
+ADR-010/023). El `tenant_id` nunca se acepta del frontend.
+
+Máquina de estados de `status`: `open` ↔ `pending`; `open`/`pending` → `resolved`;
+`resolved` → `archived`; cualquier estado ≠ `open` → `open` (reabrir). Un PATCH con el mismo
+estado es **no-op (200)**; una transición inválida → **409** `CONVERSATION_INVALID_STATE`.
+
+| Método | Ruta | Permiso | Descripción |
+|---|---|---|---|
+| GET | `/api/v1/tenants/{tenant}/conversations` | `conversations.view` (todos los roles) | Listado paginado + filtros. Query: `search` (sobre el contacto: nombre/teléfono/email), `status` (open/pending/resolved/archived), `agent_id`, `page`, `per_page` (1..100). Orden: `last_interaction_at` DESC (sin interacción al final). Respuesta: `{conversations: ConversationResource[], meta: {current_page, last_page, per_page, total}}` |
+| POST | `/api/v1/tenants/{tenant}/conversations` | `conversations.manage` (owner/admin) | Crea para un contacto del MISMO tenant → **201**. Body: `{contact_id* (uuid), status? (default open), bot_paused?, context?}`. Contacto de otro tenant/inexistente → **404**. Audita `conversation.created`. *Endpoint añadido en FASE 8 (no estaba en la especificación original) por ser el punto de alta natural para CONV-1 y para el webhook de FASE 9 (ADR-031)* |
+| GET | `/api/v1/tenants/{tenant}/conversations/{conversation}` | `conversations.view` | Detalle con contacto, agente, participantes y asignaciones (`whenLoaded`). 404 si no existe/no es del tenant |
+| PATCH | `/api/v1/tenants/{tenant}/conversations/{conversation}` | `conversations.manage` | Actualización **parcial**: `status` (máquina de estados → 409 inválida) y `context` (merge por claves, `null` lo limpia). Audita `conversation.updated` (solo si hay cambios) |
+| POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/assign` | `conversations.assign` (owner/admin) | Asigna a un agente (miembro ACTIVO del tenant) → **200**. Body: `{agent_id*}`. Usuario no miembro → **422** `AGENT_NOT_IN_TENANT`. Registra `conversation_assignments` (reason `manual`) + participante. Audita `conversation.assigned` |
+| POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/transfer` | `conversations.assign` | Transfiere a otro agente: cierra la asignación/participación previa (`unassigned_at`/`left_at`) y crea la nueva (reason `transfer`). Mismas validaciones/errores que assign. Audita `conversation.transferred` |
+| POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/close` | `conversations.manage` | Cierra (→ `resolved`). Sobre archivada → **409** `CONVERSATION_INVALID_STATE`; sobre resuelta → no-op. Audita `conversation.closed` |
+| POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/reopen` | `conversations.manage` | Reabre (→ `open`). Sobre abierta → no-op. Audita `conversation.reopened` |
+| POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/pause-bot` | `conversations.manage` | Pausa el bot (`bot_paused=true`), handoff a humano. Audita `conversation.bot_paused` |
+| POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/resume-bot` | `conversations.manage` | Reanuda el bot (`bot_paused=false`). Audita `conversation.bot_resumed` |
+
+`ConversationResource`: `{id, status, status_label, contact (ContactResource), agent {id, name,
+email} | null, last_message_at, last_interaction_at, auto_assigned, bot_paused, context,
+flow_execution_id, participants[], assignments[], created_at, updated_at}` (jamás incluye
+`tenant_id`). `context`/`flow_execution_id` los gestionará el motor de flujos (FASE 10+).
+
 ## 4. Webhooks (sin auth Bearer; autenticados por firma y dedupe)
 
 | Método | Ruta | Descripción |

@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\PasswordController;
 use App\Http\Controllers\Api\V1\BusinessProfileController;
 use App\Http\Controllers\Api\V1\ContactController;
+use App\Http\Controllers\Api\V1\ConversationController;
 use App\Http\Controllers\Api\V1\InvitationController;
 use App\Http\Controllers\Api\V1\MemberController;
 use App\Http\Controllers\Api\V1\MemberInvitationController;
@@ -83,6 +84,18 @@ Route::prefix('v1')->group(function (): void {
                 Route::get('{tenant}/contacts/{contact}', [ContactController::class, 'show']);
                 Route::patch('{tenant}/contacts/{contact}', [ContactController::class, 'update']);
                 Route::delete('{tenant}/contacts/{contact}', [ContactController::class, 'destroy']);
+
+                // FASE 8 — conversaciones (inbox).
+                Route::get('{tenant}/conversations', [ConversationController::class, 'index']);
+                Route::post('{tenant}/conversations', [ConversationController::class, 'store']);
+                Route::get('{tenant}/conversations/{conversation}', [ConversationController::class, 'show']);
+                Route::patch('{tenant}/conversations/{conversation}', [ConversationController::class, 'update']);
+                Route::post('{tenant}/conversations/{conversation}/assign', [ConversationController::class, 'assign']);
+                Route::post('{tenant}/conversations/{conversation}/transfer', [ConversationController::class, 'transfer']);
+                Route::post('{tenant}/conversations/{conversation}/close', [ConversationController::class, 'close']);
+                Route::post('{tenant}/conversations/{conversation}/reopen', [ConversationController::class, 'reopen']);
+                Route::post('{tenant}/conversations/{conversation}/pause-bot', [ConversationController::class, 'pauseBot']);
+                Route::post('{tenant}/conversations/{conversation}/resume-bot', [ConversationController::class, 'resumeBot']);
             });
         });
     });

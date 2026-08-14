@@ -6,6 +6,7 @@ namespace App\Domain\Tenants\Models;
 
 use App\Domain\Business\Models\BusinessProfile;
 use App\Domain\Contacts\Models\Contact;
+use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Tenants\Enums\TenantStatus;
 use App\Domain\Users\Models\TenantUser;
 use App\Domain\Users\Models\User;
@@ -126,5 +127,15 @@ class Tenant extends Model
     public function contacts(): HasMany
     {
         return $this->hasMany(Contact::class);
+    }
+
+    /**
+     * Conversaciones del inbox (FASE 8, ADR-031).
+     *
+     * @return HasMany<Conversation, $this>
+     */
+    public function conversations(): HasMany
+    {
+        return $this->hasMany(Conversation::class);
     }
 }

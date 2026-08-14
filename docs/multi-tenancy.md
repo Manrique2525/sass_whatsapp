@@ -1,6 +1,6 @@
 # Multi-tenancy
 
-Estado: **implementado en FASE 3 + FASE 4 + FASE 5 + FASE 6 + FASE 7**. Este documento describe el
+Estado: **implementado en FASE 3 + FASE 4 + FASE 5 + FASE 6 + FASE 7 + FASE 8**. Este documento describe el
 diseño y cómo quedó materializado en código (rutas, clases y semántica HTTP reales).
 
 ## 1. Estrategia
@@ -42,6 +42,12 @@ y tiene un **tenant activo** seleccionable:
   NULL`): un contacto borrado libera el número. `Tenant::contacts()` (hasMany). `findOrCreateForPhone`
   (uso interno de los jobs del webhook, FASE 9) busca fuera del scope pero SIEMPRE filtrando por
   `tenant_id` del tenant resuelto.
+- `conversations` / `conversation_participants` / `conversation_assignments` (FASE 8, ADR-031):
+  `conversations` con trait `BelongsToTenant`, `tenant_id` FK `cascadeOnDelete`, `contact_id`
+  FK→`contacts` del **mismo tenant** (validado en el servicio) y **soft delete**. El historial de
+  asignaciones/participantes es por conversación y por tanto por tenant. `Tenant::conversations()`
+  (hasMany). `findOrCreateActiveForContact` (uso interno de los jobs del webhook, FASE 9) busca
+  fuera del scope pero SIEMPRE filtrando por `tenant_id` del tenant resuelto.
 - Roles por tenant: se implementa con **spatie/laravel-permission en modo `teams`**
   (`team_id = tenant_id`). Así `owner/admin/agent` se asignan por tenant. `super_admin` es un
   rol global de plataforma (sin team). Ver ADR-012, ADR-018 y ADR-025 (migración de
@@ -50,9 +56,10 @@ y tiene un **tenant activo** seleccionable:
   `TenantContext::id()` → `users.current_tenant_id` → `null` (roles globales).
 - La autorización por tenant (FASE 4, ADR-026) exige SIEMPRE tres condiciones:
   `current_tenant_id == tenant` (tenant activo) + `tenant_users.status = active` + permiso en la
-  matriz de código   `TenantPermission::permissionsForRole(rol)` (17 permisos; FASE 5 añade
+  matriz de código   `TenantPermission::permissionsForRole(rol)` (20 permisos; FASE 5 añade
   `business_profile.view/update`; FASE 6 añade `whatsapp.view`/`whatsapp.manage`; FASE 7 añade
-  `contacts.view`/`contacts.manage`). Sin membresía
+  `contacts.view`/`contacts.manage`; FASE 8 añade `conversations.view`/`conversations.manage`/
+  `conversations.assign`). Sin membresía
   o inactivo → **404**; sin permiso → **403**
   `PERMISSION_DENIED`. Los roles spatie se mantienen como espejo de `tenant_users.role` vía
   `TenantRoleManager` (`syncRoles` reemplaza, nunca suma).
@@ -210,6 +217,20 @@ Nunca se acepta `tenant_id` desde el request (se ignora o se rechaza — test
   existencia; CONTACT-12 CRITICO). El `tenant_id` del body se ignora (CONTACT-13).
   `findOrCreateForPhone` (webhook, FASE 9) consulta sin scope con filtro por `tenant_id` y setea
   `TenantContext` solo alrededor del create, liberándolo en `finally` (no contamina jobs).
+- **Conversaciones (FASE 8)**: `conversations`/`conversation_participants`/
+  `conversation_assignments` con trait `BelongsToTenant`; los endpoints `/tenants/{tenant}/
+  conversations*` exigen `{tenant}` activo (otro → 404) y permiso `conversations.view` (lectura)
+  / `conversations.manage` (mutaciones de estado y bot, owner/admin) /
+  `conversations.assign` (asignar/transferir, owner/admin). El `{conversation}` del path NO usa
+  route-model binding implícito: el servicio resuelve con `withoutTenantScope()` filtrando SIEMPRE
+  por `tenant_id` del tenant autorizado → conversación a ajena o inexistente → **404**. Crear
+  sobre un contacto ajeno → **404** (`ConversationContactNotFoundException`). El `tenant_id` del
+  body se ignora (CONV-20). Aislamiento CRITICO (CONV-18/19): el tenant A jamás lee, modifica ni
+  asigna conversaciones de contactos del tenant B, y una conversación creada sobre un contacto de
+  B es invisible para A (404). Asignación solo a miembros activos del tenant (422
+  `AGENT_NOT_IN_TENANT` en caso contrario). `findOrCreateActiveForContact` (webhook, FASE 9)
+  consulta sin scope con filtro por `tenant_id` y setea `TenantContext` solo alrededor del create,
+  liberándolo en `finally`.
 
 ## 5. Aislamiento en colas, eventos y notificaciones
 
@@ -280,3 +301,8 @@ tenant distinto del propietario:
     GET/PATCH/DELETE y el contacto de B queda intacto (`CONTACT-12`, CRITICO). El `tenant_id`
     enviado en el body se ignora (`CONTACT-13`). `findOrCreateForPhone` crea/consulta siempre bajo
     el tenant indicado y deja el contexto limpio (`CONTACT-19`).
+15. (FASE 8) Tenant A jamás lee, modifica ni asigna conversaciones de Tenant B: 404 en
+    GET/PATCH/assign/transfer y la conversación de B queda intacta (`CONV-19`, CRITICO). Crear
+    sobre un contacto del Tenant B → 404 (`CONV-18`, CRITICO). El `tenant_id` enviado en el body
+    se ignora (`CONV-20`). `findOrCreateActiveForContact` crea/consulta siempre bajo el tenant
+    indicado y deja el contexto limpio (`CONV-24`).
