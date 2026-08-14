@@ -182,6 +182,10 @@ flows                                   → la fila ES la versión (ADR-036; sin
   índices (tenant_id, status) y (chatbot_id)
 ```
 
+`created_at` / `updated_at` de `flows` son `timestamp(6)` (migración FASE 12) para que el lock
+optimista del borrador (ADR-041) distinga escrituras concurrentes; `base_updated_at` en el
+`PUT /draft` se compara contra `updated_at`.
+
 ```
 triggers
   id uuid PK

@@ -785,6 +785,124 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   página Inertia + 1 ruta web. Suite de aislamiento A/B (tenant B jamás ve/edita recursos de A,
   404) y matriz de permisos por API en FlowApiTest. No existe frontend de edición (FASE 12).
 
+## ADR-040 · Flow Builder FASE 12: arquitectura del editor visual (Vue Flow)
+
+- **Estado**: Aceptado → FASE 12
+- **Contexto**: La FASE 11 dejó la API completa de borrado/persistencia de grafos pero sin
+  frontend de edición. El editor debe ser visual (canvas), en tiempo real y seguro en
+  multi-tenancy, sin código falso (AGENTS §3).
+- **Decisión**:
+  - **Librería**: `@vue-flow/core` v1.48 + `@vue-flow/background`, `@vue-flow/minimap`,
+    `@vue-flow/controls`, `@vue-flow/vue-flow` marker arrows. Node types propios (10 SFCs:
+    message, buttons, question, condition, delay, tag, webhook, human, end, ai) registrados en
+    `nodes/index.ts`; edge propio `FlowEdge.vue`.
+  - **Estado en un composable único** `useFlowEditor` (`features/flows/useFlowEditor.ts`) que
+    expone `FlowEditorController = ReturnType<typeof useFlowEditor>`: refs `nodes`, `edges`,
+    `selected`, `dirty`, `saveState`, `publishState`, `flowStatus`, `canUndo`, `canRedo`,
+    `empty`, `validationIssues`, `centerRequest`, `connectError`, `error`, `loadState`, `flow`,
+    `flowName`, `flowDescription`; booleans planos `canManage` y `readOnly`. El canvas
+    (`FlowEditor.vue`) es *one-way* (recibe `vfNodes`/`vfEdges` computados) y las mutaciones
+    pasan por los métodos del composable → cada cambio se empuja al historial.
+  - **Historial** `useEditorHistory` (máx 50 snapshots clonados, rama redo descartada al push).
+    **Atajos** `useKeyboardShortcuts` (Ctrl+S guardar, Ctrl+Z/Ctrl+Shift+Z deshacer/rehacer) vía
+    `MaybeRefOrGetter` para respetar el estado read-only.
+  - **Contrato de grafo** `flowAdapter.ts`: traduce API ↔ editor, genera edge ids deterministas
+    `e-{source}-{target}-{label}`, redondea posiciones a enteros, y `graphSignature` (huella
+    normalizada por orden) para detectar cambios y alimentar el lock optimista.
+- **Consecuencias**: El editor no muta el DOM/vue-flow state por fuera; `readOnly` (agent) y
+  estado `published` congela todas las mutaciones en el composable, no en el UI.
+
+## ADR-041 · Flow Builder FASE 12: lock optimista del borrador (`base_updated_at`)
+
+- **Estado**: Aceptado → FASE 12
+- **Contexto**: Dos agentes pueden editar el mismo borrador. El backend de FASE 11 persistía el
+  grafo por último-que-escribe. Para un editor visual esto causa pérdida de trabajo.
+- **Decisión**:
+  - `PUT /flows/{flow}/draft` acepta `base_updated_at` (opcional, ISO) = `flows.updated_at` de la
+    versión que el cliente cargó/guardó por última vez. Si difiere de la versión actual → **409**
+    `FLOW_CONFLICT` sin escribir. El cliente guarda `base_updated_at` con su estado y no usa
+    `localStorage`: el conflicto se detecta siempre contra el servidor.
+  - Si no se envía `base_updated_at` (creación, sobrescritura explícita) no hay chek del lock.
+  - **Resolución en el editor**: al recibir 409 el composable expone `conflict` y la página
+    muestra `ConflictDialog` con tres opciones — (1) recargar la versión del servidor,
+    (2) seguir editando, (3) **sobrescribir explícitamente** (reenvía sin `base_updated_at`).
+    "Sobrescribir" es una acción explícita del usuario, nunca automática.
+  - Migración `2026_08_18_000000_increase_flows_timestamps_precision` → `timestamp(6)` en
+    `flows.created_at/updated_at` para que `updated_at` cambie en escrituras concurrentes rápidas
+    (Postgres por defecto era `timestamp(0)`).
+- **Consecuencias**: Concurrencia real entre editores cubierta por FLOW-38/43 (backend) y por
+  `useFlowEditor.test.ts` (frontend). Sin `ETag`; `updated_at` del tenant row ya está disponible
+  en el recurso.
+
+## ADR-042 · Flow Builder FASE 12: contrato del draft y del grafo del editor
+
+- **Estado**: Aceptado → FASE 12
+- **Contexto**: El frontend envía grafos completos. Hay que fijar reglas de ids, posiciones,
+  ramas de condición y qué campos viajan, sin confiar en el frontend (AGENTS §5).
+- **Decisión**:
+  - **Ids**: el editor genera `crypto.randomUUID()` por nodo (nunca trusts ids del cliente en
+    backend; `ReplaceDraftRequest` los valida como uuid). Edge ids `e-{source}-{target}-{label}`
+    deterministas → dedupe natural al dibujar.
+  - **Posiciones**: enteras (`Math.round`) en `position_x/y` para evitar saltos de re-render y
+    firmas inestables.
+  - **Ramas de condición**: arista con `sourceHandle` = `true`/`false` y `label` = `true`/`false`.
+    Constantes `CONDITION_TRUE`/`CONDITION_FALSE` compartidas. `canCreateConnection` exige la
+    rama y prohibe una segunda conexión en la misma rama.
+  - **Payload**: `graphToDraft` envía `{nodes: FlowNode[], connections: FlowConnection[]}` (sin
+    `tenant_id` — lo fuerza `BelongsToTenant`, FLOW-40) y `base_updated_at` solo si hay versión
+    conocida (ADR-041). Los secrets del nodo `webhook` viven solo en backend (FLOW-29): el
+    editor edita únicamente `method`/`url`.
+- **Consecuencias**: Roundtrip probado en `flowAdapter.test.ts` (traducción sin pérdida,
+  posiciones redondeadas, `base_updated_at` opcional, ramas conservadas).
+
+## ADR-043 · Flow Builder FASE 12: validación local (espejo del `FlowValidator`)
+
+- **Estado**: Aceptado → FASE 12
+- **Contexto**: El backend valida en publish (FLOW_INVALID) pero el editor necesita feedback
+  inmediato y no duplicar lógica de negocio desconectada.
+- **Decisión**:
+  - `flowValidation.ts` implementa **dos capas**:
+    1. `configIssuesForNode(type, config)` — por tipo (texto de message, 1-3 botones con ids
+       únicos, prompt+field de question, reglas/operadores de condition usando
+       `CONDITION_OPERATORS` con `needsValue`, delay 1..3600 entero, 1-10 tags no vacías, URL
+       http(s)+método de webhook).
+    2. `localGraphIssues(nodes, edges)` — espejo del `FlowValidator` backend: exactamente un
+       `is_start`, sin self-loops ni entradas al inicio, terminales (`end`/`human`) sin salida,
+       `condition` con ramas true y false, nodos no-terminales con salida, `end` alcanzable
+       (END_MISSING como warning).
+  - La **fuente de verdad** sigue siendo el backend (publish re-valida). `mapBackendErrors`
+    traduce los mensajes `FLOW_INVALID` a issues con `nodeId` por nombre de nodo para el
+    `ValidationPanel` ("Ver nodo" → `focusNode`).
+- **Consecuencias**: El panel de validación marca nodos con badge (flow-local) y el publish
+  conflictivo deja los issues del servidor. Reglas duplicadas solo en esta capa de UX; el
+  servidor nunca confía en ellas (ADR-042).
+
+## ADR-044 · Flow Builder FASE 12: selección en Vue Flow v1.48, modo lectura y página Inertia
+
+- **Estado**: Aceptado → FASE 12
+- **Contexto**: `@vue-flow/core` v1.48 no emite el evento `selection-change` (eliminado de la
+  API pública) y sus tipos `Node<Data>`/`Edge<Data>` difieren del grafo interno del editor.
+- **Decisión**:
+  - **Selección**: la selección llega como cambios `select` dentro de `nodes-change`/
+    `edges-change`. El composable implementa `syncSelection()` que lee los flags `selected` de
+    cada nodo/arista y los proyecta a `selected` (nullable) para los paneles.
+  - **Tipos desacoplados**: `FlowEditorNode`/`FlowEditorEdge` son interfaces propias del editor
+    (requieren `data`; opcionales `selected`/`sourceHandle`/`markerEnd`). No se heredan de
+    `GraphNode`/`GraphEdge`; los cambios de vue-flow se aplican con casts controlados en
+    `applyNodeChanges`/`applyEdgeChanges`. `markerEnd` se fija a `MarkerType.ArrowClosed` en
+    `flowAdapter` y `onConnect`.
+  - **Página**: `Pages/Flows/Editor.vue` (wrapper Inertia fino, props `chatbotId` + `flowId`)
+    monta `FlowEditor.vue` + `FlowToolbar` + `NodePalette` + paneles + `ConflictDialog`.
+    Ruta web `settings/flows/{chatbot}/{flow}` (name `settings.flows.editor`, middleware
+    `['verified','tenant']`) servida por `FlowEditorSettingsController`. Enlace "Abrir editor"
+    desde `Pages/Settings/Flows.vue`. Guard de navegación (`router.on('before')`) + `beforeunload`
+    si hay cambios sin guardar.
+  - **Solo lectura**: `readOnly` deriva de `!canManage` (permiso `flows.view` de agent) o de
+    estado `published`; `FlowToolbar` oculta Guardar/Publicar y muestra Desactivar cuando aplica.
+    El composable ignora toda mutación en read-only (probado en `useFlowEditor.test.ts`).
+- **Consecuencias**: `vue-tsc` sin errores con el contrato de tipos propio; la selección,
+  undo/redo y el modo lectura quedan cubiertos por Vitest.
+
 ## Pendientes de decisión
 
 - Proveedor de email en producción (mailpit en dev; SES/Resend/SMTP en prod) → FASE 22.

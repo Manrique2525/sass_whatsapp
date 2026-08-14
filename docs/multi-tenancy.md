@@ -334,6 +334,12 @@ tenant distinto del propietario:
     triggers y ejecuciones de B → 404 en GET/PATCH/DELETE/POST y quedan intactos (FLOW-24,
     CRITICO). El `tenant_id` del body se ignora (no existe como campo en los `FormRequest`; la
     pertenencia la fuerza `BelongsToTenant` en escrituras). El motor (`FlowEngine`) corre dentro
-    del `TenantContext` del job `TenantAwareJob` y sus creates internos usan `TenantContext::withId`
+    del     `TenantContext` del job `TenantAwareJob` y sus creates internos usan `TenantContext::withId`
     (FLOW-14, FLOW-15). La ejecución activa por conversación está acotada por tenant
     (UNIQUE parcial `(tenant_id, conversation_id)`).
+18. (FASE 12) El editor visual abre solo flujos del tenant activo: `FlowEditorSettingsController`
+    resuelve chatbot+flujo filtrando por `tenant_id` del contexto (FLOW-31) y la carga vía
+    `GET /flows/{flow}` devuelve 404 a otro tenant (FLOW-39, CRITICO). El `tenant_id` jamás se
+    envía en el payload del draft (FLOW-40). La edición del borrador exige `flows.manage`;
+    un agent del tenant ve el editor en read-only (FLOW-41). El lock optimista
+    (`base_updated_at`) compara contra el `updated_at` de la propia fila del tenant.

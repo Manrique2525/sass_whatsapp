@@ -166,6 +166,30 @@ Pirámide de tests con prioridad en lo crítico:
   `extractErrorMessage`.
 - Suite total FASE 11: **294 tests backend / 1229 assertions**; frontend **71 tests Vitest**.
 
+### Editor visual (FASE 12, ADR-040..044)
+- **Backend** (`FlowEditorTest`, FLOW-29..43, 13 tests): secrets del nodo webhook se preservan y
+  jamás se exponen por API (FLOW-29); lock optimista `base_updated_at` (acepta actual, rechaza
+  obsoleto con 409 `FLOW_CONFLICT`, opcional en FLOW-30); página del editor se renderiza por
+  tenant (FLOW-31); carga completa del flujo (FLOW-32); borrador atómico (FLOW-33/34); solo
+  borrador editable + estados (FLOW-35/36); `FLOW_INVALID` con errores del validador (FLOW-37);
+  guardado concurrente → 409 (FLOW-38); **aislamiento A/B 404 cross-tenant (FLOW-39, CRITICO)**;
+  `tenant_id` del payload nunca se confía (FLOW-40); matriz `flows.view`/`flows.manage` agent
+  read-only (FLOW-41); publish tras modificación guarda y valida (FLOW-42); dos editores
+  concurrentes solo el primero persiste (FLOW-43).
+- **Frontend (Vitest, 46 nuevos → 117 total)**:
+  - `flowAdapter.test.ts` (13): roundtrip API↔draft sin pérdida, edge ids deterministas, ramas
+    `true`/`false`, posiciones redondeadas, `base_updated_at` opcional, `graphSignature`
+    independiente del orden, `canCreateConnection` (self-loop, entrada al inicio, terminales,
+    rama de condición única, salida única).
+  - `flowValidation.test.ts` (16): config por tipo (message/buttons/question/condition/delay/
+    tag/webhook), operadores con `needsValue`, `localGraphIssues` (start único, terminales,
+    ramas, end faltante), `mapBackendErrors` resuelve por nombre.
+  - `useEditorHistory.test.ts` (6): límite 50, undo/redo, descarte de rama redo, clonado.
+  - `useFlowEditor.test.ts` (11): load/save con `base_updated_at`, 409 `FLOW_CONFLICT` →
+    `conflict`, `saveOverriding` sin lock, publish `FLOW_INVALID` → issues mapeados, onConnect
+    válido/inválido, undo/redo, read-only ignora mutaciones (`window.axios` mockeado).
+- Suite total FASE 12: **307 tests backend / 1319 assertions**; frontend **117 tests Vitest**.
+
 ### Auth
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 

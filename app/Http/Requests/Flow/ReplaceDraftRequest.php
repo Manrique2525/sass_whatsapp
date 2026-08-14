@@ -30,6 +30,7 @@ final class ReplaceDraftRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'base_updated_at' => ['nullable', 'date'],
             'nodes' => ['required', 'array', 'min:1'],
             'nodes.*.id' => ['required', 'uuid'],
             'nodes.*.type' => ['required', new Enum(FlowNodeType::class)],

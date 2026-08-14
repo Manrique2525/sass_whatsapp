@@ -177,3 +177,31 @@ objetivo completo; las diferencias marcadas abajo). Referencias: ADR-034..039.
   auditoría.
 - `tests/Feature/Flows/FlowsPermissionTest.php` (FLOW-20/21): permisos con seeder sincronizado.
 - `resources/js/features/flows/flowUtils.test.ts`: utils del frontend (Vitest).
+
+## 11. Editor visual (FASE 12, ADR-040..044)
+
+- **Arquitectura**: `useFlowEditor` (estado + mutaciones + `FlowEditorController`), historial
+  propio (`useEditorHistory`, 50 snapshots clonados), atajos de teclado y canvas *one-way*
+  `FlowEditor.vue` con `@vue-flow/core` v1.48. Los 10 tipos de nodo son SFCs registradas en
+  `features/flows/components/nodes/index.ts`; la arista propia `FlowEdge.vue` muestra la etiqueta
+  de rama (`true`/`false`) con `MarkerType.ArrowClosed`.
+- **Contrato de grafo**: ids UUID del cliente, posiciones enteras, edge ids deterministas
+  `e-{source}-{target}-{label}`, ramas de condición como `sourceHandle`+`label`
+  `CONDITION_TRUE`/`CONDITION_FALSE`. El payload del draft no lleva `tenant_id` (lo fuerza
+  `BelongsToTenant`) y los secrets del nodo webhook quedan en el backend (solo `method`/`url`).
+- **Concurrencia**: `PUT /flows/{flow}/draft` acepta `base_updated_at` (opcional); si la versión
+  cambió → 409 `FLOW_CONFLICT`. El editor muestra el `ConflictDialog` (recargar / seguir
+  editando / sobrescribir explícito) y jamás sobrescribe automáticamente. Migración
+  `timestamp(6)` en `flows.created_at/updated_at`.
+- **Validación en el editor**: `flowValidation.ts` valida config por tipo y el grafo local
+  (espejo del `FlowValidator`: un solo inicio, sin loops, terminales sin salida, ramas de
+  condición, `end` alcanzable). El publish re-valida en backend (`FLOW_INVALID`); los errores
+  del servidor se mapean a nodos por nombre (`mapBackendErrors`) para el `ValidationPanel`.
+- **Solo lectura**: el agente y los flujos publicados abren el editor en read-only; el
+  composable ignora las mutaciones y la barra oculta Guardar/Publicar.
+- **Selección en Vue Flow v1.48**: sin evento `selection-change`; `syncSelection()` lee los
+  flags `selected` de `nodes-change`/`edges-change`. Los tipos `FlowEditorNode`/`FlowEditorEdge`
+  son propios del editor (desacoplados de `GraphNode`/`GraphEdge`).
+- **Tests**: backend FLOW-29..43 (secrets, lock, página, estados, aislamiento A/B, permisos,
+  publish tras editar); frontend 46 Vitest nuevos (`flowAdapter`, `flowValidation`,
+  `useEditorHistory`, `useFlowEditor`).

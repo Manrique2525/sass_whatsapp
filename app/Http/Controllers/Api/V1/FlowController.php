@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Application\Flows\Services\FlowService;
 use App\Domain\Flows\Exceptions\ChatbotNotFoundException;
 use App\Domain\Flows\Exceptions\FlowAlreadyPublishedException;
+use App\Domain\Flows\Exceptions\FlowConflictException;
 use App\Domain\Flows\Exceptions\FlowInvalidException;
 use App\Domain\Flows\Exceptions\FlowInvalidStateException;
 use App\Domain\Flows\Exceptions\FlowNotFoundException;
@@ -132,6 +133,7 @@ final class FlowController extends Controller
                 $flow,
                 $request->validated('nodes'),
                 $request->validated('connections'),
+                $request->validated('base_updated_at'),
             );
         } catch (TenantMembershipException) {
             throw new NotFoundHttpException('Tenant no encontrado.');
@@ -142,6 +144,8 @@ final class FlowController extends Controller
         } catch (FlowNotFoundException) {
             throw new NotFoundHttpException('Flujo no encontrado.');
         } catch (FlowPublishedException $e) {
+            return $this->error($e);
+        } catch (FlowConflictException $e) {
             return $this->error($e);
         } catch (FlowInvalidException $e) {
             return $this->invalid($e);
@@ -237,7 +241,7 @@ final class FlowController extends Controller
         ]);
     }
 
-    private function error(FlowPublishedException|FlowAlreadyPublishedException $e): JsonResponse
+    private function error(FlowPublishedException|FlowAlreadyPublishedException|FlowConflictException $e): JsonResponse
     {
         return response()->json([
             'message' => $e->getMessage(),

@@ -15,6 +15,7 @@ use App\Http\Controllers\Invitations\InvitationWebController;
 use App\Http\Controllers\Settings\BusinessProfileSettingsController;
 use App\Http\Controllers\Settings\ContactSettingsController;
 use App\Http\Controllers\Settings\ConversationsController;
+use App\Http\Controllers\Settings\FlowEditorSettingsController;
 use App\Http\Controllers\Settings\FlowsSettingsController;
 use App\Http\Controllers\Settings\UserSettingsController;
 use App\Http\Controllers\Settings\WhatsAppSettingsController;
@@ -87,4 +88,8 @@ Route::middleware('auth')->group(function (): void {
     Route::get('settings/flows', [FlowsSettingsController::class, 'show'])
         ->middleware(['verified', 'tenant'])
         ->name('settings.flows');
+
+    Route::get('settings/flows/{chatbot}/{flow}', [FlowEditorSettingsController::class, 'show'])
+        ->middleware(['verified', 'tenant'])
+        ->name('settings.flows.editor');
 });

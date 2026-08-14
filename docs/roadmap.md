@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 11 COMPLETADA** (Chatbot engine). Solo se trabaja sobre la fase activa.
+Estado general: **FASE 12 COMPLETADA** (Flow Builder). Solo se trabaja sobre la fase activa.
 
 ## Fases
 
@@ -18,7 +18,7 @@ Estado general: **FASE 11 COMPLETADA** (Chatbot engine). Solo se trabaja sobre l
 | 9 | Mensajes (jobs async) | COMPLETADA |
   | 10 | Bandeja de entrada (UI + Reverb) | COMPLETADA |
   | 11 | Chatbot engine | COMPLETADA |
-| 12 | Flow Builder (Vue Flow) | PENDIENTE |
+| 12 | Flow Builder (Vue Flow) | COMPLETADA |
 | 13 | Variables de conversación | PENDIENTE |
 | 14 | Triggers | PENDIENTE |
 | 15 | Transferencia a humano | PENDIENTE |
@@ -575,3 +575,55 @@ COMPLETADO / BLOQUEADO
       `database.md` (tablas FASE 11), `multi-tenancy.md`, `security.md`, `testing.md`,
       `architecture.md`, `roadmap.md`, `decisions.md` (ADR-034..039)
 - [ ] FASE 11 termina SIN push a origin (reporte final en PASO 13)
+
+> ## Fase 12 — Flow Builder (estado)
+
+- [x] **Editor visual** (ADR-040): `@vue-flow/core` v1.48 + background/minimap/controls.
+      `features/flows/useFlowEditor.ts` (estado + mutaciones + `FlowEditorController`),
+      `useEditorHistory` (50 snapshots clonados, undo/redo), `useKeyboardShortcuts`
+      (Ctrl+S / Ctrl+Z / Ctrl+Shift+Z). Canvas one-way `FlowEditor.vue` con nodeTypes propios.
+- [x] **10 nodos** (`features/flows/components/nodes/`): message, buttons, question,
+      condition (handles true/false), delay, tag, webhook, human, end y `ai` (visible pero
+      bloqueado con badge "Reservado · FASE 16"). `FlowNodeBase.vue` (colores por tipo, badge
+      Inicio, badge de issue). Edge propio `FlowEdge.vue` con label pill y `MarkerType.ArrowClosed`.
+- [x] **Config panels** (`components/panels/config/`): MessageNodeConfig (texto + hint de
+      variables), ButtonsNodeConfig (1-3 botones con id+title), QuestionNodeConfig (text/prompt/
+      field `{custom.*}`), ConditionNodeConfig (reglas + `CONDITION_OPERATORS` con
+      `needsValue`), DelayNodeConfig (1..3600s), TagNodeConfig (1-10), WebhookNodeConfig
+      (solo method+url — secrets en backend), HumanNodeConfig, EndNodeConfig.
+- [x] **Paneles y dialogs**: NodePropertiesPanel (nombre, isStart, config, duplicar/eliminar),
+      FlowPropertiesPanel (nombre/descripción), EdgePropertiesPanel (rama + eliminar),
+      ValidationPanel (issues + "Ver nodo" → `focusNode`), ConfirmDialog, ConflictDialog
+      (recargar / seguir editando / sobrescribir). NodePalette + FlowToolbar (Guardar/Deshacer/
+      Rehacer/Validar/Publicar/Desactivar) + EmptyState.
+- [x] **Lock optimista** (ADR-041): `base_updated_at` opcional en `PUT /draft`; 409
+      `FLOW_CONFLICT` → ConflictDialog; sobrescribir reenvía sin `base_updated_at`.
+      Migración `timestamp(6)` en flows. Página `Pages/Flows/Editor.vue` + ruta
+      `settings/flows/{chatbot}/{flow}` (`settings.flows.editor`, middleware verified+tenant) +
+      enlace "Abrir editor" en `Pages/Settings/Flows.vue`. Guard beforeunload + `router.on`.
+- [x] **Contrato de grafo** (ADR-042): ids UUID cliente, posiciones enteras, edge ids
+      `e-{source}-{target}-{label}`, ramas `true`/`false`, `graphSignature`, sin `tenant_id` en
+      payload. **Validación local** (ADR-043): `configIssuesForNode` + `localGraphIssues`
+      (espejo de `FlowValidator`) + `mapBackendErrors`. **Selección v1.48** (ADR-044):
+      `syncSelection` por flags `selected` sin evento `selection-change`; tipos propios
+      `FlowEditorNode/Edge` desacoplados de `GraphNode/GraphEdge`.
+- [x] **Solo lectura**: agent (`flows.view` sin `manage`) y flujos publicados abren el editor en
+      read-only; el composable ignora toda mutación; la barra oculta Guardar/Publicar.
+- [x] **Tests frontend** (46 Vitest nuevos → **117 total**): `flowAdapter.test.ts` (13:
+      roundtrip API↔draft, edge ids, ramas, graphSignature, canCreateConnection), 
+      `flowValidation.test.ts` (16: config por tipo + grafo + mapBackendErrors),
+      `useEditorHistory.test.ts` (6: límite 50, undo/redo, clonado, clear),
+      `useFlowEditor.test.ts` (11: load/save/conflicto/sobrescribir/publish-inválido/connect/
+      undo-redo/read-only con `window.axios` mockeado)
+- [x] **Tests backend** (13 nuevos FLOW-29..43 → **307 total, 1319 assertions**):
+      secrets webhook no expuestos (FLOW-29), lock optimista (FLOW-30/38/43), página editor
+      (FLOW-31), carga del flujo (FLOW-32), borrador atómico (FLOW-33/34), estados
+      (FLOW-35/36), FLOW_INVALID (FLOW-37), aislamiento A/B (FLOW-39), tenant_id forzado
+      (FLOW-40), matriz de permisos (FLOW-41), publish tras edición (FLOW-42)
+- [x] Pint + PHPStan (nivel 6) + `php -l` + `vue-tsc` + `vite build` + `vitest` sin errores;
+      suite completa 307 verde; regresión Docker (`health:check` ok) + migraciones PostgreSQL
+      down/up (timestamp(6) verificado)
+- [x] Documentación: `chatbot-engine.md` (§11), `api.md` (§3.8 editor + lock), `database.md`
+      (timestamp(6)), `multi-tenancy.md` (editor), `security.md` (editor), `testing.md`,
+      `architecture.md` (frontend editor), `roadmap.md`, `decisions.md` (ADR-040..044)
+- [ ] FASE 12 termina SIN push a origin (reporte final en PASO 13)

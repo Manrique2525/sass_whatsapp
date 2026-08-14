@@ -292,7 +292,7 @@ Permisos nuevos: `flows.view` (owner/admin/agent) y `flows.manage` (owner/admin)
 | POST | `/api/v1/tenants/{tenant}/chatbots/{chatbot}/flows` | `flows.manage` | Crea `{name*, description?}` (estado `draft`) → **201**. Audita `flow.created` |
 | GET | `/api/v1/tenants/{tenant}/flows/{flow}` | `flows.view` | Detalle con `nodes`, `connections` y `triggers` eager-loaded. 404 si no existe/no es del tenant |
 | PATCH | `/api/v1/tenants/{tenant}/flows/{flow}` | `flows.manage` | Actualización de nombre/descripción (no del grafo). Publicado → **409** `FLOW_PUBLISHED`. Audita `flow.updated` |
-| PUT | `/api/v1/tenants/{tenant}/flows/{flow}/draft` | `flows.manage` | Reemplaza el grafo **atómicamente** (transacción nodes+connections). Body: `{nodes[]*, connections[]}`. Valida forma (422 `VALIDATION_ERROR`) y grafo (422 `FLOW_INVALID`). Publicado → **409**. Audita `flow.draft_replaced` |
+| PUT | `/api/v1/tenants/{tenant}/flows/{flow}/draft` | `flows.manage` | Reemplaza el grafo **atómicamente** (transacción nodes+connections). Body: `{nodes[]*, connections[], base_updated_at?}`. `base_updated_at` (ISO) es el lock optimista: si la versión guardada del cliente no coincide con `flows.updated_at` → **409** `FLOW_CONFLICT` sin escribir. Valida forma (422 `VALIDATION_ERROR`) y grafo (422 `FLOW_INVALID`). Publicado → **409**. Audita `flow.draft_replaced` |
 | GET | `/api/v1/tenants/{tenant}/flows/{flow}/validate` | `flows.view` | Valida el grafo SIN mutar → `{valid: bool, errors: string[]}` |
 | POST | `/api/v1/tenants/{tenant}/flows/{flow}/publish` | `flows.manage` | Publica (valida grafo → 422 `FLOW_INVALID`). Otro flujo publicado con el mismo trigger genérico → **409** `FLOW_ALREADY_PUBLISHED`; transición inválida → **409** `FLOW_INVALID_STATE`. Audita `flow.published` |
 | POST | `/api/v1/tenants/{tenant}/flows/{flow}/deactivate` | `flows.manage` | Desactiva (requiere `published`; si no → **409** `FLOW_INVALID_STATE`). Audita `flow.deactivated` |
@@ -320,6 +320,13 @@ variables, attempts, last_inbound_message_id, created_at, updated_at}`.
 **El nodo `webhook` solo expone `method` + `url`** (el `config` completo no sale por API para no
 filtrar headers/secrets; el frontend muestra un resumen, no el config crudo).
 
+**Editor visual (FASE 12)**: el frontend edita sobre los endpoints de la tabla (página
+`settings/flows/{chatbot}/{flow}`, ADR-040..044). El editor envía ids de nodo UUID, posiciones
+enteras, aristas con `label` (`true`/`false` para ramas de condición) y `base_updated_at`
+(ADR-041); el `tenant_id` nunca viaja en el body. Conflictos de concurrencia → **409**
+`FLOW_CONFLICT` con `{message, code, current_updated_at}`; la resolución (recargar / seguir /
+sobrescribir) ocurre en el cliente con `ConflictDialog`.
+
 ## 4. Webhooks (sin auth Bearer; autenticados por firma y dedupe)
 
 | Método | Ruta | Descripción |
@@ -340,8 +347,8 @@ Formato estándar:
 }
 ```
 
-Excepciones de dominio con código propio (`FLOW_INVALID`, `TENANT_QUOTA_EXCEEDED`,
-`WHATSAPP_MESSAGE_FAILED`...).
+Excepciones de dominio con código propio (`FLOW_INVALID`, `FLOW_CONFLICT`,
+`TENANT_QUOTA_EXCEEDED`, `WHATSAPP_MESSAGE_FAILED`...).
 
 ## 6. Versionado
 

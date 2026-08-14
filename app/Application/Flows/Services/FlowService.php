@@ -12,6 +12,7 @@ use App\Domain\Flows\Enums\FlowTriggerType;
 use App\Domain\Flows\Exceptions\ChatbotHasPublishedFlowsException;
 use App\Domain\Flows\Exceptions\ChatbotNotFoundException;
 use App\Domain\Flows\Exceptions\FlowAlreadyPublishedException;
+use App\Domain\Flows\Exceptions\FlowConflictException;
 use App\Domain\Flows\Exceptions\FlowInvalidException;
 use App\Domain\Flows\Exceptions\FlowInvalidStateException;
 use App\Domain\Flows\Exceptions\FlowNotFoundException;
@@ -28,6 +29,7 @@ use App\Domain\Users\Enums\TenantPermission;
 use App\Domain\Users\Models\User;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
@@ -285,6 +287,15 @@ final class FlowService
      * El flujo inválido jamás persiste (422 FLOW_INVALID); la transacción
      * garantiza que nunca queda un grafo a medias.
      *
+     * Lock optimista (FASE 12, ADR-042): si `$baseUpdatedAt` (ISO 8601) es
+     * anterior a `flow.updated_at`, otro usuario modificó el flujo después de
+     * que este cliente lo cargó → `409 FLOW_CONFLICT`. Nunca se sobrescribe en
+     * silencio: el cliente decide recargar/sobrescribir explícitamente.
+     *
+     * Los secretos del nodo webhook (headers/payload) viven SOLO en el backend
+     * (ADR-044): cuando el payload del editor las omite se preservan los
+     * valores persistidos; si el payload las incluye explícitamente, ganan.
+     *
      * @param  array<int, array<string, mixed>>  $nodes
      * @param  array<int, array<string, mixed>>  $connections
      */
@@ -294,6 +305,7 @@ final class FlowService
         string $flowId,
         array $nodes,
         array $connections,
+        ?string $baseUpdatedAt = null,
     ): Flow {
         $this->authorization->authorize($user, TenantPermission::ManageFlows, $tenant);
 
@@ -301,7 +313,11 @@ final class FlowService
 
         $this->assertEditable($flow);
 
-        $nodeModels = $this->buildNodeModels($nodes);
+        $this->assertVersion($flow, $baseUpdatedAt);
+
+        $existingNodes = $flow->nodes()->get()->keyBy('id');
+
+        $nodeModels = $this->buildNodeModels($nodes, $existingNodes);
         $connectionModels = $this->buildConnectionModels($connections);
 
         $errors = $this->validator->validate($nodeModels, $connectionModels, $flow->config);
@@ -328,6 +344,8 @@ final class FlowService
                 $connection->flow_id = $flow->id;
                 $connection->save();
             }
+
+            $flow->touch();
         });
 
         $this->auditLogger->record(
@@ -610,10 +628,64 @@ final class FlowService
     }
 
     /**
+     * Lock optimista: `base_updated_at` opcional enviado por el editor. Si el
+     * flujo fue tocado después de esa marca de tiempo, hay un conflicto de
+     * escritura concurrente. El campo es opcional para mantener compatibilidad
+     * con clientes que no usan el editor (backward compatible).
+     */
+    private function assertVersion(Flow $flow, ?string $baseUpdatedAt): void
+    {
+        if ($baseUpdatedAt === null || trim($baseUpdatedAt) === '') {
+            return;
+        }
+
+        $base = Carbon::parse($baseUpdatedAt);
+
+        if ($flow->updated_at->gt($base)) {
+            throw new FlowConflictException(
+                'El flujo fue modificado por otro usuario mientras editabas. Recargá la versión actual antes de guardar (o sobrescribí explícitamente).',
+            );
+        }
+    }
+
+    /**
+     * Preserva los secretos del nodo webhook (headers/payload) cuando el
+     * payload del editor no los incluye. Solo aplica a nodos webhook ya
+     * persistidos; si el editor envía valores explícitos, ganan.
+     *
+     * @param  array<string, mixed>|null  $config
+     * @param  Collection<string, FlowNode>|null  $existingNodes
+     * @return array<string, mixed>|null
+     */
+    private function preserveWebhookSecrets(string $nodeId, ?array $config, ?Collection $existingNodes): ?array
+    {
+        if ($config === null || $existingNodes === null) {
+            return $config;
+        }
+
+        $existing = $existingNodes->get($nodeId);
+
+        if ($existing === null || $existing->type !== FlowNodeType::Webhook) {
+            return $config;
+        }
+
+        $stored = is_array($existing->config) ? $existing->config : [];
+
+        foreach (['headers', 'payload'] as $secret) {
+            if (! array_key_exists($secret, $config) && array_key_exists($secret, $stored)) {
+                $config[$secret] = $stored[$secret];
+            }
+        }
+
+        return $config;
+    }
+
+    /**
      * @param  array<int, array<string, mixed>>  $nodes
+     * @param  Collection<string, FlowNode>|null  $existingNodes
      * @return array<string, FlowNode>
      */
-    private function buildNodeModels(array $nodes): array
+    private function buildNodeModels(array $nodes, ?Collection $existingNodes = null): array
     {
         $models = [];
 
@@ -624,12 +696,18 @@ final class FlowService
                 continue;
             }
 
+            $config = is_array($node['config'] ?? null) ? $node['config'] : null;
+
+            if (($node['type'] ?? '') === FlowNodeType::Webhook->value) {
+                $config = $this->preserveWebhookSecrets($id, $config, $existingNodes);
+            }
+
             $model = new FlowNode([
                 'type' => FlowNodeType::from((string) $node['type']),
                 'name' => (string) ($node['name'] ?? $id),
                 'position_x' => (int) ($node['position_x'] ?? 0),
                 'position_y' => (int) ($node['position_y'] ?? 0),
-                'config' => is_array($node['config'] ?? null) ? $node['config'] : null,
+                'config' => $config,
                 'is_start' => (bool) ($node['is_start'] ?? false),
             ]);
 

@@ -307,6 +307,24 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
   agente reanuda.
 - **Auditoría**: cada mutación (chatbot/flow/trigger/execution) se registra en `audit_logs`.
 
+### Editor visual de flujos (FASE 12, ADR-040..044)
+- **Autorización del lado servidor**: el editor es solo la capa de UX. Todo se valida en backend
+  (`FlowValidator`, `FormRequest`); el frontend envía únicamente `{nodes[], connections[],
+  base_updated_at?}`. `tenant_id` jamás viaja en el body (se fuerza desde el contexto);
+  aislamiento A/B probado en FLOW-39. El agente (`flows.view`) abre el editor en read-only
+  (FLOW-41); el composable ignora toda mutación y la barra oculta Guardar/Publicar.
+- **Lock optimista (concurrencia)**: `base_updated_at` = `flows.updated_at` de la versión
+  cargada. Si otro editor guardó antes → 409 `FLOW_CONFLICT` y NADA se escribe. La resolución
+  (recargar / seguir / **sobrescribir explícito**) es una acción del usuario, jamás automática.
+  Los secrets del nodo webhook solo se editan como `method`/`url`; headers/payload permanecen en
+  el backend (FLOW-29).
+- **Validación local solo como UX**: `flowValidation.ts` es espejo del validador del backend para
+  feedback inmediato (badges, panel). El publish re-valida en servidor (`FLOW_INVALID`); los
+  errores del servidor se mapean a nodos por nombre. El backend nunca confía en la validación del
+  frontend.
+- **Sin datos en localStorage**: el estado del editor y el lock viven en memoria; al recargar se
+  obtiene la versión del servidor (nada de versiones fantasma locales).
+
 ## 3. Comprobaciones automatizadas
 
 - PHPStan nivel alto.

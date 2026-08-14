@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { usePage } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import {
     buildChatbotQuery,
@@ -134,9 +134,8 @@ onMounted(loadChatbots);
             <div class="rounded-xl border border-zinc-200 bg-white p-8 shadow-sm">
                 <h2 class="text-xl font-semibold text-zinc-900">Flujos</h2>
                 <p class="mt-2 text-sm text-zinc-600">
-                    Automatizaciones de WhatsApp por chatbot. Vista read-only de la FASE 11:
-                    consulta el estado de cada flujo, sus nodos, conexiones y triggers. El
-                    editor visual llegará en una fase posterior.
+                    Automatizaciones de WhatsApp por chatbot. Consulta el estado de cada flujo,
+                    sus nodos, conexiones y triggers, o abrí el editor visual para modificarlo.
                 </p>
             </div>
 
@@ -233,33 +232,45 @@ onMounted(loadChatbots);
 
                     <ul v-else class="space-y-2">
                         <li v-for="flow in flows" :key="flow.id">
-                            <button
-                                type="button"
+                            <div
                                 class="w-full rounded-md border p-3 text-left transition"
                                 :class="
                                     selectedFlow?.id === flow.id
                                         ? 'border-emerald-500 bg-emerald-50'
-                                        : 'border-zinc-200 hover:bg-zinc-50'
+                                        : 'border-zinc-200'
                                 "
-                                @click="selectFlow(flow)"
                             >
-                                <span class="flex items-center justify-between gap-2">
-                                    <span class="text-sm font-medium text-zinc-900">{{ flow.name }}</span>
-                                    <span
-                                        class="rounded-full px-2 py-0.5 text-xs font-medium"
-                                        :class="{
-                                            'bg-amber-100 text-amber-700': flow.status === 'draft',
-                                            'bg-emerald-100 text-emerald-700': flow.status === 'published',
-                                            'bg-zinc-100 text-zinc-600': flow.status === 'inactive',
-                                        }"
-                                    >
-                                        {{ flowStatusLabel(flow.status) }}
+                                <button
+                                    type="button"
+                                    class="w-full text-left"
+                                    @click="selectFlow(flow)"
+                                >
+                                    <span class="flex items-center justify-between gap-2">
+                                        <span class="text-sm font-medium text-zinc-900">{{ flow.name }}</span>
+                                        <span
+                                            class="rounded-full px-2 py-0.5 text-xs font-medium"
+                                            :class="{
+                                                'bg-amber-100 text-amber-700': flow.status === 'draft',
+                                                'bg-emerald-100 text-emerald-700': flow.status === 'published',
+                                                'bg-zinc-100 text-zinc-600': flow.status === 'inactive',
+                                            }"
+                                        >
+                                            {{ flowStatusLabel(flow.status) }}
+                                        </span>
                                     </span>
-                                </span>
-                                <span class="mt-0.5 block text-xs text-zinc-500">
-                                    {{ flow.nodes?.length ?? 0 }} nodos · {{ flow.triggers_count ?? flow.triggers?.length ?? 0 }} triggers
-                                </span>
-                            </button>
+                                    <span class="mt-0.5 block text-xs text-zinc-500">
+                                        {{ flow.nodes?.length ?? 0 }} nodos · {{ flow.triggers_count ?? flow.triggers?.length ?? 0 }} triggers
+                                    </span>
+                                </button>
+                                <div class="mt-2 border-t border-zinc-100 pt-2">
+                                    <Link
+                                        :href="`/settings/flows/${selectedChatbot?.id ?? ''}/${flow.id}`"
+                                        class="inline-flex rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-zinc-700"
+                                    >
+                                        Abrir editor
+                                    </Link>
+                                </div>
+                            </div>
                         </li>
                     </ul>
                 </section>
