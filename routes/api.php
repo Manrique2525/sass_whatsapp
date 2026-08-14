@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\ConversationController;
 use App\Http\Controllers\Api\V1\InvitationController;
 use App\Http\Controllers\Api\V1\MemberController;
 use App\Http\Controllers\Api\V1\MemberInvitationController;
+use App\Http\Controllers\Api\V1\MessagesController;
 use App\Http\Controllers\Api\V1\TenantController;
 use App\Http\Controllers\Api\V1\WhatsAppController;
 use App\Http\Controllers\Api\Webhooks\WhatsAppWebhookController;
@@ -96,6 +97,10 @@ Route::prefix('v1')->group(function (): void {
                 Route::post('{tenant}/conversations/{conversation}/reopen', [ConversationController::class, 'reopen']);
                 Route::post('{tenant}/conversations/{conversation}/pause-bot', [ConversationController::class, 'pauseBot']);
                 Route::post('{tenant}/conversations/{conversation}/resume-bot', [ConversationController::class, 'resumeBot']);
+
+                // FASE 10 — historial y envío de mensajes (inbox chat).
+                Route::get('{tenant}/conversations/{conversation}/messages', [MessagesController::class, 'index']);
+                Route::post('{tenant}/conversations/{conversation}/messages', [MessagesController::class, 'store']);
             });
         });
     });

@@ -15,6 +15,7 @@ use App\Domain\WhatsApp\Enums\MessageSendStatus;
 use App\Domain\WhatsApp\Enums\PhoneNumberStatus;
 use App\Domain\WhatsApp\Exceptions\WhatsAppMessageFailedException;
 use App\Domain\WhatsApp\Models\MessageSendAttempt;
+use App\Events\MessageStatusUpdated;
 use App\Jobs\Concerns\TenantAwareJob;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -184,6 +185,8 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
             'attempted_at' => now(),
         ])->save();
 
+        $previous = $message->status->value;
+
         $message->forceFill([
             'status' => MessageStatus::Sent,
             'provider_message_id' => $result->providerMessageId,
@@ -201,10 +204,14 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
             subjectId: $message->id,
             tenantId: $this->tenantId,
         );
+
+        event(new MessageStatusUpdated($message, $previous));
     }
 
     private function failMessage(Tenant $tenant, Message $message, string $errorCode, ?string $errorMessage = null): void
     {
+        $previous = $message->status->value;
+
         $message->forceFill([
             'status' => MessageStatus::Failed,
             'failed_at' => now(),
@@ -222,5 +229,7 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
             subjectId: $message->id,
             tenantId: $tenant->id,
         );
+
+        event(new MessageStatusUpdated($message, $previous));
     }
 }

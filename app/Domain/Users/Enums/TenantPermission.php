@@ -59,6 +59,8 @@ enum TenantPermission: string
     case ManageConversations = 'conversations.manage';
     case AssignConversations = 'conversations.assign';
 
+    case SendMessages = 'messages.send';
+
     /**
      * Todos los permisos de la plataforma (para el seeder).
      *
@@ -87,6 +89,7 @@ enum TenantPermission: string
             self::ViewConversations,
             self::ManageConversations,
             self::AssignConversations,
+            self::SendMessages,
         ];
     }
 
@@ -103,6 +106,7 @@ enum TenantPermission: string
      *   (crear/editar/eliminar contactos).
      * - conversations: view para todos (inbox); manage y assign solo owner/admin
      *   (estados, bot, asignación/transferencia a agentes).
+     * - messages: send para todos los roles del tenant (responder en el chat).
      *
      * @return list<TenantPermission>
      */
@@ -128,6 +132,7 @@ enum TenantPermission: string
                 self::ViewConversations,
                 self::ManageConversations,
                 self::AssignConversations,
+                self::SendMessages,
             ],
             UserRole::Agent => [
                 self::ViewTenants,
@@ -135,6 +140,7 @@ enum TenantPermission: string
                 self::ViewWhatsApp,
                 self::ViewContacts,
                 self::ViewConversations,
+                self::SendMessages,
             ],
             // super_admin es rol global de plataforma (spatie, sin team):
             // no obtiene permisos de tenant, se autoriza aparte.

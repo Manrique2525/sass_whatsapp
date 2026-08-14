@@ -210,6 +210,23 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - **Auditoría FASE 9**: `message.received`, `message.status_updated`, `message.sent`,
   `message.failed`, `message.duplicate` (no-op).
 
+### Inbox API + Realtime (FASE 10)
+- **Autorización por endpoint y por recurso**: `GET .../messages` exige `conversations.view` y
+  `POST .../messages` exige `messages.send` (owner/admin/agent). Ambos resuelven la conversación
+  con `withoutTenantScope()->where(tenant_id, ...)` del tenant de la URL: usuario de otro tenant o
+  no-miembro → **404** (sin oráculo); conversación inexistente → 404; tenant suspendido → 409;
+  falta de permiso → 403 `PERMISSION_DENIED`. Tests CRITICOS MSG-API-4/5/8/11 (aislamiento A/B e
+  IDOR sobre el recurso).
+- **Canales Reverb aislados**: los eventos (`MessageCreated`, `MessageStatusUpdated`,
+  `ConversationUpdated`) se emiten en el canal **privado por conversación**
+  `tenant.{tenantId}.conversations.{conversationId}`; `routes/channels.php` autoriza con
+  `belongsToTenantById` y el frontend se suscribe solo a la conversación abierta (sin canales
+  globales). Un usuario del tenant A no puede autenticarse al canal de B (ReverbChannelAuthTest).
+  El polling de la lista (30 s) respeta los mismos permisos que el índice.
+- **Envío seguro**: el `body` se valida en el backend (required, string, max 4096) y el mensaje
+  queda `pending` (nunca `sent`) hasta que el job CAS lo envía. Los eventos broadcast no exponen
+  datos sensibles (payload vía `*Resource`, sin tokens ni metadata interna).
+
 ### Inyección SQL
 - Eloquent/Query Builder con bindings. Sin concatenación de SQL.
 - `phpstan` + revisión en code review.

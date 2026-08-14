@@ -1,5 +1,7 @@
 export type ConversationStatus = 'open' | 'pending' | 'resolved' | 'archived';
 
+import type { Message } from '@/features/messages/messageTypes';
+
 export interface ConversationContact {
     id: string;
     phone: string;
@@ -31,8 +33,19 @@ export interface Conversation {
     bot_paused: boolean;
     context: Record<string, unknown> | null;
     flow_execution_id: string | null;
+    last_message: Message | null;
     created_at: string;
     updated_at: string;
+}
+
+export interface TenantMember {
+    id: number;
+    user: {
+        id: number;
+        name: string;
+        email: string;
+    };
+    role: string;
 }
 
 export interface ConversationFilters {

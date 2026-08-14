@@ -568,6 +568,42 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   en los extractores y `public int` en `tries`/`timeout` de jobs. Los REST
   `conversations/{id}/messages` quedan para FASE 10 (bandeja de entrada).
 
+## ADR-033 · Inbox FASE 10: mensajes REST, permiso `messages.send` y tiempo real Reverb por conversación
+
+- **Estado**: Aceptado → FASE 10
+- **Contexto**: La bandeja (FASE 1) era una tabla con CRUD; el historial de mensajes persistía
+  (FASE 9) pero no había lectura/escritura desde el frontend ni notificación en vivo. Se necesita
+  un inbox tipo chat con mensajes por conversación, envío desde el agente y actualizaciones en
+  tiempo real aisladas por tenant.
+- **Decisión**:
+  - **REST**: `GET|POST /api/v1/tenants/{tenant}/conversations/{conversation}/messages` bajo el
+    grupo `middleware('tenant')`. `index` página DESC (default 30, máx 100) con `MessageResource`
+    completo y `{messages, meta}`; `store` valida `body` (required, string, max 4096) y responde
+    201 `{message, created_message}`. Permisos: `conversations.view` (index) y **nuevo**
+    `messages.send` (store), concedido a owner/admin/agent (todo rol de tenant que atiende inbox).
+    Errores estándar: 404 no-miembro/tenant ajeno, 403 PERMISSION_DENIED, 409 tenant inactivo.
+  - **Realtime**: eventos `MessageCreated`, `MessageStatusUpdated` (con `previous_status`) y
+    `ConversationUpdated`, todos `ShouldBroadcast` con `broadcastAs()`/`broadcastWith()` usando los
+    `*Resource` como payload. Se despachan vía `Illuminate\Contracts\Events\Dispatcher` inyectado
+    (nada de facades en services). Canal **privado por conversación**
+    `tenant.{tenantId}.conversations.{conversationId}` (sin canales globales; ReverbChannelAuthTest
+    ya validaba el patrón). Almacenado para status `sent`/`failed` (SendWhatsAppMessage) y para
+    `touchConversation`/`markConversationPending` (inbound con conversación resuelta).
+  - **Frontend**: Laravel Echo + Reverb (lazy `initEcho()`, guard `VITE_REVERB_APP_KEY`), suscripción
+    dinámica por conversación abierta vía composable `useConversationChannel`; polling de la lista
+    cada 30 s como complemento (los eventos solo llegan de la conversación abierta). El scroll es
+    "inteligente": auto-bottom solo si el usuario está al final; si llega un mensaje con el scroll
+    en histórico se muestra el pill "Nuevos mensajes". `ConversationResource` incluye `last_message`
+    (HasOne `latestOfMany`) para el preview del listado.
+  - **Pruebas**: `MessageApiTest` (MSG-API-1..16) cubre paginación, aislamiento A/B (404), IDOR,
+    matriz de permisos, eventos vía `Event::fake`, `last_message` y envío + timestamps. Laravel
+    12.66 no expone `Broadcast::fake()`: los tests de broadcasts usan `Event::fake([...])` +
+    `assertDispatched` con callback sobre la instancia.
+- **Consecuencias**: 1 permiso nuevo, 3 eventos, 1 controller + 2 requests + 1 resource, rutas
+  nuevas y `last_message` eager-load en el índice de conversaciones. Suite backend **264 tests /
+  996 assertions**; frontend 48 tests Vitest (jsdom + @vue/test-utils). El inbox reemplaza la tabla
+  de FASE 1 en `Pages/Conversations/Index.vue` (mantiene crear conversación y acciones de FASE 1).
+
 ## Pendientes de decisión
 
 - Proveedor de email en producción (mailpit en dev; SES/Resend/SMTP en prod) → FASE 22.

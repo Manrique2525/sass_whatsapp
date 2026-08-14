@@ -1,8 +1,9 @@
 # WhatsApp (Meta Cloud API)
 
 Estado: **FASE 6 COMPLETADA** (provider, webhook, conexión y envío), **FASE 7 COMPLETADA**
-(CRM de contactos: el find-or-create por teléfono ya está disponible para los jobs del webhook) y
-**FASE 9 COMPLETADA** (mensajes: persistencia inbound/outbound, status updates y outbox sweeper).
+(CRM de contactos: el find-or-create por teléfono ya está disponible para los jobs del webhook),
+**FASE 9 COMPLETADA** (mensajes: persistencia inbound/outbound, status updates y outbox sweeper)
+y **FASE 10 COMPLETADA** (REST de mensajes para el inbox + notificaciones Reverb por conversación).
 Lo pendiente de diseño (media, plantillas, motor de flujos, rate limits, lock de conversación) se
 detalla abajo con su fase de implementación.
 
@@ -232,5 +233,8 @@ webhook a registrar en Meta es `https://<dominio>/api/webhooks/whatsapp`.
   `provider_message_id`, MSG-1..9); status delivered/read/failed actualiza mensajes y `failed`
   pasa la conversación a `pending` (STAT-1..8); outbound con CAS `pending → sending`, attempts,
   reintento retryable y fallo permanente (OUT-1..7); outbox sweeper (OUTBOX-1..4).
-- Pendiente (FASE 10+): media outbound, templates, lock de conversación, rate limits, REST
-  `conversations/{id}/messages`.
+- FASE 10: REST `GET/POST /api/v1/tenants/{tenant}/conversations/{conversation}/messages`
+  (`conversations.view` / `messages.send`) con envío async vía `SendWhatsAppMessage` y
+  notificaciones Reverb (`MessageCreated`/`MessageStatusUpdated`/`ConversationUpdated`) en el canal
+  privado por conversación para el inbox (MSG-API-1..16).
+- Pendiente (FASE 11+): media outbound, templates, lock de conversación, rate limits.

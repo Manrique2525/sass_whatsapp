@@ -5,6 +5,7 @@ import type { AuthUser } from '@/types/inertia';
 
 const props = defineProps<{
     user: AuthUser | null;
+    fullWidth?: boolean;
 }>();
 
 const page = usePage();
@@ -92,7 +93,7 @@ const logout = (): void => {
             </nav>
         </header>
 
-        <main class="mx-auto max-w-4xl px-4 py-8">
+        <main class="mx-auto px-4 py-8" :class="props.fullWidth ? 'max-w-[1400px]' : 'max-w-4xl'">
             <slot />
         </main>
     </div>

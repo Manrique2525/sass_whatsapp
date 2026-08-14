@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 9 COMPLETADA** (Mensajes). Solo se trabaja sobre la fase activa.
+Estado general: **FASE 10 COMPLETADA** (Bandeja de entrada UI + Reverb). Solo se trabaja sobre la fase activa.
 
 ## Fases
 
@@ -16,7 +16,7 @@ Estado general: **FASE 9 COMPLETADA** (Mensajes). Solo se trabaja sobre la fase 
 | 7 | Contactos | COMPLETADA |
 | 8 | Conversaciones | COMPLETADA |
 | 9 | Mensajes (jobs async) | COMPLETADA |
-| 10 | Bandeja de entrada (UI + Reverb) | PENDIENTE |
+| 10 | Bandeja de entrada (UI + Reverb) | COMPLETADA |
 | 11 | Chatbot engine | PENDIENTE |
 | 12 | Flow Builder (Vue Flow) | PENDIENTE |
 | 13 | Variables de conversación | PENDIENTE |
@@ -471,3 +471,54 @@ COMPLETADO / BLOQUEADO
       suite completa verde en el contenedor, `health:check` ok (app/database/redis/queue)
 - [x] Documentación: `database.md`, `whatsapp.md`, `api.md` (§3.7), `multi-tenancy.md`,
       `security.md`, `testing.md`, `roadmap.md`, `decisions.md` (ADR-032)
+
+## Fase 10 — Bandeja de entrada (estado)
+
+- [x] **REST de mensajes**: `GET|POST /api/v1/tenants/{tenant}/conversations/{conversation}/messages`
+      bajo `middleware('tenant')`. `index` página DESC (`per_page` 1..100, default 30) → `{messages,
+      meta}` con `MessageResource` completo; `store` valida `body` (required, string, max 4096),
+      encola el envío real vía `MessageService::createOutbound` y responde 201 `{message,
+      created_message}`. Errores estándar: no-miembro/tenant ajeno → 404, sin permiso → 403
+      PERMISSION_DENIED, tenant inactivo → 409. Permisos: `conversations.view` (index) y nuevo
+      `messages.send` (store) para owner/admin/agent
+- [x] `TenantPermission::SendMessages` en `all()` y en la matriz de roles (owner/admin/agent);
+      seeder sincronizado con el enum (espejo automático)
+- [x] `Conversation::lastMessage()` (HasOne `latestOfMany`) + `ConversationResource::last_message`
+      (whenLoaded) + eager-load en `ConversationService::index` (preview del listado)
+- [x] **Realtime backend**: eventos `MessageCreated`, `MessageStatusUpdated` (con `previous_status`)
+      y `ConversationUpdated` (`ShouldBroadcast`, `broadcastAs`/`broadcastWith` con payload vía
+      `*Resource`) despachados con `Illuminate\Contracts\Events\Dispatcher` inyectado. Emisores:
+      inbound/outbound/status (`MessageService`), `sent`/`failed` (`SendWhatsAppMessage`) y
+      update/close/reopen/pause-bot/resume-bot/assign/transfer (`ConversationService`). Canal
+      privado por conversación `tenant.{id}.conversations.{convId}` (patrón ya validado en
+      `ReverbChannelAuthTest`; ADR-022/033)
+- [x] **Realtime frontend**: `features/realtime/echo.ts` (init lazy con guard
+      `VITE_REVERB_APP_KEY`, connector `reverb`, `forceTLS` según `VITE_REVERB_SCHEME`, se añadió
+      `VITE_REVERB_SCHEME` a `.env`/`.env.example`) y composable `useConversationChannel` (se
+      suscribe al canal de la conversación abierta, listener `.MessageCreated`/`.MessageStatusUpdated`/
+      `.ConversationUpdated`, unsubscribe al cambiar/cerrar)
+- [x] **features/messages**: `messageTypes.ts` (Message/MessagePagination/payloads), `messageUtils.ts`
+      (buildMessageQuery, isNearBottom, formatMessageTimestamp, dayKey/messageDayLabel/
+      groupMessagesByDay, mergeIncomingMessage con dedupe, applyMessageUpdate, messagePreview,
+      messageStatusLabel, isOutbound). `Conversation` tipada con `last_message` y `TenantMember`
+- [x] **Inbox UI** (`Pages/Conversations/Index.vue` reescrito + componentes en
+      `Components/Conversations/`): `ConversationList` (ConversationListItem + ConversationFilters),
+      `ChatHeader` (estado, asignar/transferir, cerrar/reabrir, pausar/reanudar bot, volver en
+      mobile), `MessageList` (scroll inteligente: auto-bottom si estás al final, pill "Nuevos
+      mensajes", "cargar anteriores" y carga al llegar al tope), `MessageBubble` (ticks de estado
+      sent/delivered/read, error), `MessageComposer` (Enter envía, Shift+Enter salto de línea),
+      `ContactPanel` (datos del contacto, agente, última interacción, contexto). Responsive: 3
+      paneles en desktop, lista→chat con "volver" en mobile; `AppLayout` acepta `full-width` para
+      la bandeja. Lista con filtros (búsqueda/estado/agente), "cargar más", polling 30 s (solo en
+      página 1) como complemento de Reverb
+- [x] **Vitest**: entorno `jsdom` + `@vitejs/plugin-vue` en `vitest.config.ts`; 48 tests
+      (messageUtils 22, MessageComposer 6, contactUtils 13, conversationUtils 7)
+- [x] Tests backend (16 nuevos en FASE 10 → **264 total, 996 assertions**): MSG-API-1..16
+      (paginación DESC/per_page, agente lista, aislamiento A/B 404, IDOR, POST pending + job +
+      timestamps, validación 422, cross-tenant 404, responder del inbox 201, matriz de permisos,
+      eventos MessageCreated/ConversationUpdated/MessageStatusUpdated vía `Event::fake`, canal con
+      prefijo `private-`, `last_message` en lista)
+- [x] Pint + PHPStan (nivel 6) + `vue-tsc` + `vite build` + `vitest` sin errores; regresión Docker
+      (suite completa verde, `migrate` sin cambios, `/health` ok)
+- [x] Documentación: `api.md` (§3.7 mensajes), `architecture.md` (realtime), `testing.md`,
+      `security.md`, `whatsapp.md`, `roadmap.md`, `decisions.md` (ADR-033)

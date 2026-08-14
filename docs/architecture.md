@@ -120,6 +120,11 @@ Flujo del mensaje entrante (WhatsApp → Inbox):
     `ConversationService::findOrCreateActiveForContact` listo para el worker).
     **FASE 9**: mensajes persistidos (inbound con dedupe por `provider_message_id`, status
     updates que nunca crean, outbound asíncrono `SendWhatsAppMessage` con CAS + retry).
+    **FASE 10**: los eventos broadcast llegan a agentes por Reverb en el canal **privado por
+    conversación** `tenant.{tenantId}.conversations.{conversationId}`: `MessageCreated`,
+    `MessageStatusUpdated` (con `previous_status`) y `ConversationUpdated`, con payload vía
+    `*Resource` (ADR-033). El frontend (Laravel Echo + connector `reverb`) se suscribe solo al
+    canal de la conversación abierta y complementa con polling de la lista cada 30 s.
     El motor de flujos se conecta en FASE 11.
 
 Autenticación (dos modos, ADR-011):

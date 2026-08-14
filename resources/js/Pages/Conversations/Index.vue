@@ -1,30 +1,27 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import {
     buildConversationQuery,
-    canClose,
-    canReopen,
-    CONVERSATION_STATUS_META,
     extractErrorMessage,
-    formatLastInteraction,
     type Conversation,
-    type ConversationStatus,
+    type ConversationFilters as ConversationFilterOptions,
+    type TenantMember,
 } from '@/features/conversations/conversationUtils';
-
-interface ConversationMeta {
-    current_page: number;
-    last_page: number;
-    per_page: number;
-    total: number;
-}
-
-interface Member {
-    id: number;
-    user: { id: number; name: string; email: string };
-    role: string;
-}
+import type { Message, MessagePagination } from '@/features/messages/messageTypes';
+import {
+    applyMessageUpdate,
+    buildMessageQuery,
+    mergeIncomingMessage,
+} from '@/features/messages/messageUtils';
+import { useConversationChannel } from '@/features/realtime/useConversationChannel';
+import ChatHeader from '@/Components/Conversations/ChatHeader.vue';
+import ContactPanel from '@/Components/Conversations/ContactPanel.vue';
+import ConversationFilters from '@/Components/Conversations/ConversationFilters.vue';
+import ConversationListItem from '@/Components/Conversations/ConversationListItem.vue';
+import MessageComposer from '@/Components/Conversations/MessageComposer.vue';
+import MessageList from '@/Components/Conversations/MessageList.vue';
 
 interface ContactOption {
     id: string;
@@ -42,6 +39,7 @@ const canView = computed(() => can('conversations.view'));
 const canManage = computed(() => can('conversations.manage'));
 const canAssign = computed(() => can('conversations.assign'));
 const canSeeUsers = computed(() => can('users.view'));
+const canSend = computed(() => can('messages.send'));
 
 const loading = ref(true);
 const acting = ref(false);
@@ -49,34 +47,85 @@ const error = ref<string | null>(null);
 const success = ref<string | null>(null);
 
 const conversations = ref<Conversation[]>([]);
-const meta = ref<ConversationMeta>({ current_page: 1, last_page: 1, per_page: 15, total: 0 });
-const members = ref<Member[]>([]);
-
-const filters = ref<{ search: string; status: ConversationStatus | ''; agent_id: number | '' }>({
-    search: '',
-    status: '',
-    agent_id: '',
+const meta = ref<{ current_page: number; last_page: number; per_page: number; total: number }>({
+    current_page: 1,
+    last_page: 1,
+    per_page: 30,
+    total: 0,
 });
+const members = ref<TenantMember[]>([]);
+const filters = ref<ConversationFilterOptions>({ search: '', status: '', agent_id: '' });
 const pageNumber = ref(1);
+const listLoadingMore = ref(false);
+
+const openId = ref<string | null>(null);
+const detail = ref<Conversation | null>(null);
+const view = ref<'list' | 'chat'>('list');
+
+const messages = ref<Message[]>([]);
+const messagesMeta = ref<MessagePagination>({ current_page: 1, last_page: 1, per_page: 30, total: 0 });
+const messagesLoading = ref(false);
+const loadingOlder = ref(false);
+const sending = ref(false);
+const nearBottom = ref(true);
+const hasNewMessages = ref(false);
+
+const messageListRef = ref<InstanceType<typeof MessageList> | null>(null);
 
 const showCreateModal = ref(false);
-const showDetailModal = ref(false);
 const creating = ref(false);
-const detail = ref<Conversation | null>(null);
 const contacts = ref<ContactOption[]>([]);
 const newContactId = ref('');
 
-const lastPage = computed(() => Math.max(1, meta.value.last_page));
-const statusMeta = CONVERSATION_STATUS_META;
+const hasOlderMessages = computed(() => messagesMeta.value.current_page < messagesMeta.value.last_page);
+const listHasMore = computed(() => meta.value.current_page < meta.value.last_page);
+const canWrite = computed(
+    () => canSend.value && detail.value !== null && detail.value.status !== 'archived',
+);
 
-const statusOptions: ConversationStatus[] = ['open', 'pending', 'resolved', 'archived'];
+let pollTimer: number | null = null;
 
-const load = async (): Promise<void> => {
+const sortConversations = (): void => {
+    conversations.value.sort((a, b) => {
+        const aTime = a.last_interaction_at ?? '';
+        const bTime = b.last_interaction_at ?? '';
+
+        return bTime.localeCompare(aTime);
+    });
+};
+
+const updateConversationRow = (fresh: Conversation): void => {
+    const index = conversations.value.findIndex((c) => c.id === fresh.id);
+
+    if (index !== -1) {
+        const existing = conversations.value[index];
+        const merged = {
+            ...fresh,
+            last_message: fresh.last_message ?? existing.last_message,
+        };
+
+        conversations.value[index] = merged;
+    }
+
+    if (detail.value?.id === fresh.id) {
+        detail.value = {
+            ...fresh,
+            last_message: fresh.last_message ?? detail.value.last_message,
+        };
+    }
+
+    sortConversations();
+};
+
+const loadConversations = async (silent = false): Promise<void> => {
     if (!tenantId) {
         return;
     }
 
-    loading.value = true;
+    if (!silent) {
+        loading.value = true;
+    }
+
     error.value = null;
 
     try {
@@ -84,14 +133,25 @@ const load = async (): Promise<void> => {
             params: buildConversationQuery({
                 ...filters.value,
                 page: pageNumber.value,
+                perPage: 30,
             }),
         });
-        conversations.value = res.data.conversations;
+
+        if (pageNumber.value === 1) {
+            conversations.value = res.data.conversations as Conversation[];
+        } else {
+            conversations.value = [...conversations.value, ...(res.data.conversations as Conversation[])];
+        }
+
         meta.value = res.data.meta;
     } catch (err) {
         error.value = extractErrorMessage(err, 'No se pudieron cargar las conversaciones.');
     } finally {
-        loading.value = false;
+        if (!silent) {
+            loading.value = false;
+        }
+
+        listLoadingMore.value = false;
     }
 };
 
@@ -102,7 +162,8 @@ const loadMembers = async (): Promise<void> => {
 
     try {
         const res = await window.axios.get(`/api/v1/tenants/${tenantId}/users`);
-        members.value = res.data.members as Member[];
+
+        members.value = res.data.members as TenantMember[];
     } catch {
         members.value = [];
     }
@@ -110,7 +171,7 @@ const loadMembers = async (): Promise<void> => {
 
 const applyFilters = (): void => {
     pageNumber.value = 1;
-    load();
+    loadConversations();
 };
 
 const clearFilters = (): void => {
@@ -118,77 +179,144 @@ const clearFilters = (): void => {
     applyFilters();
 };
 
-const goToPage = (target: number): void => {
-    if (target < 1 || target > lastPage.value) {
+const loadMoreList = (): void => {
+    if (!tenantId || listLoadingMore.value || !listHasMore.value) {
         return;
     }
-    pageNumber.value = target;
-    load();
+
+    listLoadingMore.value = true;
+    pageNumber.value += 1;
+    loadConversations(true);
 };
 
-const openDetail = async (conversation: Conversation): Promise<void> => {
-    if (!tenantId) {
+const loadMessages = async (): Promise<void> => {
+    if (!tenantId || openId.value === null) {
         return;
     }
 
+    messagesLoading.value = true;
+    messages.value = [];
+    messagesMeta.value = { current_page: 1, last_page: 1, per_page: 30, total: 0 };
+
     try {
-        const res = await window.axios.get(`/api/v1/tenants/${tenantId}/conversations/${conversation.id}`);
-        detail.value = res.data.conversation as Conversation;
-        showDetailModal.value = true;
+        const res = await window.axios.get(
+            `/api/v1/tenants/${tenantId}/conversations/${openId.value}/messages`,
+            { params: buildMessageQuery(1) },
+        );
+
+        messages.value = (res.data.messages as Message[]).slice().reverse();
+        messagesMeta.value = res.data.meta;
     } catch (err) {
-        error.value = extractErrorMessage(err, 'No se pudo cargar la conversación.');
-    }
-};
-
-const openCreate = async (): Promise<void> => {
-    newContactId.value = '';
-    error.value = null;
-    showCreateModal.value = true;
-
-    if (!tenantId || contacts.value.length > 0) {
-        return;
-    }
-
-    try {
-        const res = await window.axios.get(`/api/v1/tenants/${tenantId}/contacts`, { params: { per_page: 100 } });
-        contacts.value = (res.data.contacts as ContactOption[]);
-    } catch {
-        contacts.value = [];
-    }
-};
-
-const createConversation = async (): Promise<void> => {
-    if (!tenantId || newContactId.value === '') {
-        error.value = 'Debes elegir un contacto.';
-        return;
-    }
-
-    creating.value = true;
-    error.value = null;
-    success.value = null;
-
-    try {
-        await window.axios.post(`/api/v1/tenants/${tenantId}/conversations`, {
-            contact_id: newContactId.value,
-        });
-        success.value = 'Conversación creada.';
-        showCreateModal.value = false;
-        await load();
-    } catch (err) {
-        error.value = extractErrorMessage(err, 'No se pudo crear la conversación.');
+        error.value = extractErrorMessage(err, 'No se pudieron cargar los mensajes.');
     } finally {
-        creating.value = false;
+        messagesLoading.value = false;
     }
 };
 
-const onAssign = async (conversation: Conversation, target: string): Promise<void> => {
-    if (!tenantId || target === '') {
+const openConversation = async (conversation: Conversation): Promise<void> => {
+    openId.value = conversation.id;
+    detail.value = conversation;
+    view.value = 'chat';
+    nearBottom.value = true;
+    hasNewMessages.value = false;
+    await loadMessages();
+};
+
+const closeChat = (): void => {
+    view.value = 'list';
+};
+
+const loadOlder = async (): Promise<void> => {
+    if (!tenantId || openId.value === null || loadingOlder.value || !hasOlderMessages.value) {
         return;
     }
 
-    const agentId = Number(target);
+    loadingOlder.value = true;
+    const nextPage = messagesMeta.value.current_page + 1;
 
-    if (conversation.agent?.id === agentId) {
+    try {
+        const res = await window.axios.get(
+            `/api/v1/tenants/${tenantId}/conversations/${openId.value}/messages`,
+            { params: buildMessageQuery(nextPage) },
+        );
+
+        messages.value = [...(res.data.messages as Message[]).slice().reverse(), ...messages.value];
+        messagesMeta.value = res.data.meta;
+    } catch (err) {
+        error.value = extractErrorMessage(err, 'No se pudieron cargar los mensajes anteriores.');
+    } finally {
+        loadingOlder.value = false;
+    }
+};
+
+const handleIncomingMessage = (message: Message): void => {
+    const alreadyPresent = messages.value.some((m) => m.id === message.id);
+
+    if (!alreadyPresent) {
+        messagesMeta.value.total += 1;
+    }
+
+    messages.value = mergeIncomingMessage(messages.value, message);
+
+    const conversationId = message.conversation_id;
+
+    if (detail.value?.id === conversationId) {
+        detail.value = {
+            ...detail.value,
+            last_message: message,
+            last_message_at: message.created_at,
+            last_interaction_at: message.created_at,
+        };
+    }
+
+    const index = conversations.value.findIndex((c) => c.id === conversationId);
+
+    if (index !== -1) {
+        conversations.value[index] = {
+            ...conversations.value[index],
+            last_message: message,
+            last_message_at: message.created_at,
+            last_interaction_at: message.created_at,
+        };
+    }
+
+    sortConversations();
+
+    if (!nearBottom.value) {
+        hasNewMessages.value = true;
+    }
+};
+
+const sendMessage = async (body: string): Promise<void> => {
+    if (!tenantId || openId.value === null || sending.value || !canWrite.value) {
+        return;
+    }
+
+    sending.value = true;
+    error.value = null;
+    nearBottom.value = true;
+    hasNewMessages.value = false;
+
+    try {
+        const res = await window.axios.post(
+            `/api/v1/tenants/${tenantId}/conversations/${openId.value}/messages`,
+            { body },
+        );
+
+        handleIncomingMessage(res.data.created_message as Message);
+        await nextTick();
+        messageListRef.value?.scrollToBottom(true);
+    } catch (err) {
+        error.value = extractErrorMessage(err, 'No se pudo enviar el mensaje.');
+    } finally {
+        sending.value = false;
+    }
+};
+
+const onAssign = async (agentId: number): Promise<void> => {
+    const conversation = detail.value;
+
+    if (!tenantId || conversation === null || acting.value) {
         return;
     }
 
@@ -203,8 +331,9 @@ const onAssign = async (conversation: Conversation, target: string): Promise<voi
             `/api/v1/tenants/${tenantId}/conversations/${conversation.id}/${endpoint}`,
             { agent_id: agentId },
         );
+
         success.value = conversation.agent === null ? 'Conversación asignada.' : 'Conversación transferida.';
-        await refreshRow(conversation, res.data.conversation as Conversation);
+        updateConversationRow(res.data.conversation as Conversation);
     } catch (err) {
         error.value = extractErrorMessage(err, 'No se pudo asignar la conversación.');
     } finally {
@@ -212,8 +341,10 @@ const onAssign = async (conversation: Conversation, target: string): Promise<voi
     }
 };
 
-const runAction = async (conversation: Conversation, action: 'close' | 'reopen' | 'pause-bot' | 'resume-bot'): Promise<void> => {
-    if (!tenantId) {
+const onAction = async (action: 'close' | 'reopen' | 'pause_bot' | 'resume_bot'): Promise<void> => {
+    const conversation = detail.value;
+
+    if (!tenantId || conversation === null || acting.value) {
         return;
     }
 
@@ -225,14 +356,16 @@ const runAction = async (conversation: Conversation, action: 'close' | 'reopen' 
         const res = await window.axios.post(
             `/api/v1/tenants/${tenantId}/conversations/${conversation.id}/${action}`,
         );
-        const messages: Record<string, string> = {
+
+        const messagesMap: Record<string, string> = {
             close: 'Conversación cerrada.',
             reopen: 'Conversación reabierta.',
-            'pause-bot': 'Bot pausado.',
-            'resume-bot': 'Bot reanudado.',
+            pause_bot: 'Bot pausado.',
+            resume_bot: 'Bot reanudado.',
         };
-        success.value = messages[action];
-        await refreshRow(conversation, res.data.conversation as Conversation);
+
+        success.value = messagesMap[action] ?? 'Acción ejecutada.';
+        updateConversationRow(res.data.conversation as Conversation);
     } catch (err) {
         error.value = extractErrorMessage(err, 'No se pudo ejecutar la acción.');
     } finally {
@@ -240,42 +373,86 @@ const runAction = async (conversation: Conversation, action: 'close' | 'reopen' 
     }
 };
 
-const refreshRow = (oldRow: Conversation, fresh: Conversation): void => {
-    const index = conversations.value.findIndex((c) => c.id === oldRow.id);
+const openCreate = async (): Promise<void> => {
+    newContactId.value = '';
+    error.value = null;
+    showCreateModal.value = true;
 
-    if (index !== -1) {
-        conversations.value[index] = fresh;
+    if (!tenantId || contacts.value.length > 0) {
+        return;
     }
 
-    if (showDetailModal.value && detail.value?.id === oldRow.id) {
-        detail.value = fresh;
+    try {
+        const res = await window.axios.get(`/api/v1/tenants/${tenantId}/contacts`, { params: { per_page: 100 } });
+
+        contacts.value = res.data.contacts as ContactOption[];
+    } catch {
+        contacts.value = [];
     }
 };
 
-const assignableAgents = (conversation: Conversation): Member[] => {
-    return members.value.filter((m) => m.user.id !== conversation.agent?.id);
+const createConversation = async (): Promise<void> => {
+    if (!tenantId || newContactId.value === '') {
+        error.value = 'Debes elegir un contacto.';
+
+        return;
+    }
+
+    creating.value = true;
+    error.value = null;
+    success.value = null;
+
+    try {
+        await window.axios.post(`/api/v1/tenants/${tenantId}/conversations`, {
+            contact_id: newContactId.value,
+        });
+
+        success.value = 'Conversación creada.';
+        showCreateModal.value = false;
+        await loadConversations();
+    } catch (err) {
+        error.value = extractErrorMessage(err, 'No se pudo crear la conversación.');
+    } finally {
+        creating.value = false;
+    }
 };
+
+useConversationChannel(
+    () => tenantId,
+    () => openId.value,
+    {
+        onMessageCreated: (message) => handleIncomingMessage(message),
+        onMessageStatusUpdated: (message) => {
+            messages.value = applyMessageUpdate(messages.value, message);
+        },
+        onConversationUpdated: (conversation) => updateConversationRow(conversation),
+    },
+);
 
 onMounted(() => {
-    load();
-    if (canSeeUsers.value && canAssign.value) {
+    loadConversations();
+
+    if (canSeeUsers.value) {
         loadMembers();
+    }
+
+    pollTimer = window.setInterval(() => {
+        if (pageNumber.value === 1) {
+            loadConversations(true);
+        }
+    }, 30000);
+});
+
+onBeforeUnmount(() => {
+    if (pollTimer !== null) {
+        window.clearInterval(pollTimer);
     }
 });
 </script>
 
 <template>
-    <AppLayout :user="user">
-        <div class="space-y-6">
-            <div class="rounded-xl border border-zinc-200 bg-white p-8 shadow-sm">
-                <h2 class="text-xl font-semibold text-zinc-900">Conversaciones</h2>
-                <p class="mt-2 text-sm text-zinc-600">
-                    Inbox de conversaciones por contacto. Los agentes pueden consultarlas; solo
-                    owner/admin pueden crear, cambiar estados, pausar el bot y asignar/transferir a
-                    otros agentes. La conversación se asocia al contacto desde el primer mensaje.
-                </p>
-            </div>
-
+    <AppLayout :user="user" full-width>
+        <div class="space-y-4">
             <div v-if="success" class="rounded-md bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
                 {{ success }}
             </div>
@@ -283,191 +460,127 @@ onMounted(() => {
                 {{ error }}
             </div>
 
-            <div v-if="canManage" class="flex justify-end">
-                <button
-                    type="button"
-                    class="rounded-md bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-                    @click="openCreate"
-                >
-                    Nueva conversación
-                </button>
-            </div>
-
-            <div v-if="!canView" class="rounded-xl border border-zinc-200 bg-white p-8 text-sm text-zinc-500 shadow-sm">
+            <div
+                v-if="!canView"
+                class="rounded-xl border border-zinc-200 bg-white p-8 text-sm text-zinc-500 shadow-sm"
+            >
                 No tienes permiso para ver conversaciones.
             </div>
 
-            <div v-else class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-                <form class="grid grid-cols-1 gap-4 sm:grid-cols-4" @submit.prevent="applyFilters">
-                    <div>
-                        <label for="cv-search" class="mb-1 block text-sm font-medium text-zinc-700">Buscar</label>
-                        <input
-                            id="cv-search"
-                            v-model="filters.search"
-                            type="text"
-                            placeholder="Contacto, teléfono o email"
-                            class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            <div
+                v-else
+                class="flex h-[calc(100vh-12rem)] min-h-[480px] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+            >
+                <section
+                    class="w-full flex-col border-r border-zinc-200 lg:flex lg:w-72 lg:shrink-0"
+                    :class="view === 'list' ? 'flex' : 'hidden'"
+                >
+                    <div class="flex items-center justify-between gap-2 border-b border-zinc-200 bg-white px-4 py-3">
+                        <h2 class="text-sm font-semibold text-zinc-900">Conversaciones</h2>
+                        <button
+                            v-if="canManage"
+                            type="button"
+                            class="rounded-md bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+                            @click="openCreate"
+                        >
+                            Nueva
+                        </button>
+                    </div>
+
+                    <ConversationFilters
+                        v-model="filters"
+                        :members="members"
+                        @apply="applyFilters"
+                        @clear="clearFilters"
+                    />
+
+                    <div class="min-h-0 flex-1 overflow-y-auto bg-white">
+                        <p v-if="loading" class="px-4 py-6 text-center text-sm text-zinc-500">Cargando...</p>
+
+                        <div
+                            v-else-if="conversations.length === 0"
+                            class="px-4 py-6 text-center text-sm text-zinc-500"
+                        >
+                            No hay conversaciones que coincidan con la búsqueda.
+                        </div>
+
+                        <ConversationListItem
+                            v-for="conversation in conversations"
+                            :key="conversation.id"
+                            :conversation="conversation"
+                            :active="conversation.id === openId"
+                            @select="openConversation(conversation)"
                         />
                     </div>
-                    <div>
-                        <label for="cv-status" class="mb-1 block text-sm font-medium text-zinc-700">Estado</label>
-                        <select
-                            id="cv-status"
-                            v-model="filters.status"
-                            class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        >
-                            <option value="">Todos</option>
-                            <option v-for="status in statusOptions" :key="status" :value="status">
-                                {{ statusMeta[status].label }}
-                            </option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="cv-agent" class="mb-1 block text-sm font-medium text-zinc-700">Agente</label>
-                        <select
-                            id="cv-agent"
-                            v-model="filters.agent_id"
-                            class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        >
-                            <option value="">Todos</option>
-                            <option v-for="m in members" :key="m.user.id" :value="m.user.id">
-                                {{ m.user.name }}
-                            </option>
-                        </select>
-                    </div>
-                    <div class="flex items-end gap-2">
-                        <button
-                            type="submit"
-                            class="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
-                        >
-                            Filtrar
-                        </button>
+
+                    <div v-if="listHasMore" class="border-t border-zinc-200 p-2">
                         <button
                             type="button"
-                            class="rounded-md border border-zinc-300 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
-                            @click="clearFilters"
+                            class="w-full rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 disabled:opacity-60"
+                            :disabled="listLoadingMore"
+                            @click="loadMoreList"
                         >
-                            Limpiar
+                            {{ listLoadingMore ? 'Cargando...' : 'Cargar más' }}
                         </button>
                     </div>
-                </form>
+                </section>
 
-                <p v-if="loading" class="mt-6 text-sm text-zinc-500">Cargando...</p>
+                <section
+                    class="min-w-0 flex-1 flex-col bg-zinc-50 lg:flex"
+                    :class="view === 'chat' ? 'flex' : 'hidden'"
+                >
+                    <template v-if="detail !== null">
+                        <ChatHeader
+                            :conversation="detail"
+                            :members="members"
+                            :can-manage="canManage"
+                            :can-assign="canAssign"
+                            :acting="acting"
+                            @assign="onAssign"
+                            @action="onAction"
+                            @back="closeChat"
+                        />
 
-                <div v-else-if="conversations.length === 0" class="mt-6 rounded-md bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-500">
-                    No hay conversaciones que coincidan con la búsqueda.
-                </div>
+                        <div v-if="messagesLoading" class="flex flex-1 items-center justify-center text-sm text-zinc-500">
+                            Cargando mensajes...
+                        </div>
 
-                <div v-else class="mt-6 overflow-x-auto">
-                    <table class="w-full text-left text-sm">
-                        <thead>
-                            <tr class="border-b border-zinc-200 text-xs uppercase text-zinc-500">
-                                <th class="py-2 pr-4">Contacto</th>
-                                <th class="py-2 pr-4">Estado</th>
-                                <th class="py-2 pr-4">Última interacción</th>
-                                <th class="py-2 pr-4">Agente</th>
-                                <th class="py-2 text-right">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="conversation in conversations" :key="conversation.id" class="border-b border-zinc-100">
-                                <td class="py-3 pr-4">
-                                    <button type="button" class="text-left font-medium text-zinc-900 hover:underline" @click="openDetail(conversation)">
-                                        {{ conversation.contact?.name ?? 'Contacto' }}
-                                    </button>
-                                    <p class="text-xs text-zinc-500">{{ conversation.contact?.phone ?? '—' }}</p>
-                                </td>
-                                <td class="py-3 pr-4">
-                                    <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium" :class="statusMeta[conversation.status].badge">
-                                        <span class="h-1.5 w-1.5 rounded-full" :class="statusMeta[conversation.status].dot"></span>
-                                        {{ conversation.status_label }}
-                                    </span>
-                                    <span v-if="conversation.bot_paused" class="ml-2 text-xs font-medium text-red-600" title="Bot pausado">
-                                        Bot pausado
-                                    </span>
-                                </td>
-                                <td class="py-3 pr-4 text-zinc-700">{{ formatLastInteraction(conversation) }}</td>
-                                <td class="py-3 pr-4 text-zinc-700">{{ conversation.agent?.name ?? 'Sin asignar' }}</td>
-                                <td class="py-3 text-right">
-                                    <div class="flex items-center justify-end gap-2">
-                                        <select
-                                            v-if="canAssign && members.length > 0"
-                                            class="rounded-md border border-zinc-300 px-2 py-1 text-xs text-zinc-700"
-                                            :value="conversation.agent?.id ?? ''"
-                                            :disabled="acting"
-                                            @change="onAssign(conversation, ($event.target as HTMLSelectElement).value)"
-                                        >
-                                            <option value="">Asignar...</option>
-                                            <option v-for="m in assignableAgents(conversation)" :key="m.user.id" :value="m.user.id">
-                                                {{ m.user.name }}
-                                            </option>
-                                        </select>
-                                        <button
-                                            v-if="canManage && canClose(conversation.status)"
-                                            type="button"
-                                            :disabled="acting"
-                                            class="text-emerald-700 hover:underline disabled:opacity-50"
-                                            @click="runAction(conversation, 'close')"
-                                        >
-                                            Cerrar
-                                        </button>
-                                        <button
-                                            v-if="canManage && canReopen(conversation.status)"
-                                            type="button"
-                                            :disabled="acting"
-                                            class="text-sky-700 hover:underline disabled:opacity-50"
-                                            @click="runAction(conversation, 'reopen')"
-                                        >
-                                            Reabrir
-                                        </button>
-                                        <button
-                                            v-if="canManage && !conversation.bot_paused && conversation.status !== 'archived'"
-                                            type="button"
-                                            :disabled="acting"
-                                            class="text-amber-700 hover:underline disabled:opacity-50"
-                                            @click="runAction(conversation, 'pause-bot')"
-                                        >
-                                            Pausar bot
-                                        </button>
-                                        <button
-                                            v-if="canManage && conversation.bot_paused"
-                                            type="button"
-                                            :disabled="acting"
-                                            class="text-amber-700 hover:underline disabled:opacity-50"
-                                            @click="runAction(conversation, 'resume-bot')"
-                                        >
-                                            Reanudar bot
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                        <MessageList
+                            v-else
+                            ref="messageListRef"
+                            :messages="messages"
+                            :loading-older="loadingOlder"
+                            :has-older="hasOlderMessages"
+                            :has-new-messages="hasNewMessages"
+                            @load-older="loadOlder"
+                            @reach-top="loadOlder"
+                            @near-bottom-change="(near: boolean) => { nearBottom = near; if (near) hasNewMessages = false; }"
+                        />
 
-                <div v-if="!loading && meta.total > 0" class="mt-4 flex items-center justify-between text-sm">
-                    <p class="text-zinc-500">
-                        Página {{ meta.current_page }} de {{ lastPage }} · {{ meta.total }} conversaciones
-                    </p>
-                    <div class="flex gap-2">
-                        <button
-                            type="button"
-                            :disabled="meta.current_page <= 1"
-                            class="rounded-md border border-zinc-300 px-3 py-1.5 text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
-                            @click="goToPage(meta.current_page - 1)"
+                        <MessageComposer
+                            v-if="canWrite"
+                            :sending="sending"
+                            :disabled="acting"
+                            @send="sendMessage"
+                        />
+                        <div
+                            v-else
+                            class="border-t border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-400"
                         >
-                            Anterior
-                        </button>
-                        <button
-                            type="button"
-                            :disabled="meta.current_page >= lastPage"
-                            class="rounded-md border border-zinc-300 px-3 py-1.5 text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
-                            @click="goToPage(meta.current_page + 1)"
-                        >
-                            Siguiente
-                        </button>
+                            {{ canSend ? 'La conversación está archivada.' : 'No tienes permiso para enviar mensajes.' }}
+                        </div>
+                    </template>
+
+                    <div v-else class="flex flex-1 flex-col items-center justify-center gap-2 text-center text-zinc-400">
+                        <p class="text-sm font-medium">Inbox de conversaciones</p>
+                        <p class="text-xs">Elegí una conversación para ver el historial de mensajes.</p>
                     </div>
-                </div>
+                </section>
+
+                <aside class="hidden w-64 shrink-0 xl:block">
+                    <ContactPanel v-if="detail !== null" :conversation="detail" />
+                    <div v-else class="h-full bg-white" />
+                </aside>
             </div>
         </div>
 
@@ -512,66 +625,6 @@ onMounted(() => {
                         </button>
                     </div>
                 </form>
-            </div>
-        </div>
-
-        <div
-            v-if="showDetailModal && detail !== null"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 p-4"
-            @click.self="showDetailModal = false"
-        >
-            <div class="w-full max-w-lg rounded-xl bg-white p-6 shadow-lg">
-                <div class="flex items-start justify-between gap-4">
-                    <h3 class="text-lg font-semibold text-zinc-900">
-                        {{ detail.contact?.name ?? 'Conversación' }}
-                    </h3>
-                    <button type="button" class="text-zinc-400 hover:text-zinc-600" @click="showDetailModal = false">✕</button>
-                </div>
-                <dl class="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-                    <div>
-                        <dt class="text-xs uppercase text-zinc-500">Teléfono</dt>
-                        <dd class="mt-0.5 text-zinc-800">{{ detail.contact?.phone ?? '—' }}</dd>
-                    </div>
-                    <div>
-                        <dt class="text-xs uppercase text-zinc-500">Email</dt>
-                        <dd class="mt-0.5 text-zinc-800">{{ detail.contact?.email ?? '—' }}</dd>
-                    </div>
-                    <div>
-                        <dt class="text-xs uppercase text-zinc-500">Estado</dt>
-                        <dd class="mt-0.5">
-                            <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium" :class="statusMeta[detail.status].badge">
-                                {{ detail.status_label }}
-                            </span>
-                        </dd>
-                    </div>
-                    <div>
-                        <dt class="text-xs uppercase text-zinc-500">Agente asignado</dt>
-                        <dd class="mt-0.5 text-zinc-800">{{ detail.agent?.name ?? 'Sin asignar' }}</dd>
-                    </div>
-                    <div>
-                        <dt class="text-xs uppercase text-zinc-500">Último mensaje</dt>
-                        <dd class="mt-0.5 text-zinc-800">{{ formatLastInteraction({ ...detail, last_interaction_at: detail.last_message_at }) }}</dd>
-                    </div>
-                    <div>
-                        <dt class="text-xs uppercase text-zinc-500">Última interacción</dt>
-                        <dd class="mt-0.5 text-zinc-800">{{ formatLastInteraction(detail) }}</dd>
-                    </div>
-                    <div class="sm:col-span-2">
-                        <dt class="text-xs uppercase text-zinc-500">Contexto (motor de flujos)</dt>
-                        <dd class="mt-0.5 font-mono text-xs text-zinc-700">
-                            {{ detail.context === null ? '—' : JSON.stringify(detail.context) }}
-                        </dd>
-                    </div>
-                </dl>
-                <div class="mt-6 flex justify-end gap-2">
-                    <button
-                        type="button"
-                        class="rounded-md border border-zinc-300 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
-                        @click="showDetailModal = false"
-                    >
-                        Cerrar
-                    </button>
-                </div>
             </div>
         </div>
     </AppLayout>

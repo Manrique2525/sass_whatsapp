@@ -143,7 +143,7 @@ pendiente de la fase de storage).
 | Contacts | Ver §3.5: `GET/POST /api/v1/tenants/{tenant}/contacts`, `GET/PATCH/DELETE /api/v1/tenants/{tenant}/contacts/{id}` (import pendiente) |
 | Tags | `GET/POST /api/v1/tags`, `PATCH/DELETE /api/v1/tags/{id}` (pendiente, FASE 20) |
 | Conversations | `GET /api/v1/conversations`, `GET/PATCH /api/v1/conversations/{id}`, `POST /api/v1/conversations/{id}/assign`, `POST .../transfer`, `POST .../close`, `POST .../reopen`, `POST .../resume-bot` |
-| Messages | `GET /api/v1/conversations/{id}/messages`, `POST /api/v1/conversations/{id}/messages` (enviar, con `Idempotency-Key`) |
+| Messages | Ver §3.7: `GET/POST /api/v1/tenants/{tenant}/conversations/{conversation}/messages` (`conversations.view` / `messages.send`) |
 | Chatbots | `GET/POST /api/v1/chatbots`, `PATCH/DELETE /api/v1/chatbots/{id}` |
 | Flows | `GET/POST /api/v1/chatbots/{id}/flows`, `PATCH /api/v1/flows/{id}`, `POST /api/v1/flows/{id}/validate`, `POST /api/v1/flows/{id}/publish`, `POST /api/v1/flows/{id}/deactivate` |
 | Triggers | `GET/POST /api/v1/flows/{id}/triggers` |
@@ -228,7 +228,7 @@ email} | null, last_message_at, last_interaction_at, auto_assigned, bot_paused, 
 flow_execution_id, participants[], assignments[], created_at, updated_at}` (jamás incluye
 `tenant_id`). `context`/`flow_execution_id` los gestionará el motor de flujos (FASE 10+).
 
-### 3.7 Mensajes (persistencia en FASE 9; REST en FASE 10)
+### 3.7 Mensajes (persistencia en FASE 9; REST + Realtime en FASE 10)
 
 En FASE 9 los mensajes se **persisten y procesan por backend** (sin endpoints REST todavía):
 
@@ -237,16 +237,38 @@ En FASE 9 los mensajes se **persisten y procesan por backend** (sin endpoints RE
   find-or-create conversación (FASE 8) → crea el mensaje con idempotencia por
   `provider_message_id` (UNIQUE `(tenant_id, provider_message_id)` + backstop `QueryException`).
   Tipo no soportado → `UnsupportedMessageTypeException` → el evento se marca `failed` y el webhook
-  responde 200. Reabre conversaciones `resolved`/`archived`. Audita `message.received`.
+  responde 200. Reabre conversaciones `resolved`/`archived`. Audita `message.received`. Emite
+  `MessageCreated` y (si reabre) `ConversationUpdated`.
 - **Status** (mismo webhook): `MessageService::handleStatusUpdate()` actualiza el mensaje por
   `provider_message_id` (nunca crea): `sent`/`delivered`/`read` rellenan su columna temporal y
-  `failed` pasa la conversación a `pending`. Audita `message.status_updated`.
+  `failed` pasa la conversación a `pending`. Audita `message.status_updated`. Emite
+  `MessageStatusUpdated` (con `previous_status`).
 - **Outbound**: `MessageService::createOutbound()` crea el mensaje `pending` y encola
   `SendWhatsAppMessage` (CAS `pending → sending`, `message_send_attempts`, reintento retryable con
-  backoff; éxito → `sent` + `provider_message_id`, fallo permanente → `failed`).
+  backoff; éxito → `sent` + `provider_message_id`, fallo permanente → `failed`). Emite
+  `MessageCreated` y toca timestamps de la conversación (`last_message_at`/`last_interaction_at`
+  sin reabrir) con `ConversationUpdated`.
 
-Los endpoints REST `GET/POST /api/v1/conversations/{id}/messages` (con `Idempotency-Key` en el
-POST, tabla resumen de arriba) se implementan en **FASE 10** (bandeja de entrada).
+**REST (FASE 10)** — ambos bajo `middleware('tenant')` (aislamiento A/B: tenant ajeno/no-miembro →
+404; sin permiso → 403 `PERMISSION_DENIED`; tenant suspendido → 409):
+
+| Método | Ruta | Permiso | Descripción |
+|---|---|---|---|
+| GET | `/api/v1/tenants/{tenant}/conversations/{conversation}/messages` | `conversations.view` | Historial **DESC** paginado (`per_page` 1..100, default 30) → `{messages: MessageResource[], meta}` |
+| POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/messages` | `messages.send` (owner/admin/agent) | Envía `{body*}` (required, string, max 4096) → **201** `{message, created_message}` (pending; el envío es async por job) |
+
+**MessageResource**: `id`, `conversation_id`, `provider_message_id`, `direction`, `type`, `status`,
+`body`, `media_url`, `media_mime`, `media_size`, `metadata`, `sent_at`, `delivered_at`, `read_at`,
+`failed_at`, `created_at`, `updated_at`.
+
+**Realtime (FASE 10)** — eventos broadcast (`ShouldBroadcast`) en el canal privado
+`tenant.{tenantId}.conversations.{conversationId}` (sin canales globales; ADR-033):
+
+| Evento | Payload | Cuándo |
+|---|---|---|
+| `MessageCreated` | `{message}` | inbound (webhook) y outbound (envío del agente) |
+| `MessageStatusUpdated` | `{message, previous_status}` | status de Meta y `sent`/`failed` del job |
+| `ConversationUpdated` | `{conversation}` | touch timestamps, reabrir por inbound, update/close/reopen/pause-bot/resume-bot/assign/transfer |
 
 ## 4. Webhooks (sin auth Bearer; autenticados por firma y dedupe)
 

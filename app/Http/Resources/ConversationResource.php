@@ -32,6 +32,9 @@ final class ConversationResource extends JsonResource
                 : null,
             'last_message_at' => $this->last_message_at,
             'last_interaction_at' => $this->last_interaction_at,
+            'last_message' => $this->whenLoaded('lastMessage', fn () => $this->lastMessage !== null
+                ? new MessageResource($this->lastMessage)
+                : null),
             'auto_assigned' => $this->auto_assigned,
             'bot_paused' => $this->bot_paused,
             'context' => $this->context,

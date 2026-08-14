@@ -19,6 +19,7 @@ const conversation = (overrides: Partial<Conversation> = {}): Conversation => ({
     bot_paused: false,
     context: null,
     flow_execution_id: null,
+    last_message: null,
     created_at: '2026-08-15T10:00:00.000000Z',
     updated_at: '2026-08-15T10:00:00.000000Z',
     ...overrides,

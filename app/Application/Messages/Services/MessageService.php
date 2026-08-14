@@ -7,7 +7,9 @@ namespace App\Application\Messages\Services;
 use App\Application\Audit\Services\AuditLogger;
 use App\Application\Contacts\Services\ContactService;
 use App\Application\Conversations\Services\ConversationService;
+use App\Application\Users\Services\AuthorizationService;
 use App\Domain\Conversations\Enums\ConversationStatus;
+use App\Domain\Conversations\Exceptions\ConversationNotFoundException;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Messages\Enums\MessageDirection;
 use App\Domain\Messages\Enums\MessageStatus;
@@ -15,9 +17,16 @@ use App\Domain\Messages\Enums\MessageType;
 use App\Domain\Messages\Exceptions\UnsupportedMessageTypeException;
 use App\Domain\Messages\Models\Message;
 use App\Domain\Tenants\Models\Tenant;
+use App\Domain\Users\Enums\TenantPermission;
+use App\Domain\Users\Models\User;
+use App\Events\ConversationUpdated;
+use App\Events\MessageCreated;
+use App\Events\MessageStatusUpdated;
 use App\Infrastructure\Tenancy\TenantContext;
 use App\Jobs\SendWhatsAppMessage;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\QueryException;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -42,6 +51,8 @@ final class MessageService
         private readonly AuditLogger $auditLogger,
         private readonly ContactService $contacts,
         private readonly ConversationService $conversations,
+        private readonly AuthorizationService $authorization,
+        private readonly Dispatcher $events,
     ) {}
 
     /**
@@ -124,6 +135,8 @@ final class MessageService
             tenantId: $tenant->id,
         );
 
+        $this->events->dispatch(new MessageCreated($message));
+
         return $message;
     }
 
@@ -171,6 +184,8 @@ final class MessageService
             $this->markConversationPending($tenant, $message->conversation_id);
         }
 
+        $previous = $message->status->value;
+
         $message->forceFill($fill)->save();
 
         $this->auditLogger->record(
@@ -184,10 +199,16 @@ final class MessageService
             subjectId: $message->id,
             tenantId: $tenant->id,
         );
+
+        $this->events->dispatch(new MessageStatusUpdated($message, $previous));
     }
 
     /**
      * Crea un mensaje saliente (texto) en `pending` y encola su envío.
+     *
+     * Refresca los timestamps de la conversación (`last_message_at` /
+     * `last_interaction_at`) para mantener el orden de la lista del inbox y
+     * emite `MessageCreated` + `ConversationUpdated` (FASE 10, ADR-033).
      */
     public function createOutbound(Tenant $tenant, Conversation $conversation, string $body): Message
     {
@@ -206,9 +227,92 @@ final class MessageService
             TenantContext::clear();
         }
 
+        $this->bumpConversationTimestamps($tenant, $conversation->id);
+
         dispatch((new SendWhatsAppMessage($tenant->id, $conversation->id, $message->id))->forTenant($tenant->id));
 
+        $this->events->dispatch(new MessageCreated($message));
+
         return $message;
+    }
+
+    /**
+     * Historial de mensajes de una conversación (paginado DESC) para el inbox.
+     *
+     * Autoriza `conversations.view`; la conversación se resuelve filtrando por
+     * `tenant_id` autorizado (404 oculta la existencia cross-tenant).
+     *
+     * @param  array{per_page?: int}  $filters
+     * @return LengthAwarePaginator<int, Message>
+     */
+    public function indexForUser(User $user, Tenant $tenant, string $conversationId, array $filters): LengthAwarePaginator
+    {
+        $this->authorization->authorize($user, TenantPermission::ViewConversations, $tenant);
+
+        $conversation = $this->findConversationForTenant($tenant, $conversationId);
+
+        return Message::query()
+            ->withoutTenantScope()
+            ->where('tenant_id', $tenant->id)
+            ->where('conversation_id', $conversation->id)
+            ->orderByDesc('created_at')
+            ->paginate($filters['per_page'] ?? 30);
+    }
+
+    /**
+     * Envía un mensaje de texto desde el inbox (FASE 10, ADR-033).
+     *
+     * Autoriza `messages.send` (owner/admin/agent). La conversación se resuelve
+     * filtrando por `tenant_id` autorizado; `tenant_id` nunca viene del frontend.
+     */
+    public function send(User $user, Tenant $tenant, string $conversationId, string $body): Message
+    {
+        $this->authorization->authorize($user, TenantPermission::SendMessages, $tenant);
+
+        $conversation = $this->findConversationForTenant($tenant, $conversationId);
+
+        return $this->createOutbound($tenant, $conversation, $body);
+    }
+
+    private function findConversationForTenant(Tenant $tenant, string $conversationId): Conversation
+    {
+        $conversation = Conversation::query()
+            ->withoutTenantScope()
+            ->where('tenant_id', $tenant->id)
+            ->whereKey($conversationId)
+            ->first();
+
+        if ($conversation === null) {
+            throw new ConversationNotFoundException;
+        }
+
+        return $conversation;
+    }
+
+    /**
+     * Actualiza `last_message_at`/`last_interaction_at` al enviar un mensaje
+     * saliente (no reabre estados resueltos/archivados).
+     */
+    private function bumpConversationTimestamps(Tenant $tenant, string $conversationId): void
+    {
+        $conversation = Conversation::query()
+            ->withoutTenantScope()
+            ->where('tenant_id', $tenant->id)
+            ->whereKey($conversationId)
+            ->first();
+
+        if ($conversation === null) {
+            return;
+        }
+
+        $conversation->forceFill([
+            'last_message_at' => now(),
+            'last_interaction_at' => now(),
+        ])->save();
+
+        $conversation->loadMissing(['contact', 'agent']);
+
+        $this->events->dispatch(new ConversationUpdated($conversation));
     }
 
     private function findByProviderMessageId(Tenant $tenant, string $providerMessageId): ?Message
@@ -222,7 +326,8 @@ final class MessageService
 
     /**
      * Actualiza `last_message_at`/`last_interaction_at` de la conversación y la
-     * reabre si estaba resuelta/archivada. Devuelve si se reabrió.
+     * reabre si estaba resuelta/archivada. Devuelve si se reabrió. Emite
+     * `ConversationUpdated` (FASE 10) para refrescar el inbox en tiempo real.
      */
     private function touchConversation(Tenant $tenant, string $conversationId, ?string $providerTimestamp): bool
     {
@@ -244,6 +349,10 @@ final class MessageService
             ...($reopened ? ['status' => ConversationStatus::Open] : []),
         ])->save();
 
+        $conversation->loadMissing(['contact', 'agent']);
+
+        $this->events->dispatch(new ConversationUpdated($conversation));
+
         return $reopened;
     }
 
@@ -260,6 +369,10 @@ final class MessageService
         }
 
         $conversation->forceFill(['status' => ConversationStatus::Pending])->save();
+
+        $conversation->loadMissing(['contact', 'agent']);
+
+        $this->events->dispatch(new ConversationUpdated($conversation));
     }
 
     private function providerTimestamp(?string $providerTimestamp): Carbon

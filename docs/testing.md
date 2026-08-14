@@ -120,6 +120,25 @@ Pirámide de tests con prioridad en lo crítico:
   `make_conversation`, webhook (firma/secreto/payload); `created_at`/`updated_at` de
   `webhook_events` no son `$fillable` → los tests de outbox insertan con `DB::table(...)->insert()`.
 
+### Inbox API + Realtime (FASE 10, 16 tests MSG-API-1..16 en `MessageApiTest`)
+- Index (`MSG-API-1/2/3`): historial DESC, recurso completo, un agente lista con `conversations.view`,
+  `per_page` acotado a 100 y paginación.
+- Aislamiento (`MSG-API-4/5/8/11`): un usuario de A jamás lista/envía a conversaciones de B (404,
+  incluido IDOR sobre id inexistente = 404 sin oráculo).
+- Store (`MSG-API-6/7/9/10`): POST de texto → mensaje `pending` + job encolado + timestamps
+  bumped; valida body (required/string/no vacío); un agente responde desde el inbox (201);
+  matriz `messages.send` para owner/admin/agent.
+- Realtime (`MSG-API-12..15`): POST emite `MessageCreated`; webhook inbound emite
+  `MessageCreated` + `ConversationUpdated` (reabre); status update emite `MessageStatusUpdated`;
+  cerrar emite `ConversationUpdated`. Se verifican con `Event::fake([...])` + `assertDispatched`
+  (Laravel 12.66 no expone `Broadcast::fake()`); el nombre del canal privado incluye el prefijo
+  `private-`.
+- Listado (`MSG-API-16`): `ConversationResource` incluye `last_message` (preview del inbox).
+- Frontend (Vitest, entorno `jsdom` + `@vitejs/plugin-vue`): `messageUtils.test.ts` (22 tests:
+  query, `isNearBottom`, timestamps/días/agrupación, merge con dedupe, update por id, preview,
+  labels) y `MessageComposer.test.ts` (6 tests: submit, Enter, Shift+Enter, vacío, disabled,
+  botón deshabilitado al enviar).
+
 ### Chatbot engine (crítico)
 - Secuencia lineal, ramas condition, question→variable, delay, human, end.
 - Loop detection / límite de pasos.

@@ -20,7 +20,9 @@ use App\Domain\Users\Enums\TenantMembershipStatus;
 use App\Domain\Users\Enums\TenantPermission;
 use App\Domain\Users\Models\TenantUser;
 use App\Domain\Users\Models\User;
+use App\Events\ConversationUpdated;
 use App\Infrastructure\Tenancy\TenantContext;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 /**
@@ -44,6 +46,7 @@ final class ConversationService
     public function __construct(
         private readonly AuthorizationService $authorization,
         private readonly AuditLogger $auditLogger,
+        private readonly Dispatcher $events,
     ) {}
 
     /**
@@ -54,7 +57,7 @@ final class ConversationService
     {
         $this->authorization->authorize($user, TenantPermission::ViewConversations, $tenant);
 
-        $query = Conversation::query()->with(['contact', 'agent']);
+        $query = Conversation::query()->with(['contact', 'agent', 'lastMessage']);
 
         if (isset($filters['status']) && $filters['status'] !== '') {
             $query->where('status', $filters['status']);
@@ -178,7 +181,11 @@ final class ConversationService
             subjectId: $conversation->id,
         );
 
-        return $conversation->fresh()->loadMissing(['contact', 'agent']);
+        $conversation->loadMissing(['contact', 'agent']);
+
+        $this->events->dispatch(new ConversationUpdated($conversation));
+
+        return $conversation;
     }
 
     /**
@@ -220,7 +227,11 @@ final class ConversationService
             subjectId: $conversation->id,
         );
 
-        return $conversation->fresh()->loadMissing(['contact', 'agent']);
+        $conversation->loadMissing(['contact', 'agent']);
+
+        $this->events->dispatch(new ConversationUpdated($conversation));
+
+        return $conversation;
     }
 
     public function reopen(User $user, Tenant $tenant, string $conversationId): Conversation
@@ -242,7 +253,11 @@ final class ConversationService
             subjectId: $conversation->id,
         );
 
-        return $conversation->fresh()->loadMissing(['contact', 'agent']);
+        $conversation->loadMissing(['contact', 'agent']);
+
+        $this->events->dispatch(new ConversationUpdated($conversation));
+
+        return $conversation;
     }
 
     public function pauseBot(User $user, Tenant $tenant, string $conversationId): Conversation
@@ -264,7 +279,11 @@ final class ConversationService
             subjectId: $conversation->id,
         );
 
-        return $conversation->fresh()->loadMissing(['contact', 'agent']);
+        $conversation->loadMissing(['contact', 'agent']);
+
+        $this->events->dispatch(new ConversationUpdated($conversation));
+
+        return $conversation;
     }
 
     public function resumeBot(User $user, Tenant $tenant, string $conversationId): Conversation
@@ -286,7 +305,11 @@ final class ConversationService
             subjectId: $conversation->id,
         );
 
-        return $conversation->fresh()->loadMissing(['contact', 'agent']);
+        $conversation->loadMissing(['contact', 'agent']);
+
+        $this->events->dispatch(new ConversationUpdated($conversation));
+
+        return $conversation;
     }
 
     /**
@@ -376,7 +399,11 @@ final class ConversationService
             subjectId: $conversation->id,
         );
 
-        return $conversation->fresh()->loadMissing(['contact', 'agent']);
+        $conversation->loadMissing(['contact', 'agent']);
+
+        $this->events->dispatch(new ConversationUpdated($conversation));
+
+        return $conversation;
     }
 
     private function activeMembership(Tenant $tenant, int $userId): TenantUser
