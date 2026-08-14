@@ -125,7 +125,13 @@ Flujo del mensaje entrante (WhatsApp → Inbox):
     `MessageStatusUpdated` (con `previous_status`) y `ConversationUpdated`, con payload vía
     `*Resource` (ADR-033). El frontend (Laravel Echo + connector `reverb`) se suscribe solo al
     canal de la conversación abierta y complementa con polling de la lista cada 30 s.
-    El motor de flujos se conecta en FASE 11.
+    El motor de flujos (`FlowEngine`, FASE 11) corre al final de este pipeline: tras persistir
+    el inbound, `ProcessIncomingWhatsAppMessage` invoca `FlowEngine::handleMessage` bajo el
+    **lock Redis por conversación** (`lock:tenant:{id}:flow:{conversation_id}`). Si hay una
+    ejecución activa la reanuda (nodos `waiting` de question/buttons); si no, `TriggerMatcher`
+    decide si un trigger del flujo publicado dispara. Los delays programan `ContinueFlowExecution`
+    (`->forTenant()->mode('delay')`) que vuelve a entrar por el mismo pipeline. Idempotencia por
+    `last_inbound_message_id` + UNIQUE parcial de ejecución activa por conversación.
 
 Autenticación (dos modos, ADR-011):
 
@@ -148,8 +154,8 @@ Aislamiento de infraestructura compartida:
 | Contacts | CRM mínimo: contactos (E.164, soft delete, unique parcial por tenant), etiquetas | — |
 | Conversations | Sesiones de chat (FASE 8): estados, asignación/transferencia, participantes, historial de asignaciones, pause/resume de bot | — |
 | Messages | Historial (FASE 9): inbound con idempotencia, status por columna temporal, outbound asíncrono con CAS y retry; `MessageService` | — |
-| Chatbots | Chatbots, flujos, triggers | `ChatbotEngine` |
-| Flows | Definición de nodos/conexiones (Flow Builder) | — |
+| Chatbots | Chatbots (FASE 11): agrupan flujos; CRUD REST con `flows.view/manage` | `FlowService` |
+| Flows | Definición de nodos/conexiones (FASE 11): `FlowService` (borrador atómico, publish/validate), `FlowValidator`, `FlowEngine` + 9 `NodeExecutor` (message, buttons, question, condition, delay, tag, webhook, human, end), `NodeExecutorRegistry`, `TriggerMatcher`, `FlowExecutionService`; `ai` bloqueado hasta FASE 16 | `NodeExecutorInterface` |
 | Agents | Usuarios que atienden conversaciones | — |
 | AI | IA generativa + RAG | `AIProviderInterface` |
 | KnowledgeBase | Documentos, chunks, embeddings (pgvector) | — |

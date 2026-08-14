@@ -184,13 +184,11 @@ final class ContactService
             return $contact;
         }
 
-        TenantContext::setId($tenant->id);
-
         try {
-            $contact = Contact::query()->create([
+            $contact = TenantContext::withId($tenant->id, fn (): Contact => Contact::query()->create([
                 'name' => $normalized === '' ? 'Desconocido' : $normalized,
                 'phone' => $normalized,
-            ]);
+            ]));
         } catch (QueryException $e) {
             $existing = $this->findByPhone($tenant, $normalized);
 
@@ -199,8 +197,6 @@ final class ContactService
             }
 
             throw $e;
-        } finally {
-            TenantContext::clear();
         }
 
         return $contact;

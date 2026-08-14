@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 10 COMPLETADA** (Bandeja de entrada UI + Reverb). Solo se trabaja sobre la fase activa.
+Estado general: **FASE 11 COMPLETADA** (Chatbot engine). Solo se trabaja sobre la fase activa.
 
 ## Fases
 
@@ -16,8 +16,8 @@ Estado general: **FASE 10 COMPLETADA** (Bandeja de entrada UI + Reverb). Solo se
 | 7 | Contactos | COMPLETADA |
 | 8 | Conversaciones | COMPLETADA |
 | 9 | Mensajes (jobs async) | COMPLETADA |
-| 10 | Bandeja de entrada (UI + Reverb) | COMPLETADA |
-| 11 | Chatbot engine | PENDIENTE |
+  | 10 | Bandeja de entrada (UI + Reverb) | COMPLETADA |
+  | 11 | Chatbot engine | COMPLETADA |
 | 12 | Flow Builder (Vue Flow) | PENDIENTE |
 | 13 | Variables de conversación | PENDIENTE |
 | 14 | Triggers | PENDIENTE |
@@ -522,3 +522,56 @@ COMPLETADO / BLOQUEADO
       (suite completa verde, `migrate` sin cambios, `/health` ok)
 - [x] Documentación: `api.md` (§3.7 mensajes), `architecture.md` (realtime), `testing.md`,
       `security.md`, `whatsapp.md`, `roadmap.md`, `decisions.md` (ADR-033)
+
+> ## Fase 11 — Chatbot engine (estado)
+
+- [x] **Modelo de datos** (ADR-034): migraciones `2026_08_17_0000xx_*` — `chatbots` (soft
+      delete), `flows` (la fila ES la versión, sin `flow_versions`), `flow_nodes`
+      (type/config/posición/is_start; el inicio es un nodo real, no existe tipo `start`),
+      `flow_connections` (arista dirigida con label), `triggers`, `flow_executions` (UNIQUE
+      parcial `(tenant_id, conversation_id) WHERE status IN ('running','waiting')` → una activa
+      por conversación), `flow_execution_logs` (traza por paso). FK real
+      `conversations.flow_execution_id` en `000700`. Enums `FlowStatus`, `FlowNodeType`,
+      `FlowTriggerType`, `FlowExecutionStatus` con `label()`/`canTransitionTo()`/`isWaitingType()`
+- [x] **Ejecutores de nodo** (ADR-035): `NodeExecutorInterface` + `NodeExecutorRegistry` + 9
+      ejecutores (`message, buttons, question, condition, delay, tag, webhook, human, end`) en
+      `app/Application/Flows/Services/Executors/`. `ai` queda **bloqueado en FlowValidator**
+      (FASE 16); prohibido ejecutor vacío. `FlowValidator` (un solo inicio, grafo conexo,
+      `end` alcanzable, config por tipo, sin loops), `VariableResolver`, `ConditionEvaluator`,
+      `WebhookUrlGuard` (anti-SSRF)
+- [x] **Motor** (ADR-037): `FlowEngine::handleMessage`/`continueExecution` bajo lock Redis por
+      conversación (`lock:tenant:{id}:flow:{conversation_id}`), idempotencia por
+      `last_inbound_message_id`, `flow_execution_logs` por paso, guard anti-loop, retry de
+      `webhook` (máx 3, backoff), `pause/resume/cancel` sobre ejecuciones activas (409 sobre
+      terminales), `handed_off` pausa el bot. `TenantContext::withId()` (fix contexto anidado:
+      los servicios internos ya no limpian un contexto activo)
+- [x] **Estados del flujo** (ADR-036): borrador atómico `PUT /flows/{flow}/draft` (transacción
+      nodes+connections), `GET /flows/{flow}/validate` → `{valid, errors}`, publish valida el
+      grafo, deactivate, 409 `FLOW_PUBLISHED` / `FLOW_ALREADY_PUBLISHED` /
+      `FLOW_INVALID_STATE` / `CHATBOT_HAS_PUBLISHED_FLOWS`
+- [x] **Triggers** (ADR-038): `keyword` / `new_message` / `start` implementados
+      (`TriggerMatcher`, precedencia específico→genérico); `tag/schedule/webhook` registrados
+      en el enum sin matcher (FASE 14)
+- [x] **Permisos y API** (ADR-039): `flows.view` (owner/admin/agent) + `flows.manage`
+      (owner/admin) en `TenantPermission` + seeder sincronizado. 4 controllers +
+      11 form requests + 6 resources. REST: chatbots CRUD, `chatbots/{chatbot}/flows`,
+      `flows/{flow}` show/update/delete/draft/validate/publish/deactivate,
+      `flows/{flow}/triggers` CRUD, `flow-executions` index/show/pause/resume/cancel. Errores
+      estándar `{message, code, errors}` (404/403/409/422, `FLOW_INVALID` con lista)
+- [x] **Frontend read-only**: `Pages/Settings/Flows.vue` (link "Flujos" en AppLayout,
+      `settings/flows` en web.php): chatbots → flujos → detalle (nodos, conexiones, triggers,
+      estado). `features/flows/{flowTypes,flowUtils}.ts` (labels espejo del backend, query
+      builders, `nodeConfigSummary` sin exponer secrets) + Vitest
+- [x] **Tests backend** (30 nuevos en FASE 11 → **294 total, 1229 assertions**):
+      FlowEngineTest FLOW-1..15 (secuencias, condition, question captura + `{{custom.*}}`,
+      delay, human, webhook, límite de pasos, duplicado no avanza, aislamiento A/B motor),
+      FlowApiTest FLOW-16..28 (CRUD chatbots/flows, borrador atómico, publish/deactivate,
+      409 publicado, triggers, validate, aislamiento A/B CRÍTICO, matriz de permisos, ejecuciones,
+      pause/resume/cancel, auditoría), FlowsPermissionTest FLOW-20/21
+- [x] **Frontend tests**: 23 Vitest nuevos (`flowUtils.test.ts`) → 71 total
+- [x] Pint + PHPStan (nivel 6) + `php -l` + `vue-tsc` + `vite build` + `vitest` sin errores;
+      suite completa verde
+- [x] Documentación: `chatbot-engine.md` (§10 estado FASE 11), `api.md` (§3.8),
+      `database.md` (tablas FASE 11), `multi-tenancy.md`, `security.md`, `testing.md`,
+      `architecture.md`, `roadmap.md`, `decisions.md` (ADR-034..039)
+- [ ] FASE 11 termina SIN push a origin (reporte final en PASO 13)

@@ -16,6 +16,7 @@ use App\Domain\Messages\Enums\MessageStatus;
 use App\Domain\Messages\Enums\MessageType;
 use App\Domain\Messages\Exceptions\UnsupportedMessageTypeException;
 use App\Domain\Messages\Models\Message;
+use App\Domain\Messages\ValueObjects\InboundMessageResult;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Enums\TenantPermission;
 use App\Domain\Users\Models\User;
@@ -56,13 +57,16 @@ final class MessageService
     ) {}
 
     /**
-     * Persiste un mensaje entrante de Meta. Devuelve null si el payload no es
-     * procesable (falta id/from); lanza UnsupportedMessageTypeException si el
-     * tipo no se persiste; devuelve el mensaje existente si ya se procesó.
+     * Persiste un mensaje entrante de Meta. Devuelve `InboundMessageResult`:
+     * `message` es null si el payload no es procesable (falta id/from); lanza
+     * UnsupportedMessageTypeException si el tipo no se persiste; si el mensaje
+     * ya existía (dedupe por `provider_message_id`) devuelve el existente con
+     * `created = false`. El motor de flujos (FASE 11) se engancha después de
+     * esta persistencia con su propia barrera de idempotencia.
      *
      * @param  array<string, mixed>  $eventData
      */
-    public function handleInboundMessage(Tenant $tenant, array $eventData): ?Message
+    public function handleInboundMessage(Tenant $tenant, array $eventData): InboundMessageResult
     {
         $providerMessageId = isset($eventData['id']) && is_scalar($eventData['id']) ? (string) $eventData['id'] : '';
         $from = isset($eventData['from']) && is_scalar($eventData['from']) ? (string) $eventData['from'] : '';
@@ -74,13 +78,13 @@ final class MessageService
         if ($providerMessageId === '' || $from === '') {
             Log::warning('messages.inbound_missing_fields', ['provider_message_id' => $providerMessageId]);
 
-            return null;
+            return InboundMessageResult::unprocessable();
         }
 
         $existing = $this->findByProviderMessageId($tenant, $providerMessageId);
 
         if ($existing !== null) {
-            return $existing;
+            return InboundMessageResult::existing($existing);
         }
 
         $type = MessageType::fromProvider($providerType);
@@ -92,10 +96,8 @@ final class MessageService
         $contact = $this->contacts->findOrCreateForPhone($tenant, $from);
         $conversation = $this->conversations->findOrCreateActiveForContact($tenant, $contact->id);
 
-        TenantContext::setId($tenant->id);
-
         try {
-            $message = Message::query()->create([
+            $message = TenantContext::withId($tenant->id, fn (): Message => Message::query()->create([
                 'conversation_id' => $conversation->id,
                 'provider_message_id' => $providerMessageId,
                 'direction' => MessageDirection::Inbound,
@@ -106,17 +108,15 @@ final class MessageService
                 'media_size' => $this->extractMediaSize($type, $eventData),
                 'metadata' => $this->buildMetadata($eventData, $providerTimestamp),
                 'delivered_at' => $this->providerTimestamp($providerTimestamp),
-            ]);
+            ]));
         } catch (QueryException $e) {
             $existing = $this->findByProviderMessageId($tenant, $providerMessageId);
 
             if ($existing !== null) {
-                return $existing;
+                return InboundMessageResult::existing($existing);
             }
 
             throw $e;
-        } finally {
-            TenantContext::clear();
         }
 
         $reopened = $this->touchConversation($tenant, $conversation->id, $providerTimestamp);
@@ -137,7 +137,7 @@ final class MessageService
 
         $this->events->dispatch(new MessageCreated($message));
 
-        return $message;
+        return InboundMessageResult::created($message);
     }
 
     /**
@@ -212,20 +212,16 @@ final class MessageService
      */
     public function createOutbound(Tenant $tenant, Conversation $conversation, string $body): Message
     {
-        TenantContext::setId($tenant->id);
-
-        try {
-            $message = Message::query()->create([
-                'conversation_id' => $conversation->id,
-                'direction' => MessageDirection::Outbound,
-                'type' => MessageType::Text,
-                'status' => MessageStatus::Pending,
-                'body' => $body,
-                'metadata' => ['text' => $body],
-            ]);
-        } finally {
-            TenantContext::clear();
-        }
+        // `withId()` no limpia un contexto ya activo (p. ej. el del motor de
+        // flujos); solo setea/limpia si no había ninguno.
+        $message = TenantContext::withId($tenant->id, fn (): Message => Message::query()->create([
+            'conversation_id' => $conversation->id,
+            'direction' => MessageDirection::Outbound,
+            'type' => MessageType::Text,
+            'status' => MessageStatus::Pending,
+            'body' => $body,
+            'metadata' => ['text' => $body],
+        ]));
 
         $this->bumpConversationTimestamps($tenant, $conversation->id);
 

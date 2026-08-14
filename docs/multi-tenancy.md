@@ -56,10 +56,10 @@ y tiene un **tenant activo** seleccionable:
   `TenantContext::id()` → `users.current_tenant_id` → `null` (roles globales).
 - La autorización por tenant (FASE 4, ADR-026) exige SIEMPRE tres condiciones:
   `current_tenant_id == tenant` (tenant activo) + `tenant_users.status = active` + permiso en la
-  matriz de código   `TenantPermission::permissionsForRole(rol)` (20 permisos; FASE 5 añade
+  matriz de código   `TenantPermission::permissionsForRole(rol)` (23 permisos; FASE 5 añade
   `business_profile.view/update`; FASE 6 añade `whatsapp.view`/`whatsapp.manage`; FASE 7 añade
   `contacts.view`/`contacts.manage`; FASE 8 añade `conversations.view`/`conversations.manage`/
-  `conversations.assign`). Sin membresía
+  `conversations.assign`; FASE 11 añade `flows.view`/`flows.manage`). Sin membresía
   o inactivo → **404**; sin permiso → **403**
   `PERMISSION_DENIED`. Los roles spatie se mantienen como espejo de `tenant_users.role` vía
   `TenantRoleManager` (`syncRoles` reemplaza, nunca suma).
@@ -229,8 +229,8 @@ Nunca se acepta `tenant_id` desde el request (se ignora o se rechaza — test
   asigna conversaciones de contactos del tenant B, y una conversación creada sobre un contacto de
   B es invisible para A (404). Asignación solo a miembros activos del tenant (422
   `AGENT_NOT_IN_TENANT` en caso contrario). `findOrCreateActiveForContact` (webhook, FASE 9)
-  consulta sin scope con filtro por `tenant_id` y setea `TenantContext` solo alrededor del create,
-  liberándolo en `finally`.
+  consulta sin scope con filtro por `tenant_id` y usa `TenantContext::withId()` alrededor del
+  create (no pisa ni limpia un contexto ya activo, p. ej. el del motor de flujos, FASE 11).
 - `messages` (FASE 9, ADR-032): tabla con trait `BelongsToTenant`, `tenant_id` FK
   `cascadeOnDelete` y `conversation_id` FK→`conversations` del **mismo tenant** (cascade; el
   contacto se resuelve por la conversación, no se duplica). `Tenant::messages()` (hasMany). La
@@ -241,6 +241,16 @@ Nunca se acepta `tenant_id` desde el request (se ignora o se rechaza — test
   `withoutTenantScope()->where('tenant_id', ...)` y setea `TenantContext` solo alrededor de los
   creates (liberado en `finally`) → el webhook del número de B jamás persiste en datos de A
   (MSG-6, STAT-8, CRITICO).
+- `chatbots` / `flows` / `flow_nodes` / `flow_connections` / `triggers` / `flow_executions` /
+  `flow_execution_logs` (FASE 11, ADR-034): TODAS con trait `BelongsToTenant`, `tenant_id` FK
+  `cascadeOnDelete`. FKs de dominio siempre entre entidades del MISMO tenant (chatbot→tenant,
+  flow→chatbot del mismo tenant, node/connection→flow, execution→conversation del mismo tenant,
+  log→execution). La **ejecución activa por conversación** se garantiza con el UNIQUE parcial
+  `(tenant_id, conversation_id) WHERE status IN ('running','waiting')` (una por tenant).
+  `FlowEngine` se ejecuta SIEMPRE dentro del `TenantContext` del job `TenantAwareJob`
+  (no lo crea ni lo limpia); los servicios internos usan `TenantContext::withId()` para crear
+  modelos sin pisar el contexto activo (FASE 11). El nodo `webhook` usa `WebhookUrlGuard`
+  (anti-SSRF) y las URLs externas llevan `execution_id` para idempotencia.
 
 ## 5. Aislamiento en colas, eventos y notificaciones
 
@@ -320,3 +330,10 @@ tenant distinto del propietario:
     conversaciones en el tenant A (`MSG-6`, CRITICO); los status de B no tocan mensajes de A
     (`STAT-8`, CRITICO). `MessageService` y los jobs de mensajes resuelven siempre con filtro por
     `tenant_id` y dejan el contexto limpio en `finally`.
+17. (FASE 11) Tenant A jamás ve/edita/ejecuta recursos de flujos del Tenant B: chatbots, flujos,
+    triggers y ejecuciones de B → 404 en GET/PATCH/DELETE/POST y quedan intactos (FLOW-24,
+    CRITICO). El `tenant_id` del body se ignora (no existe como campo en los `FormRequest`; la
+    pertenencia la fuerza `BelongsToTenant` en escrituras). El motor (`FlowEngine`) corre dentro
+    del `TenantContext` del job `TenantAwareJob` y sus creates internos usan `TenantContext::withId`
+    (FLOW-14, FLOW-15). La ejecución activa por conversación está acotada por tenant
+    (UNIQUE parcial `(tenant_id, conversation_id)`).

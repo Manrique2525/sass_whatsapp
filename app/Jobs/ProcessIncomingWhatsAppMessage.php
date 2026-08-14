@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Application\Flows\Services\FlowEngine;
 use App\Application\Messages\Services\MessageService;
+use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Messages\Exceptions\UnsupportedMessageTypeException;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\WhatsApp\Enums\WebhookEventStatus;
@@ -81,11 +83,23 @@ final class ProcessIncomingWhatsAppMessage implements ShouldQueue
         }
 
         try {
-            app(MessageService::class)->handleInboundMessage($tenant, $data);
+            $result = app(MessageService::class)->handleInboundMessage($tenant, $data);
         } catch (UnsupportedMessageTypeException) {
             $event->markFailed('unsupported_message_type');
 
             return;
+        }
+
+        if ($result->message !== null) {
+            $conversation = Conversation::query()
+                ->withoutTenantScope()
+                ->where('tenant_id', $tenant->id)
+                ->whereKey($result->message->conversation_id)
+                ->first();
+
+            if ($conversation !== null) {
+                app(FlowEngine::class)->handleMessage($tenant, $result->message, $conversation);
+            }
         }
 
         $event->markProcessed();

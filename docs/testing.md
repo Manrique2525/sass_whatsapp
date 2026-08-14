@@ -145,6 +145,27 @@ Pirámide de tests con prioridad en lo crítico:
 - Reanudación tras `waiting`.
 - Validación de flujo: sin start, nodo huérfano, sin end, config inválida.
 
+### Flujos FASE 11 (30 tests + 23 Vitest)
+- **Motor** (`FlowEngineTest`, FLOW-1..15, cola sync): secuencia message→message→end; condition
+  con variables → rama; question captura `{{custom.*}}` y continua; delay agenda el siguiente
+  paso; tag aplica etiquetas; human pausa el bot; webhook anti-SSRF + retry/backoff; límite de
+  pasos (anti-loop); duplicado de webhook no avanza dos veces (idempotencia por
+  `last_inbound_message_id`); webhook HTTP falla no rompe la ejecución; aislamiento A/B del
+  motor (FLOW-14/15 CRITICO).
+- **API** (`FlowApiTest`, FLOW-16..28): CRUD chatbots con matriz de permisos; index/show de
+  flujos con nodos/conexiones/triggers; replaceDraft atómico + validación de forma (422) y
+  grafo (422 `FLOW_INVALID`); publish valida y deactivate exige published (auditado);
+  flujo publicado no se edita/elimina (409 `FLOW_PUBLISHED`); CRUD de triggers solo en flujos no
+  publicados; `/validate` → `{valid, errors}` sin mutar; **aislamiento A/B CRITICO (FLOW-24)**
+  y matriz de permisos agent solo lectura (FLOW-25); ejecuciones index/show con filtros;
+  pause/resume/cancel + 409 sobre terminales (FLOW-27); auditoría de mutaciones (FLOW-28).
+- **Permisos** (`FlowsPermissionTest`, FLOW-20/21): `flows.view` (owner/admin/agent) y
+  `flows.manage` (owner/admin) con seeder sincronizado.
+- **Frontend (Vitest)** `flowUtils.test.ts` (23): labels espejo del backend, `build*Query`,
+  `nodeConfigSummary` (sin exponer secrets), `findStartNode`, `isImplementedNodeType`,
+  `extractErrorMessage`.
+- Suite total FASE 11: **294 tests backend / 1229 assertions**; frontend **71 tests Vitest**.
+
 ### Auth
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 

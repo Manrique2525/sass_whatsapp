@@ -65,11 +65,13 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
   (`isCurrentTenant`), (2) membresía con `status = active`, (3) permiso en la matriz. Sin
   membresía/no-activa → 404 (no revela existencia); sin permiso → 403 `PERMISSION_DENIED`;
   tenant suspendido → 409 `TENANT_NOT_ACTIVE`.
-- **20 permisos granulares** (`tenants.view/update`, `users.view/invite/update/remove`,
+- **23 permisos granulares** (`tenants.view/update`, `users.view/invite/update/remove`,
   `roles.view/assign`, `agents.view/manage`, `audit.view`, `business_profile.view/update`,
-  `whatsapp.view/manage`, `contacts.view/manage`, `conversations.view/manage/assign`). Matriz:
+  `whatsapp.view/manage`, `contacts.view/manage`, `conversations.view/manage/assign`,
+  `flows.view/manage`). Matriz:
   owner = todos; admin = operativo sin `roles.assign`; agent = solo `tenants.view`,
-  `business_profile.view`, `whatsapp.view`, `contacts.view` y `conversations.view`;
+  `business_profile.view`, `whatsapp.view`, `contacts.view`, `conversations.view` y
+  `flows.view`;
   `super_admin` = global (sin permisos de tenant).
 - **Roles espejo en spatie**: `TenantRoleManager` sincroniza spatie con `tenant_users.role`
   usando `syncRoles` (reemplaza, no acumula) con el team del `TenantTeamResolver`
@@ -286,6 +288,25 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - `AuditLog` para acciones sensibles (ver `database.md`). Logs sin datos personales
   innecesarios, con `tenant_id`/`user_id`/correlation id.
 
+### Motor de flujos (FASE 11, ADR-034..039)
+- **Validación backend-first**: `FlowValidator` valida el grafo ANTES de publicar (un solo
+  `is_start`, grafo conexo, `end` alcanzable, config de nodo por tipo). El frontend es
+  read-only; no existe editor en FASE 11. `tenant_id` NUNCA se acepta del frontend (no existe
+  como campo en los `FormRequest`; `BelongsToTenant` lo fuerza desde el contexto).
+- **Anti-SSRF en nodos webhook**: `WebhookUrlGuard` bloquea IPs privadas/reservadas (localhost,
+  loopback, rangos RFC1918, link-local, etc.) y exige esquema http/https. Las llamadas externas
+  llevan `execution_id` (idempotencia del lado del destino). Los fallos del webhook NO exponen
+  detalles internos; reintento con backoff (máx 3) y fallo permanente → ejecución `failed`.
+- **Sin secretos por API**: los `*Resource` de FASE 11 no incluyen `tenant_id`; el nodo
+  `webhook` solo expone `method` + `url` (headers/body nunca salen del config); el frontend
+  renderiza un resumen del config (`nodeConfigSummary`), no el config crudo.
+- **Idempotencia y concurrencia**: dedupe de webhook de plataforma + `last_inbound_message_id`
+  como barrera del motor (un inbound reprocesado jamás avanza dos veces) + UNIQUE parcial de
+  ejecución activa por conversación + lock Redis por conversación. `pause/resume/cancel` solo
+  sobre ejecuciones activas (409 sobre terminales); `handed_off` pausa el bot hasta que un
+  agente reanuda.
+- **Auditoría**: cada mutación (chatbot/flow/trigger/execution) se registra en `audit_logs`.
+
 ## 3. Comprobaciones automatizadas
 
 - PHPStan nivel alto.
@@ -308,3 +329,5 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - [ ] Webhook signature test verde.
 - [ ] Sin secretos en el repo (gitleaks en CI).
 - [ ] Rate limits aplicados a rutas sensibles.
+- [ ] (FASE 11) Aislamiento A/B de flujos verdes (FLOW-24), matriz de permisos `flows.*`
+        verdes, validación de grafo en publicación y anti-SSRF del nodo webhook verdes.

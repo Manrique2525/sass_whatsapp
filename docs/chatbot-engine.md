@@ -120,3 +120,60 @@ Integración (con queue falsa y DB):
 - flujo completo desde webhook → ejecución → mensajes outbound.
 - reanudación tras `waiting`.
 - duplicado de webhook no duplica ejecución.
+
+## 10. FASE 11 — Estado de implementación (lo que existe en el código hoy)
+
+Esta sección describe la implementación REAL entregada en FASE 11 (lo anterior es el diseño
+objetivo completo; las diferencias marcadas abajo). Referencias: ADR-034..039.
+
+### 10.1 Tablas y modelo (ADR-034)
+
+- `chatbots` (soft delete), `flows` (la fila ES la versión; no hay `flow_versions`), `flow_nodes`,
+  `flow_connections`, `triggers`, `flow_executions` (UNIQUE parcial activa por conversación),
+  `flow_execution_logs`. Migraciones `2026_08_17_0000xx_*`.
+- El nodo de inicio es un nodo real con `is_start=true`; **no existe** un tipo `start`
+  (el §8 de arriba habla de "nodo start"; léase como "nodo con `is_start`").
+
+### 10.2 Ejecución (ADR-035/037)
+
+- `FlowNodeType`: `message, buttons, question, condition, delay, tag, webhook, human, end`
+  implementados como ejecutores en `app/Application/Flows/Services/Executors/`; `ai` queda
+  **bloqueado en el validador** (FASE 16) — nunca habrá un ejecutor vacío.
+- `FlowEngine::handleMessage` / `continueExecution` bajo lock Redis por conversación,
+  `last_inbound_message_id` como barrera de idempotencia, `flow_execution_logs` por paso,
+  guard anti-loop. `pause/resume/cancel` sobre ejecuciones activas (409 sobre terminales).
+- Variables: `VariableResolver` (contact/custom/conversation/node) + `ConditionEvaluator`
+  (ramas de `condition`) + `WebhookUrlGuard` (anti-SSRF). `{{custom.*}}` se lee de
+  `execution.variables` (respuestas de `question`); no hay espejo hacia `conversation.context`
+  (decisión FASE 11 — ver FLOW-2 en tests).
+
+### 10.3 Estados del flujo (ADR-036)
+
+- `draft → published → inactive` con `canTransitionTo`; borrador atómico vía
+  `PUT /flows/{flow}/draft` (transacción nodes+connections); publicar valida el grafo
+  (`FlowValidator`); `GET /flows/{flow}/validate` → `{valid, errors}` sin mutar.
+- Un flujo publicado no se edita/elimina (409 `FLOW_PUBLISHED`); un chatbot con flujos
+  publicados no se elimina (409 `CHATBOT_HAS_PUBLISHED_FLOWS`); no dos flujos publicados con el
+  mismo trigger genérico (409 `FLOW_ALREADY_PUBLISHED`).
+
+### 10.4 Triggers (ADR-038)
+
+- FASE 11: `keyword`, `new_message`, `start` (disparo por mensaje entrante vía
+  `TriggerMatcher`, precedencia específico→genérico). `tag/schedule/webhook` registrados en el
+  enum pero sin matcher hasta FASE 14.
+
+### 10.5 API y permisos (ADR-039)
+
+- `flows.view` (todos los roles) y `flows.manage` (owner/admin). REST bajo `middleware('tenant')`:
+  chatbots CRUD, flows (show/update/delete/draft/validate/publish/deactivate), triggers CRUD,
+  flow-executions (index/show/pause/resume/cancel). Errores estándar `{message, code, errors}`.
+- Frontend read-only: `Pages/Settings/Flows.vue` + `features/flows/{flowTypes,flowUtils}.ts`.
+  El editor visual (Vue Flow) es FASE 12.
+
+### 10.6 Tests entregados
+
+- `tests/Feature/Flows/FlowEngineTest.php` (FLOW-1..15): motor end-to-end sobre cola sync.
+- `tests/Feature/Flows/FlowApiTest.php` (FLOW-16..28): API, matriz de permisos, aislamiento A/B,
+  auditoría.
+- `tests/Feature/Flows/FlowsPermissionTest.php` (FLOW-20/21): permisos con seeder sincronizado.
+- `resources/js/features/flows/flowUtils.test.ts`: utils del frontend (Vitest).

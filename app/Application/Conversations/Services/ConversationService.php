@@ -333,18 +333,10 @@ final class ConversationService
             return $conversation;
         }
 
-        TenantContext::setId($tenant->id);
-
-        try {
-            $conversation = Conversation::query()->create([
-                'contact_id' => $contactId,
-                'status' => ConversationStatus::Open,
-            ]);
-        } finally {
-            TenantContext::clear();
-        }
-
-        return $conversation;
+        return TenantContext::withId($tenant->id, fn (): Conversation => Conversation::query()->create([
+            'contact_id' => $contactId,
+            'status' => ConversationStatus::Open,
+        ]));
     }
 
     /**

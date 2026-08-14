@@ -270,6 +270,56 @@ En FASE 9 los mensajes se **persisten y procesan por backend** (sin endpoints RE
 | `MessageStatusUpdated` | `{message, previous_status}` | status de Meta y `sent`/`failed` del job |
 | `ConversationUpdated` | `{conversation}` | touch timestamps, reabrir por inbound, update/close/reopen/pause-bot/resume-bot/assign/transfer |
 
+### 3.8 Flujos, chatbots, triggers y ejecuciones (implementado en FASE 11)
+
+Motor de flujos (ADR-034..039). Mismas reglas de enforcement que §3.1–§3.7: `{tenant}` debe ser
+el **activo**; otro tenant → **404**; sin permiso → **403** `PERMISSION_DENIED`; tenant
+suspendido → 409 `TENANT_NOT_ACTIVE`. `{chatbot}`, `{flow}`, `{trigger}` y `{execution}` se
+resuelven por servicio filtrando SIEMPRE por `tenant_id` autorizado (sin route-model binding
+implícito); recurso de otro tenant/inexistente → **404** (oculta existencia). **El `tenant_id`
+nunca se acepta del frontend**: la pertenencia la fuerza `BelongsToTenant` en escrituras.
+
+Permisos nuevos: `flows.view` (owner/admin/agent) y `flows.manage` (owner/admin).
+
+| Método | Ruta | Permiso | Descripción |
+|---|---|---|---|
+| GET | `/api/v1/tenants/{tenant}/chatbots` | `flows.view` | Listado paginado + `search` (nombre) → `{chatbots: ChatbotResource[], meta}` |
+| POST | `/api/v1/tenants/{tenant}/chatbots` | `flows.manage` | Crea `{name*, description?}` → **201**. Audita `chatbot.created` |
+| GET | `/api/v1/tenants/{tenant}/chatbots/{chatbot}` | `flows.view` | Detalle con `flows` (cuando el query pide `with=flows`). 404 si no existe/no es del tenant |
+| PATCH | `/api/v1/tenants/{tenant}/chatbots/{chatbot}` | `flows.manage` | Actualización parcial. Audita `chatbot.updated` |
+| DELETE | `/api/v1/tenants/{tenant}/chatbots/{chatbot}` | `flows.manage` | Elimina (soft). Con flujos publicados → **409** `CHATBOT_HAS_PUBLISHED_FLOWS`. Audita `chatbot.deleted` |
+| GET | `/api/v1/tenants/{tenant}/chatbots/{chatbot}/flows` | `flows.view` | Flujos del chatbot, paginados + filtro `status` (draft/published/inactive). `{flows: FlowResource[], meta}` |
+| POST | `/api/v1/tenants/{tenant}/chatbots/{chatbot}/flows` | `flows.manage` | Crea `{name*, description?}` (estado `draft`) → **201**. Audita `flow.created` |
+| GET | `/api/v1/tenants/{tenant}/flows/{flow}` | `flows.view` | Detalle con `nodes`, `connections` y `triggers` eager-loaded. 404 si no existe/no es del tenant |
+| PATCH | `/api/v1/tenants/{tenant}/flows/{flow}` | `flows.manage` | Actualización de nombre/descripción (no del grafo). Publicado → **409** `FLOW_PUBLISHED`. Audita `flow.updated` |
+| PUT | `/api/v1/tenants/{tenant}/flows/{flow}/draft` | `flows.manage` | Reemplaza el grafo **atómicamente** (transacción nodes+connections). Body: `{nodes[]*, connections[]}`. Valida forma (422 `VALIDATION_ERROR`) y grafo (422 `FLOW_INVALID`). Publicado → **409**. Audita `flow.draft_replaced` |
+| GET | `/api/v1/tenants/{tenant}/flows/{flow}/validate` | `flows.view` | Valida el grafo SIN mutar → `{valid: bool, errors: string[]}` |
+| POST | `/api/v1/tenants/{tenant}/flows/{flow}/publish` | `flows.manage` | Publica (valida grafo → 422 `FLOW_INVALID`). Otro flujo publicado con el mismo trigger genérico → **409** `FLOW_ALREADY_PUBLISHED`; transición inválida → **409** `FLOW_INVALID_STATE`. Audita `flow.published` |
+| POST | `/api/v1/tenants/{tenant}/flows/{flow}/deactivate` | `flows.manage` | Desactiva (requiere `published`; si no → **409** `FLOW_INVALID_STATE`). Audita `flow.deactivated` |
+| DELETE | `/api/v1/tenants/{tenant}/flows/{flow}` | `flows.manage` | Elimina. Publicado → **409** `FLOW_PUBLISHED`. Audita `flow.deleted` |
+| GET | `/api/v1/tenants/{tenant}/flows/{flow}/triggers` | `flows.view` | Lista de triggers del flujo → `{triggers: TriggerResource[]}` |
+| POST | `/api/v1/tenants/{tenant}/flows/{flow}/triggers` | `flows.manage` | Crea `{type* (keyword/new_message/start/tag/schedule/webhook), keyword? (requerido si type=keyword), config?, priority?, active?}` → **201**. Flujo publicado → **409** `FLOW_PUBLISHED`. Audita `trigger.created` |
+| PATCH | `/api/v1/tenants/{tenant}/flows/{flow}/triggers/{trigger}` | `flows.manage` | Actualiza. Flujo publicado → **409**. Audita `trigger.updated` |
+| DELETE | `/api/v1/tenants/{tenant}/flows/{flow}/triggers/{trigger}` | `flows.manage` | Elimina. Flujo publicado → **409**. Audita `trigger.deleted` |
+| GET | `/api/v1/tenants/{tenant}/flow-executions` | `flows.view` | Ejecuciones paginadas. Query: `status` (running/waiting/completed/failed/handed_off), `flow_id`, `chatbot_id`, `page`, `per_page` → `{executions: FlowExecutionResource[], meta}` |
+| GET | `/api/v1/tenants/{tenant}/flow-executions/{execution}` | `flows.view` | Detalle con `flow`. 404 si no existe/no es del tenant |
+| POST | `/api/v1/tenants/{tenant}/flow-executions/{execution}/pause` | `flows.manage` | Pausa una ejecución **activa**. Terminal → **409** `EXECUTION_INVALID_STATE`. Audita `execution.paused` |
+| POST | `/api/v1/tenants/{tenant}/flow-executions/{execution}/resume` | `flows.manage` | Reanuda una ejecución pausada/waiting. Terminal → **409**. Audita `execution.resumed` |
+| POST | `/api/v1/tenants/{tenant}/flow-executions/{execution}/cancel` | `flows.manage` | Cancela (→ `failed`). Terminal → **409**. Audita `execution.cancelled` |
+
+**Resources** (ninguno incluye `tenant_id`): `ChatbotResource`
+`{id, name, description, flows_count, created_at, updated_at}`; `FlowResource`
+`{id, chatbot_id, name, description, status, status_label, config, nodes[], connections[],
+triggers[], created_at, updated_at}`; `FlowNodeResource` `{id, type, type_label, name,
+position_x, position_y, config, is_start}`; `FlowConnectionResource`
+`{id, source_node_id, target_node_id, label}`; `TriggerResource`
+`{id, flow_id, type, type_label, keyword, config, priority, active, created_at, updated_at}`;
+`FlowExecutionResource` `{id, flow_id, conversation_id, status, status_label, current_node_id,
+variables, attempts, last_inbound_message_id, created_at, updated_at}`.
+
+**El nodo `webhook` solo expone `method` + `url`** (el `config` completo no sale por API para no
+filtrar headers/secrets; el frontend muestra un resumen, no el config crudo).
+
 ## 4. Webhooks (sin auth Bearer; autenticados por firma y dedupe)
 
 | Método | Ruta | Descripción |

@@ -4,6 +4,16 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Application\Flows\Services\Executors\ButtonsNodeExecutor;
+use App\Application\Flows\Services\Executors\ConditionNodeExecutor;
+use App\Application\Flows\Services\Executors\DelayNodeExecutor;
+use App\Application\Flows\Services\Executors\EndNodeExecutor;
+use App\Application\Flows\Services\Executors\HumanNodeExecutor;
+use App\Application\Flows\Services\Executors\MessageNodeExecutor;
+use App\Application\Flows\Services\Executors\QuestionNodeExecutor;
+use App\Application\Flows\Services\Executors\TagNodeExecutor;
+use App\Application\Flows\Services\Executors\WebhookNodeExecutor;
+use App\Application\Flows\Services\NodeExecutorRegistry;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\WhatsApp\Contracts\WhatsAppProviderInterface;
 use App\Infrastructure\WhatsApp\MetaWhatsAppProvider;
@@ -29,6 +39,20 @@ class AppServiceProvider extends ServiceProvider
                 appSecret: (string) config('whatsapp.app_secret'),
                 verifyToken: (string) config('whatsapp.verify_token'),
             );
+        });
+
+        $this->app->bind(NodeExecutorRegistry::class, function ($app): NodeExecutorRegistry {
+            return new NodeExecutorRegistry([
+                $app->make(MessageNodeExecutor::class),
+                $app->make(ButtonsNodeExecutor::class),
+                $app->make(QuestionNodeExecutor::class),
+                $app->make(ConditionNodeExecutor::class),
+                $app->make(DelayNodeExecutor::class),
+                $app->make(TagNodeExecutor::class),
+                $app->make(WebhookNodeExecutor::class),
+                $app->make(HumanNodeExecutor::class),
+                $app->make(EndNodeExecutor::class),
+            ]);
         });
     }
 

@@ -157,44 +157,104 @@ created_at / updated_at
 - El detalle de error de un envío (error_code/error_message del proveedor, intentos) vive en
   `message_send_attempts`, no en `messages`.
 
-### `flow_nodes`
+### `chatbots` / `flows` / `triggers` / `flow_nodes` / `flow_connections` / `flow_executions` / `flow_execution_logs` (FASE 11, ADR-034)
+
 ```
-id uuid PK
-tenant_id FK
-flow_id FK → flows
-type enum(message, buttons, question, condition, delay, tag, webhook, ai, human, end)
-name varchar(255)
-position_x / position_y int → editor Vue Flow
-config JSONB → contenido específico del nodo (texto, botones, condición, prompt IA, ...)
-is_start boolean → único nodo de entrada
+chatbots
+  id uuid PK
+  tenant_id FK → tenants (cascadeOnDelete)
+  name varchar(255)
+  description text nullable
+  created_at / updated_at / deleted_at (soft delete)
+  índice (tenant_id, created_at)
+```
+
+```
+flows                                   → la fila ES la versión (ADR-036; sin flow_versions)
+  id uuid PK
+  tenant_id FK → tenants (cascadeOnDelete)
+  chatbot_id FK → chatbots (cascadeOnDelete)
+  name varchar(255)
+  description text nullable
+  status varchar(20) default 'draft'     → draft/published/inactive (máquina de estados)
+  config JSONB nullable
+  created_at / updated_at / deleted_at (soft delete)
+  índices (tenant_id, status) y (chatbot_id)
+```
+
+```
+triggers
+  id uuid PK
+  tenant_id FK → tenants (cascadeOnDelete)
+  flow_id FK → flows (cascadeOnDelete)
+  type varchar(20)      → keyword/new_message/start implementados (FASE 11); tag/schedule/webhook registrados (FASE 14)
+  keyword varchar(255) nullable          → requerido si type=keyword
+  config JSONB nullable                  → p. ej. cron para schedule
+  priority int default 0                 → desempate entre triggers del mismo tipo
+  active boolean default true
+  índices (flow_id) y (tenant_id, type, active)
+```
+
+```
+flow_nodes
+  id uuid PK
+  tenant_id FK → tenants (cascadeOnDelete)
+  flow_id FK → flows (cascadeOnDelete)
+  type varchar(20)      → message, buttons, question, condition, delay, tag, webhook, human, end
+                          (ai registrado pero BLOQUEADO hasta FASE 16)
+  name varchar(255)
+  position_x / position_y int default 0  → editor Vue Flow (FASE 12)
+  config JSONB nullable                  → contenido específico del nodo (texto, botones, condición, prompt, ...)
+  is_start boolean default false         → único nodo de entrada (el inicio es un nodo REAL; no existe tipo "start")
+  created_at / updated_at
+  índices (flow_id) y (tenant_id, flow_id)
 ```
 
 Constraint: UNIQUE `(flow_id)` WHERE `is_start` → un solo nodo de entrada por flujo.
 
-### `flow_connections`
 ```
-id uuid PK
-tenant_id FK
-flow_id FK
-source_node_id FK → flow_nodes
-target_node_id FK → flow_nodes
-label varchar nullable → condición/resultado de rama
+flow_connections
+  id uuid PK
+  tenant_id FK → tenants (cascadeOnDelete)
+  flow_id FK → flows (cascadeOnDelete)
+  source_node_id FK → flow_nodes (cascadeOnDelete)
+  target_node_id FK → flow_nodes (cascadeOnDelete)
+  label varchar(255) nullable            → condición/resultado de rama
+  created_at / updated_at
+  índices (flow_id), (source_node_id) y (target_node_id)
 ```
 
-### `flow_executions`
 ```
-id uuid PK
-tenant_id FK
-flow_id FK
-conversation_id FK
-current_node_id FK nullable
-status enum(running, waiting, completed, failed, handed_off)
-variables JSONB
-attempts int → reintentos ante fallo
+flow_executions
+  id uuid PK
+  tenant_id FK → tenants (cascadeOnDelete)
+  flow_id FK → flows (cascadeOnDelete)
+  conversation_id FK → conversations (cascadeOnDelete)  → la ejecución activa se enlaza también en conversations.flow_execution_id (FK real, FASE 11)
+  current_node_id FK → flow_nodes nullable              → nodo en curso (null al terminar)
+  status varchar(20) default 'running'                  → running/waiting/completed/failed/handed_off
+  variables JSONB default '{}'                          → respuestas de question + {{custom.*}}
+  attempts int default 0                                → reintentos ante fallo
+  last_inbound_message_id FK → messages nullable        → barrera de idempotencia del motor (un inbound nunca avanza dos veces)
+  created_at / updated_at
+  índices (flow_id) y (status, created_at)
 ```
 
 Constraint: UNIQUE parcial `(tenant_id, conversation_id) WHERE status IN ('running','waiting')`
-→ una sola ejecución activa por conversación (evita doble ejecución).
+→ una sola ejecución activa por conversación (evita doble ejecución; barrera de concurrencia a
+nivel de DB, junto al lock Redis y el CAS de avance del motor, ADR-037).
+
+```
+flow_execution_logs
+  id uuid PK
+  tenant_id FK → tenants (cascadeOnDelete)
+  execution_id FK → flow_executions (cascadeOnDelete)
+  node_id FK → flow_nodes nullable
+  event varchar(50)      → step/advance/finish/error/...
+  payload JSONB nullable → traza por paso (debug + auditoría)
+  sequence int default 0 → orden dentro de la ejecución
+  created_at
+  índices (execution_id, sequence) y (execution_id, created_at)
+```
 
 ### `knowledge_chunks`
 ```

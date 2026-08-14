@@ -64,4 +64,31 @@ final class TenantContext
         self::$tenant = null;
         self::$tenantId = null;
     }
+
+    /**
+     * Ejecuta un callback bajo un contexto de tenant sin pisar un contexto ya
+     * activo.
+     *
+     * Los servicios de aplicación que crean modelos tenant (p. ej.
+     * `createOutbound`) establecen y liberan el contexto localmente. Cuando son
+     * invocados dentro de un contexto mayor (un job tenant-aware o el motor de
+     * flujos), NUNCA deben limpiarlo: este helper solo setea/limpia si no había
+     * contexto previo.
+     */
+    public static function withId(string $tenantId, callable $callback): mixed
+    {
+        $wasBound = self::bound();
+
+        if (! $wasBound) {
+            self::setId($tenantId);
+        }
+
+        try {
+            return $callback();
+        } finally {
+            if (! $wasBound) {
+                self::clear();
+            }
+        }
+    }
 }

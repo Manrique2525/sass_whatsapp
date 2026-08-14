@@ -6,6 +6,7 @@ namespace App\Domain\Conversations\Models;
 
 use App\Domain\Contacts\Models\Contact;
 use App\Domain\Conversations\Enums\ConversationStatus;
+use App\Domain\Flows\Models\FlowExecution;
 use App\Domain\Messages\Models\Message;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Tenants\Traits\BelongsToTenant;
@@ -119,6 +120,16 @@ final class Conversation extends Model
     public function messages(): HasMany
     {
         return $this->hasMany(Message::class);
+    }
+
+    /**
+     * Ejecución de flujo activa de la conversación (FASE 11).
+     *
+     * @return BelongsTo<FlowExecution, $this>
+     */
+    public function flowExecution(): BelongsTo
+    {
+        return $this->belongsTo(FlowExecution::class, 'flow_execution_id');
     }
 
     /**

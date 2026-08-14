@@ -61,6 +61,9 @@ enum TenantPermission: string
 
     case SendMessages = 'messages.send';
 
+    case ViewFlows = 'flows.view';
+    case ManageFlows = 'flows.manage';
+
     /**
      * Todos los permisos de la plataforma (para el seeder).
      *
@@ -90,6 +93,8 @@ enum TenantPermission: string
             self::ManageConversations,
             self::AssignConversations,
             self::SendMessages,
+            self::ViewFlows,
+            self::ManageFlows,
         ];
     }
 
@@ -107,6 +112,8 @@ enum TenantPermission: string
      * - conversations: view para todos (inbox); manage y assign solo owner/admin
      *   (estados, bot, asignación/transferencia a agentes).
      * - messages: send para todos los roles del tenant (responder en el chat).
+     * - flows: view para todos (leer flujos/chatbots/ejecuciones); manage solo
+     *   owner/admin (crear/editar/publicar/desactivar flujos y triggers).
      *
      * @return list<TenantPermission>
      */
@@ -133,6 +140,8 @@ enum TenantPermission: string
                 self::ManageConversations,
                 self::AssignConversations,
                 self::SendMessages,
+                self::ViewFlows,
+                self::ManageFlows,
             ],
             UserRole::Agent => [
                 self::ViewTenants,
@@ -141,6 +150,7 @@ enum TenantPermission: string
                 self::ViewContacts,
                 self::ViewConversations,
                 self::SendMessages,
+                self::ViewFlows,
             ],
             // super_admin es rol global de plataforma (spatie, sin team):
             // no obtiene permisos de tenant, se autoriza aparte.

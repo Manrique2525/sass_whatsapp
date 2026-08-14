@@ -6,13 +6,17 @@ use App\Domain\Tenants\Models\Tenant;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\PasswordController;
 use App\Http\Controllers\Api\V1\BusinessProfileController;
+use App\Http\Controllers\Api\V1\ChatbotController;
 use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\ConversationController;
+use App\Http\Controllers\Api\V1\FlowController;
+use App\Http\Controllers\Api\V1\FlowExecutionController;
 use App\Http\Controllers\Api\V1\InvitationController;
 use App\Http\Controllers\Api\V1\MemberController;
 use App\Http\Controllers\Api\V1\MemberInvitationController;
 use App\Http\Controllers\Api\V1\MessagesController;
 use App\Http\Controllers\Api\V1\TenantController;
+use App\Http\Controllers\Api\V1\TriggerController;
 use App\Http\Controllers\Api\V1\WhatsAppController;
 use App\Http\Controllers\Api\Webhooks\WhatsAppWebhookController;
 use Illuminate\Support\Facades\Route;
@@ -101,6 +105,35 @@ Route::prefix('v1')->group(function (): void {
                 // FASE 10 — historial y envío de mensajes (inbox chat).
                 Route::get('{tenant}/conversations/{conversation}/messages', [MessagesController::class, 'index']);
                 Route::post('{tenant}/conversations/{conversation}/messages', [MessagesController::class, 'store']);
+
+                // FASE 11 — chatbots, flujos y triggers.
+                Route::get('{tenant}/chatbots', [ChatbotController::class, 'index']);
+                Route::post('{tenant}/chatbots', [ChatbotController::class, 'store']);
+                Route::get('{tenant}/chatbots/{chatbot}', [ChatbotController::class, 'show']);
+                Route::patch('{tenant}/chatbots/{chatbot}', [ChatbotController::class, 'update']);
+                Route::delete('{tenant}/chatbots/{chatbot}', [ChatbotController::class, 'destroy']);
+
+                Route::get('{tenant}/chatbots/{chatbot}/flows', [FlowController::class, 'index']);
+                Route::post('{tenant}/chatbots/{chatbot}/flows', [FlowController::class, 'store']);
+                Route::get('{tenant}/flows/{flow}', [FlowController::class, 'show']);
+                Route::patch('{tenant}/flows/{flow}', [FlowController::class, 'update']);
+                Route::put('{tenant}/flows/{flow}/draft', [FlowController::class, 'replaceDraft']);
+                Route::get('{tenant}/flows/{flow}/validate', [FlowController::class, 'validate']);
+                Route::post('{tenant}/flows/{flow}/publish', [FlowController::class, 'publish']);
+                Route::post('{tenant}/flows/{flow}/deactivate', [FlowController::class, 'deactivate']);
+                Route::delete('{tenant}/flows/{flow}', [FlowController::class, 'destroy']);
+
+                Route::get('{tenant}/flows/{flow}/triggers', [TriggerController::class, 'index']);
+                Route::post('{tenant}/flows/{flow}/triggers', [TriggerController::class, 'store']);
+                Route::patch('{tenant}/flows/{flow}/triggers/{trigger}', [TriggerController::class, 'update']);
+                Route::delete('{tenant}/flows/{flow}/triggers/{trigger}', [TriggerController::class, 'destroy']);
+
+                // Ejecuciones de flujos (por tenant; filtros por flow/chatbot).
+                Route::get('{tenant}/flow-executions', [FlowExecutionController::class, 'index']);
+                Route::get('{tenant}/flow-executions/{execution}', [FlowExecutionController::class, 'show']);
+                Route::post('{tenant}/flow-executions/{execution}/pause', [FlowExecutionController::class, 'pause']);
+                Route::post('{tenant}/flow-executions/{execution}/resume', [FlowExecutionController::class, 'resume']);
+                Route::post('{tenant}/flow-executions/{execution}/cancel', [FlowExecutionController::class, 'cancel']);
             });
         });
     });

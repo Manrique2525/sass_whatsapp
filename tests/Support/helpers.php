@@ -2,8 +2,20 @@
 
 declare(strict_types=1);
 
+use App\Application\Flows\Services\FlowEngine;
+use App\Application\Messages\Services\MessageService;
 use App\Domain\Contacts\Models\Contact;
 use App\Domain\Conversations\Models\Conversation;
+use App\Domain\Flows\Enums\FlowExecutionStatus;
+use App\Domain\Flows\Enums\FlowStatus;
+use App\Domain\Flows\Enums\FlowTriggerType;
+use App\Domain\Flows\Models\Chatbot;
+use App\Domain\Flows\Models\Flow;
+use App\Domain\Flows\Models\FlowConnection;
+use App\Domain\Flows\Models\FlowExecution;
+use App\Domain\Flows\Models\FlowNode;
+use App\Domain\Flows\Models\Trigger;
+use App\Domain\Messages\Models\Message;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Models\User;
 use App\Domain\Users\Notifications\InvitationNotification;
@@ -143,6 +155,177 @@ function make_tenant_member(User $user, Tenant $tenant, string $role): void
     ]);
 
     $user->forceFill(['current_tenant_id' => $tenant->id])->save();
+}
+
+/**
+ * Crea un chatbot del tenant con el TenantContext activo.
+ */
+function make_chatbot(Tenant $tenant, array $attributes = []): Chatbot
+{
+    TenantContext::setId($tenant->id);
+
+    try {
+        return Chatbot::query()->create(array_merge([
+            'name' => 'Chatbot '.substr((string) Str::uuid(), 0, 8),
+        ], $attributes));
+    } finally {
+        TenantContext::clear();
+    }
+}
+
+/**
+ * Crea un flujo (draft por defecto) con el TenantContext activo.
+ */
+function make_flow(Tenant $tenant, Chatbot $chatbot, array $attributes = []): Flow
+{
+    TenantContext::setId($tenant->id);
+
+    try {
+        return Flow::query()->create(array_merge([
+            'chatbot_id' => $chatbot->id,
+            'name' => 'Flujo '.substr((string) Str::uuid(), 0, 8),
+            'status' => FlowStatus::Draft->value,
+        ], $attributes));
+    } finally {
+        TenantContext::clear();
+    }
+}
+
+/**
+ * Crea el grafo de un flujo (nodos + conexiones) y devuelve el mapa
+ * `id-cliente → FlowNode`. Los ids de los nodos los genera el cliente
+ * (patrón de FASE 11: el grafo llega completo desde el editor).
+ *
+ * @param  array<int, array{id: string, type: string, name?: string, config?: array<string, mixed>, is_start?: bool}>  $nodes
+ * @param  array<int, array{from: string, to: string, label?: string|null}>  $connections
+ * @return array<string, FlowNode>
+ */
+function make_flow_graph(Flow $flow, array $nodes, array $connections): array
+{
+    TenantContext::setId((string) $flow->tenant_id);
+
+    try {
+        $map = [];
+
+        foreach ($nodes as $node) {
+            $model = new FlowNode([
+                'flow_id' => $flow->id,
+                'type' => $node['type'],
+                'name' => $node['name'] ?? $node['id'],
+                'position_x' => 0,
+                'position_y' => 0,
+                'config' => $node['config'] ?? null,
+                'is_start' => (bool) ($node['is_start'] ?? false),
+            ]);
+
+            $model->id = $node['id'];
+            $model->save();
+
+            $map[$node['id']] = $model;
+        }
+
+        foreach ($connections as $connection) {
+            FlowConnection::query()->create([
+                'flow_id' => $flow->id,
+                'source_node_id' => $map[$connection['from']]->id,
+                'target_node_id' => $map[$connection['to']]->id,
+                'label' => $connection['label'] ?? null,
+            ]);
+        }
+
+        return $map;
+    } finally {
+        TenantContext::clear();
+    }
+}
+
+/**
+ * Crea un trigger (start por defecto) con el TenantContext activo.
+ */
+function make_trigger(Flow $flow, array $attributes = []): Trigger
+{
+    TenantContext::setId((string) $flow->tenant_id);
+
+    try {
+        return Trigger::query()->create(array_merge([
+            'flow_id' => $flow->id,
+            'type' => FlowTriggerType::Start->value,
+            'priority' => 0,
+            'active' => true,
+        ], $attributes));
+    } finally {
+        TenantContext::clear();
+    }
+}
+
+/**
+ * Crea una ejecución de flujo activa enlazada a una conversación nueva, con el
+ * TenantContext activo. Para tests de API/aislamiento.
+ */
+function make_flow_execution(Tenant $tenant, Flow $flow, array $attributes = []): FlowExecution
+{
+    TenantContext::setId($tenant->id);
+
+    try {
+        $contact = Contact::query()->create([
+            'name' => 'Contacto '.substr((string) Str::uuid(), 0, 8),
+            'phone' => '1555'.substr(preg_replace('/\D/', '', (string) Str::uuid()), 0, 8),
+        ]);
+
+        $conversation = Conversation::query()->create([
+            'contact_id' => $contact->id,
+            'status' => 'open',
+        ]);
+
+        $startNode = $flow->startNode ?? $flow->nodes()->first();
+
+        $execution = FlowExecution::query()->create(array_merge([
+            'flow_id' => $flow->id,
+            'conversation_id' => $conversation->id,
+            'current_node_id' => $startNode?->id,
+            'status' => FlowExecutionStatus::Running->value,
+            'variables' => ['custom' => []],
+            'attempts' => 0,
+        ], $attributes));
+
+        $conversation->forceFill(['flow_execution_id' => $execution->id])->save();
+
+        return $execution;
+    } finally {
+        TenantContext::clear();
+    }
+}
+
+/**
+ * Persiste un inbound de texto vía `MessageService` (dedupe por
+ * `provider_message_id` aleatorio) y devuelve el mensaje.
+ */
+function make_inbound_message(Tenant $tenant, string $body, string $from = '15550000001'): Message
+{
+    $result = app(MessageService::class)->handleInboundMessage($tenant, [
+        'id' => 'wamid-'.(string) Str::uuid(),
+        'from' => $from,
+        'timestamp' => '1725000000',
+        'type' => 'text',
+        'text' => ['body' => $body],
+    ]);
+
+    return $result->message;
+}
+
+/**
+ * Ejecuta el motor con el TenantContext activo (como en producción lo hacen
+ * los jobs `TenantAwareJob`).
+ */
+function run_flow_engine(Tenant $tenant, Message $message, Conversation $conversation): void
+{
+    TenantContext::setId($tenant->id);
+
+    try {
+        app(FlowEngine::class)->handleMessage($tenant, $message, $conversation);
+    } finally {
+        TenantContext::clear();
+    }
 }
 
 /**

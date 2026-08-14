@@ -75,7 +75,9 @@ test('MSG-2: el mismo provider_message_id no persiste el mensaje dos veces', fun
     $first = $service->handleInboundMessage($tenant, $data);
     $second = $service->handleInboundMessage($tenant, $data);
 
-    expect($first->id)->toBe($second->id)
+    expect($first->created)->toBeTrue()
+        ->and($second->created)->toBeFalse()
+        ->and($first->message->id)->toBe($second->message->id)
         ->and(Message::query()->withoutTenantScope()->where('tenant_id', $tenant->id)->count())->toBe(1);
 });
 
@@ -85,8 +87,8 @@ test('MSG-3: CRITICO — el mismo id de mensaje en dos tenants aísla contact, c
     $service = app(MessageService::class);
     $data = inbound_data('wamid-shared');
 
-    $messageA = $service->handleInboundMessage($tenantA, $data);
-    $messageB = $service->handleInboundMessage($tenantB, $data);
+    $messageA = $service->handleInboundMessage($tenantA, $data)->message;
+    $messageB = $service->handleInboundMessage($tenantB, $data)->message;
 
     expect($messageA->id)->not->toBe($messageB->id);
 
@@ -156,7 +158,7 @@ test('MSG-5: un mensaje de imagen persiste caption, mime, size y metadata media'
         ],
     ];
 
-    $message = $service->handleInboundMessage($tenant, $data);
+    $message = $service->handleInboundMessage($tenant, $data)->message;
 
     expect($message->type)->toBe(MessageType::Image)
         ->and($message->body)->toBe('Foto del producto')
@@ -169,8 +171,8 @@ test('MSG-6: un mensaje sin id o sin from no persiste nada (no-op)', function ()
     $tenant = Tenant::factory()->create();
     $service = app(MessageService::class);
 
-    expect($service->handleInboundMessage($tenant, ['type' => 'text', 'text' => ['body' => 'x']]))->toBeNull()
-        ->and($service->handleInboundMessage($tenant, ['id' => 'wamid-x', 'type' => 'text']))->toBeNull();
+    expect($service->handleInboundMessage($tenant, ['type' => 'text', 'text' => ['body' => 'x']])->message)->toBeNull()
+        ->and($service->handleInboundMessage($tenant, ['id' => 'wamid-x', 'type' => 'text'])->message)->toBeNull();
 
     expect(Message::query()->withoutTenantScope()->where('tenant_id', $tenant->id)->count())->toBe(0);
 });

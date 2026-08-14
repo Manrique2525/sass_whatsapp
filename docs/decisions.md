@@ -604,6 +604,187 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   996 assertions**; frontend 48 tests Vitest (jsdom + @vue/test-utils). El inbox reemplaza la tabla
   de FASE 1 en `Pages/Conversations/Index.vue` (mantiene crear conversación y acciones de FASE 1).
 
+## ADR-034 · Motor de flujos FASE 11: modelo de datos (chatbots → flows → nodos → ejecuciones)
+
+- **Estado**: Aceptado → FASE 11
+- **Contexto**: Automatizar atención en WhatsApp exige un motor genérico interpretado desde
+  datos (no código por negocio). La FASE 0 (docs/chatbot-engine.md) definía el diseño; FASE 11
+  lo concreta con 7 tablas nuevas y una barrera de concurrencia a nivel de DB.
+- **Decisión**:
+  - **`chatbots`**: negocio/número dentro de un tenant (soft delete). Un tenant puede tener N
+    chatbots; cada chatbot agrupa flujos.
+  - **`flows`**: la fila ES la versión (ADR-036): `status` (draft/published/inactive), `config`
+    JSON. **No existe `flow_versions`**: el flujo publicado se ejecuta, los demás no disparan.
+  - **`flow_nodes`**: `type` + `config` JSON + `position_x/y` (editor) + `is_start`. Máximo un
+    nodo de inicio por flujo (validado por `FlowValidator`). El nodo de inicio es un nodo REAL
+    (p. ej. `message`) con `is_start=true`; no existe un tipo `start`.
+  - **`flow_connections`**: arista dirigida `source_node_id → target_node_id` con `label`
+    (resultado de rama para `condition`). FKs con cascade desde `flow_nodes`.
+  - **`triggers`**: `type` (keyword/new_message/start en FASE 11; tag/schedule/webhook
+    registrados para FASE 14), `keyword`, `config`, `priority`, `active`.
+  - **`flow_executions`**: una ejecución activa por conversación. `current_node_id` (null al
+    terminar), `variables` JSON (respuestas de question y `{{custom.*}}`), `attempts`,
+    `last_inbound_message_id` (barrera de idempotencia). **UNIQUE parcial**
+    `(tenant_id, conversation_id) WHERE status IN ('running','waiting')` vía SQL nativo
+    (Laravel 12 no soporta `where()` fluido en índices; precedente FASE 7).
+  - **`flow_execution_logs`**: traza por paso (`event`, `payload`, `sequence`); auditoría y debug.
+  - Todas las tablas tienen `tenant_id` + trait `BelongsToTenant` (multi-tenancy desde el inicio,
+    ADR-003).
+- **Consecuencias**: 7 migraciones (chatbots, flows, flow_nodes, flow_connections, triggers,
+  flow_executions, flow_execution_logs) + FK `conversations.flow_execution_id` (nullable, sin FK
+  hasta FASE 11 — ahora sí se añade la FK real en `000700`). El UNIQUE parcial es la barrera de
+  concurrency a nivel de base de datos; el motor además usa lock Redis + CAS de avance (ADR-037).
+
+## ADR-035 · Motor de flujos FASE 11: nodos como ejecutores + validación previa a publicación
+
+- **Estado**: Aceptado → FASE 11
+- **Contexto**: El motor debe ejecutar 10 tipos de nodo con comportamientos distintos (enviar,
+  ramificar, esperar, pausar, terminar). Mezclar todo en un switch gigante rompe la testabilidad.
+- **Decisión**:
+  - Un **`NodeExecutorInterface` por tipo de nodo**, implementado en
+    `app/Application/Flows/Services/Executors/`: `Message`, `Buttons`, `Question`, `Condition`,
+    `Delay`, `Tag`, `Webhook`, `Human`, `End`. El `NodeExecutorRegistry` los resuelve por
+    `FlowNodeType`. **No existe ejecutor para `ai`** (FASE 16): `FlowValidator` lo rechaza con
+    mensaje explícito; prohibido un ejecutor vacío/falso (regla AGENTS §3).
+  - Cada ejecutor recibe un `NodeExecutionContext` (tenant, nodo, ejecución, conexión, variables)
+    y devuelve un `NodeExecutionResult` (estado siguiente, variables mutadas, mensajes a enviar,
+    rama elegida, espera/continuación). Los mensajes outbound se despachan vía el patrón existente
+    (`MessageService::createOutbound` + job), bajo el mismo lock.
+  - **`FlowValidator`** valida el grafo completo ANTES de publicar: un solo `is_start`, grafo
+    conexo alcanzable, `end` siempre alcanzable, config de cada nodo según su tipo, sin
+    auto-lazos, límites de tamaño. Publicar un flujo inválido → `FlowInvalidException` (422
+    `FLOW_INVALID` con la lista de errores).
+  - Nodos que quedan en espera (`waiting`) tras ejecutarse: `question`, `buttons`, `human`
+    (y `ai` cuando exista). `delay` no queda en waiting: programa `ContinueFlowExecution`.
+  - Variables resueltas por `VariableResolver` (`{{contact.*}}`, `{{custom.*}}`,
+    `{{conversation.*}}`, `{{node.*}}`); `ConditionEvaluator` evalúa las reglas de `condition`;
+    `WebhookUrlGuard` bloquea SSRF (IPs privadas/reservadas, precedente FASE 9).
+- **Consecuencias**: 9 ejecutores + registry + validator + resolver/evaluator/guard. Cada nodo es
+  testeable en aislamiento (unit) y el motor en integración. El coste es un mapeo explícito
+  type→ejecutor; beneficios: añadir nodos nuevos = clase + registro + validación.
+
+## ADR-036 · Motor de flujos FASE 11: borrador, publicación y estados (sin versionado)
+
+- **Estado**: Aceptado → FASE 11
+- **Contexto**: El flujo pasa por edición (borrador) y entra en producción (publicado). La
+  especificación FASE 0 contemplaba `flow_versions`; al no existir el editor visual todavía
+  (FASE 12), un versionado de 1-N complica sin aportar valor real en esta fase.
+- **Decisión**:
+  - **No hay `flow_versions`**: la fila de `flows` es la única versión. Solo el flujo con
+    `status = published` se ejecuta (draft/inactive no disparan). Los triggers apuntan al flujo,
+    no a una versión.
+  - **Borrador atómico**: `PUT /flows/{flow}/draft` reemplaza en una transacción `flow_nodes` +
+    `flow_connections` (`ReplaceDraftRequest` valida la forma; `FlowValidator` valida el grafo).
+    Un reemplazo fallido no deja estado a medias.
+  - **Máquina de estados** (`FlowStatus`): `draft → published` (publicar), `draft → inactive`
+    (descartar), `published → inactive` (desactivar), `published → draft` (volver a editar),
+    `inactive → draft|published` (repúblicar). PATCH con el mismo estado = no-op (200).
+    Transiciones inválidas → `FlowInvalidStateException` (409 `FLOW_INVALID_STATE`).
+  - **Protecciones**: publicar valida el grafo (ADR-035); un flujo publicado NO se edita ni se
+    elimina (409 `FLOW_PUBLISHED`); un chatbot con flujos publicados no se elimina
+    (409 `CHATBOT_HAS_PUBLISHED_FLOWS`); no se puede publicar dos flujos con el mismo trigger
+    genérico (409 `FLOW_ALREADY_PUBLISHED`). Cada mutación se audita (AuditLog).
+  - `GET /flows/{flow}/validate` expone `{valid, errors}` sin mutar nada.
+- **Consecuencias**: modelo simple y auditable; el versionado queda documentado como deuda
+  si el editor (FASE 12) necesita historial. Publicar es transacción: `validate → persist
+  estado → audit` bajo lock del flujo.
+
+## ADR-037 · Motor de flujos FASE 11: ejecución (lock Redis, idempotencia, reanudación)
+
+- **Estado**: Aceptado → FASE 11
+- **Contexto**: Cada conversación es un autómata con una sola ejecución activa. Los webhooks de
+  Meta reenvían eventos duplicados y los delays encolan trabajo diferido: el motor debe ser
+  determinista, reanudable e idempotente, sin ejecuciones paralelas sobre la misma conversación.
+- **Decisión**:
+  - **Punto de entrada único**: `FlowEngine::handleMessage` (mensaje entrante) y
+    `FlowEngine::continueExecution` (continuación programada), ambos bajo el lock Redis
+    `lock:tenant:{id}:flow:{conversation_id}` (`FlowExecutionService::conversationLock`, patrón
+    de bloqueo con heartbeat de FASE 9). Quien crea el lock lo limpia en `finally`.
+  - **Idempotencia**: `last_inbound_message_id` en la ejecución es la barrera del motor — un
+    mismo inbound reprocesado (dedupe de plataforma + re-entrega) jamás avanza la ejecución dos
+    veces. El UNIQUE parcial (ADR-034) garantiza una sola ejecución activa; `start()` crea la
+    ejecución bajo el lock y reintenta el `QueryException` del UNIQUE (precedente ADR-032).
+  - **Ciclo**: avanza nodo a nodo con guard `MAX_STEPS` (anti-loop) y timeout total; cada paso se
+    persiste y se traza en `flow_execution_logs`. Nodos waiting (`question`/`buttons`) dejan la
+    ejecución en `waiting` y guardan el `current_node_id`; el siguiente inbound del cliente
+    reanuda ese nodo (valida la opción, asigna variable) y continúa.
+  - **Delay**: el ejecutor `DelayNodeExecutor` programa `ContinueFlowExecution` con
+    `->forTenant()->mode('delay')->delay(seconds)`; al ejecutarse re-adquiere el lock y avanza.
+  - **Webhook**: fallos transitorios reintentan con backoff (máx 3, backoff [5,15,30] s);
+    fallos permanentes marcan la ejecución `failed`.
+  - **Pause/resume/cancel** (`FlowExecutionService`): solo sobre ejecuciones activas; terminales
+    → 409 `EXECUTION_INVALID_STATE`. `cancel` marca `failed` y desenlaza. `handed_off` (nodo
+    human) pausa el bot (`conversations.bot_paused=true`) hasta que un agente reanude.
+  - El motor **no** crea ni limpia `TenantContext` (lo provee el job `TenantAwareJob`); los
+    servicios internos que necesitan contexto usan `TenantContext::withId()` (fix de contexto
+    anidado, no limpian un contexto ya activo).
+- **Consecuencias**: una sola ejecución activa por conversación garantizada por UNIQUE parcial +
+  lock Redis + barrera de idempotencia. Traza completa por paso en logs. `continueExecution`
+  comparte el mismo pipeline que `handleMessage` (misma lógica de reanudación).
+
+## ADR-038 · Motor de flujos FASE 11: triggers de mensaje (keyword / new_message / start)
+
+- **Estado**: Aceptado → FASE 11
+- **Contexto**: Un inbound sin ejecución activa debe decidir si dispara un flujo y cuál. Los
+  tipos `tag`/`schedule`/`webhook` requieren componentes de fases posteriores (etiquetas FASE 13,
+  scheduler/webhooks FASE 14).
+- **Decisión**:
+  - **FASE 11 implementa solo disparos por mensaje entrante**: `keyword` (texto que contiene la
+    palabra clave, normalizada a minúsculas y sin espacios extra), `new_message` (cualquier
+    mensaje) y `start` (solo el primer mensaje de la conversación). `tag`/`schedule`/`webhook`
+    quedan registrados en el enum sin matcher (no se rompen datos, no se mienten: un trigger de
+    esos tipos no dispara).
+  - **Precedencia** (`TriggerMatcher`): keyword específico antes que genérico; entre
+    `new_message` y `start`, `start` solo dispara en el primer inbound de la conversación.
+    Prioridad `priority` desempata entre triggers del mismo tipo.
+  - **Condiciones**: el trigger debe estar `active`, el flujo debe estar `published`, y el
+    chatbot debe estar operativo. El matcher opera dentro del lock de conversación y del
+    `TenantContext` del job.
+  - Se guarda el `conversation_id` en la ejecución para que la reanudación sea directa; el
+    matcher no se re-evalúa mientras exista ejecución activa.
+- **Consecuencias**: `TriggerMatcher` + `FlowTriggerType::isImplementedInPhaseEleven()`. El
+  matcher es puro y testeable unit. FASE 14 añadirá matchers nuevos sin tocar el pipeline de
+  ejecución (solo el punto de entrada correspondiente: tag assignment, scheduler, webhook).
+
+## ADR-039 · Motor de flujos FASE 11: permisos Flows.*, API REST y frontend read-only
+
+- **Estado**: Aceptado → FASE 11
+- **Contexto**: La plataforma expone los flujos por API REST y por páginas Inertia. Toda
+  autorización debe vivir en el backend (AGENTS §5), con la matriz de roles de la FASE 4 y el
+  aislamiento A/B de la FASE 3.
+- **Decisión**:
+  - **Permisos nuevos** en `TenantPermission`: `flows.view` (todos los roles de tenant:
+    owner/admin/agent) y `flows.manage` (solo owner/admin). El seeder FASE 4 sincroniza los
+    permisos; la matriz se aplica por policy-style checks dentro de los services (404 no-miembro,
+    403 `PERMISSION_DENIED`, 409 tenant inactivo, patrón de FASE 7-10).
+  - **API REST** (`routes/api.php`, grupo `middleware('tenant')`, params de ruta como `string`,
+    sin route-model binding implícito — patrón ADR-030/033):
+    - `chatbots`: GET index (búsqueda + paginación) / POST store (flows.manage) / GET show /
+      PATCH update / DELETE (409 si tiene flujos publicados).
+    - `chatbots/{chatbot}/flows`: GET index (filtro status) / POST store.
+    - `flows/{flow}`: GET show (nodos+conexiones+triggers eager) / PATCH update / DELETE.
+    - `flows/{flow}/draft`: PUT replaceDraft (transacción, validación de forma + grafo).
+    - `flows/{flow}/validate`: GET → `{valid, errors}`.
+    - `flows/{flow}/publish|deactivate`: POST.
+    - `flows/{flow}/triggers`: GET index / POST store; `triggers/{trigger}` PATCH/DELETE (solo en
+      flujos no publicados).
+    - `flow-executions`: GET index (filtros status/flow/chatbot + paginación) / GET show /
+      POST `{execution}/pause|resume|cancel` (flows.manage; 409 `EXECUTION_INVALID_STATE` sobre
+      terminales).
+  - **Errores estándar**: `{message, code, errors}`; códigos: 404 `NOT_FOUND` (recurso o
+    tenant ajeno), 403 `PERMISSION_DENIED`, 409 `TENANT_NOT_ACTIVE` / `FLOW_PUBLISHED` /
+    `FLOW_ALREADY_PUBLISHED` / `FLOW_INVALID_STATE` / `EXECUTION_INVALID_STATE` /
+    `CHATBOT_HAS_PUBLISHED_FLOWS`, 422 `VALIDATION_ERROR` / `FLOW_INVALID`.
+  - **Frontend read-only**: `Pages/Settings/Flows.vue` (link "Flujos" en AppLayout) con
+    chatbots → flujos → detalle (nodos, conexiones, triggers) y estado de cada flujo; carga vía
+    API donde la autorización es real. Types + utils en `features/flows/` (`flowTypes.ts`,
+    `flowUtils.ts` con labels espejo del backend y builders de query) + Vitest.
+  - El endpoint `webhook` de Meta (FASE 6) encola el inbound; el job (FASE 9) llama a
+    `FlowEngine::handleMessage` con el tenant ya en contexto.
+- **Consecuencias**: 4 controllers + 11 form requests + 6 resources + 2 permisos nuevos + 1
+  página Inertia + 1 ruta web. Suite de aislamiento A/B (tenant B jamás ve/edita recursos de A,
+  404) y matriz de permisos por API en FlowApiTest. No existe frontend de edición (FASE 12).
+
 ## Pendientes de decisión
 
 - Proveedor de email en producción (mailpit en dev; SES/Resend/SMTP en prod) → FASE 22.
