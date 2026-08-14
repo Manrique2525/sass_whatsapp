@@ -1,8 +1,9 @@
 # WhatsApp (Meta Cloud API)
 
-Estado: **FASE 6 COMPLETADA** (provider, webhook, conexión y envío). Lo pendiente de diseño
-(media, outbox sweeper, plantillas, contactos/conversaciones/mensajes, rate limits, lock de
-conversación) se detalla abajo con su fase de implementación.
+Estado: **FASE 6 COMPLETADA** (provider, webhook, conexión y envío) y **FASE 7 COMPLETADA**
+(CRM de contactos: el find-or-create por teléfono ya está disponible para los jobs del webhook).
+Lo pendiente de diseño (media, outbox sweeper, plantillas, conversaciones/mensajes, rate limits,
+lock de conversación) se detalla abajo con su fase de implementación.
 
 ## 1. Regla
 
@@ -104,8 +105,9 @@ GET /api/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=...&hub.challenge
 6. Responder `200`. **El request del webhook nunca hace trabajo pesado.**
 
 Los jobs (FASE 6) solo marcan `processed` el evento si sigue `enqueued` + `event_type` + `tenant_id`
-coinciden (idempotencia). **TODO FASE 9**: persistir el mensaje/contacto/conversación y ejecutar el
-motor de flujos (§5).
+coinciden (idempotencia). **FASE 7**: el find-or-create de contacto por teléfono E.164 ya existe
+(`ContactService::findOrCreateForPhone(Tenant, string)`, ADR-030) y se usará en el job.
+**TODO FASE 9**: persistir el mensaje/conversación y ejecutar el motor de flujos (§5).
 
 ### 4.3 Outbox (no perder eventos)
 
@@ -129,8 +131,8 @@ encolado ocurre dentro del mismo request (cola `sync` en tests).
 ProcessIncomingWhatsAppMessage
  ├─ set TenantContext (por tenant_id resuelto en el webhook)  [finally: clear()]
  ├─ localizar whatsapp_phone_number (phone_number_id)
- ├─ find-or-create Contact (tenant + phone E.164)  → dedupe
- ├─ find-or-create Conversation (abierta o nueva)
+ ├─ find-or-create Contact (tenant + phone E.164)  → dedupe  [FASE 7: ContactService::findOrCreateForPhone]
+ ├─ find-or-create Conversation (abierta o nueva)  [FASE 9]
  ├─ persist Message (inbound)
  ├─ marcar contexto de conversación
  ├─ decidir acción (bajo LOCK de conversación, ver §7):
@@ -215,5 +217,6 @@ webhook a registrar en Meta es `https://<dominio>/api/webhooks/whatsapp`.
 - Aislamiento: webhook de un número de B jamás toca datos de A (WHATSAPP-11, CRITICO).
 - Conexión: token cifrado, 401/404 en Meta, 409 sin cuenta, aislamiento A/B (WHATSAPP-15..30).
 - Provider: payload oficial, mapeo de errores retryable/no-retryable, timeout (WHATSAPP-31..40).
-- Pendiente (FASE 9): mensaje entrante crea contact+conversation+message una sola vez; status
-  delivered/read/failed actualiza mensajes; outbox sweeper; lock de conversación; rate limits.
+- Pendiente (FASE 9): mensaje entrante crea conversation+message una sola vez (el contacto ya lo
+  crea `findOrCreateForPhone`); status delivered/read/failed actualiza mensajes; outbox sweeper;
+  lock de conversación; rate limits.

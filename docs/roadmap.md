@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 6 COMPLETADA** (WhatsApp). Solo se trabaja sobre la fase activa.
+Estado general: **FASE 7 COMPLETADA** (Contactos). Solo se trabaja sobre la fase activa.
 
 ## Fases
 
@@ -13,7 +13,7 @@ Estado general: **FASE 6 COMPLETADA** (WhatsApp). Solo se trabaja sobre la fase 
 | 4 | Usuarios y roles (invitaciones, agentes) | COMPLETADA |
 | 5 | Business profile | COMPLETADA |
 | 6 | WhatsApp (webhooks, provider) | COMPLETADA |
-| 7 | Contactos | PENDIENTE |
+| 7 | Contactos | COMPLETADA |
 | 8 | Conversaciones | PENDIENTE |
 | 9 | Mensajes (jobs async) | PENDIENTE |
 | 10 | Bandeja de entrada (UI + Reverb) | PENDIENTE |
@@ -303,3 +303,51 @@ COMPLETADO / BLOQUEADO
 - [x] Documentación: `whatsapp.md`, `api.md` (§3.4 + webhooks), `database.md`, `security.md`,
       `multi-tenancy.md` (aislamiento webhook), `testing.md`, `deployment.md`, `roadmap.md`,
       `decisions.md` (ADR-029)
+
+## Fase 7 — Contactos (CRM básico) (estado)
+
+- [x] Migraciones (3): `contacts` (UUID, `tenant_id` FK `cascadeOnDelete`, `phone` E.164 canónico
+      con `+` y sin separadores, `name`, `email`, `avatar_url` (2048), `metadata` JSON,
+      `provider_contact_id` (preparado para correlación outbound FASE 9), `last_interaction_at`,
+      timestamps, softDeletes, índices `(tenant_id, created_at)` y `(tenant_id, name)` y UNIQUE
+      PARCIAL `(tenant_id, phone) WHERE deleted_at IS NULL` = unicidad por tenant entre activos),
+      `tags` (`(tenant_id, name)` UNIQUE) y `contact_tag` (PK `(contact_id, tag_id)`); tablas de
+      tags preparadas para FASE 20 (sin API/UI)
+- [x] Modelos en `app/Domain/Contacts/Models`: `Contact` (BelongsToTenant + HasUuids + SoftDeletes,
+      casts metadata/last_interaction_at, relación `tags()` N:M) y `Tag`; `Tenant::contacts()`
+      (hasMany)
+- [x] Excepciones de dominio: `ContactDuplicateException` (409, code `CONTACT_DUPLICATE`) y
+      `ContactNotFoundException` (mapeada a 404 por el controller, oculta existencia ADR-010/023)
+- [x] `ContactService` (Application): `normalizePhone()` (E.164 con `+`; espejo del webhook de Meta),
+      index con filtros search/phone/email + paginación, showForUser, create, update (parcial),
+      delete (soft), `findOrCreateForPhone()` sin autorización para jobs del webhook (FASE 9, con
+      backstop de carrera `QueryException` → re-consulta). Guard `assertPhoneUnique` + índice único
+      parcial como backstop. Auditoría `contact.created/updated/deleted`
+- [x] Permisos `contacts.view` (todos los roles) / `contacts.manage` (owner/admin) en la matriz
+      ADR-026 → 17 permisos; seeder actualizado (espejo spatie se alimenta de `all()`)
+- [x] HTTP API `/api/v1/tenants/{tenant}/contacts` (GET/POST) y `/contacts/{contact}`
+      (GET/PATCH/DELETE): index 200 + `meta` de paginación explícito, store 201, update/delete 200,
+      duplicado 409 `CONTACT_DUPLICATE`, 404/403/409 según patrón de fase. `{contact}` se resuelve
+      como `string` (sin route-model binding implícito: `SubstituteBindings` corre antes que el
+      middleware `tenant`) y el servicio filtra SIEMPRE por `tenant_id` autorizado
+- [x] Requests: `ContactIndexRequest` (filtros + `per_page` 1..100), `StoreContactRequest` y
+      `UpdateContactRequest` (phone regex `/^\+?[0-9\s().\-]+$/` + 7–15 dígitos por closure,
+      email/avatar_url/metadata opcionales). `ContactResource` sin `tenant_id`
+- [x] Web: `ContactSettingsController` + ruta `settings/contacts` + nav en `AppLayout`
+- [x] Frontend: `Settings/Contacts.vue` (tabla responsive, filtros search/phone/email, paginación
+      Anterior/Siguiente, modal crear/editar con validación y JSON de metadata, confirmación de
+      borrado, `can('contacts.view')`/`can('contacts.manage')`) y `features/contacts/contactUtils.ts`
+      (funciones puras espejo del backend)
+- [x] Vitest instalado (devDep `vitest@^3`), `vitest.config.ts`, script `npm run test`,
+      `contactUtils.test.ts` (13 tests: normalizePhone, hasValidPhoneDigits, buildContactQuery,
+      extractErrorMessage, parseMetadata)
+- [x] Tests (19 nuevos en FASE 7 → **196 total, 693 assertions**): CONTACT-1..19 (CRUD + 201/409,
+      normalización E.164, validación, soft delete + re-creación, filtros + paginación, aislamiento
+      CRITICO CONTACT-12 A/B, tampering CONTACT-13, matriz permisos CONTACT-14, auditoría
+      CONTACT-15, no-miembro/suspendido/switch, `findOrCreateForPhone` CONTACT-19)
+- [x] Pint + PHPStan (nivel 6, larastan) + `vue-tsc` + `vite build` + `vitest` sin errores
+- [x] Regresión Docker: migraciones aplicadas y revertidas (`migrate`/`rollback`) en postgres sin
+      errores; suite completa verde
+- [x] Documentación: `database.md`, `api.md` (§3.5), `security.md`, `multi-tenancy.md`,
+      `whatsapp.md` (find-or-create FASE 9), `testing.md` (vitest), `architecture.md`, `roadmap.md`,
+      `decisions.md` (ADR-030)

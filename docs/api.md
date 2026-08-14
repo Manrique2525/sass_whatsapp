@@ -76,10 +76,10 @@ Todos los errores de `/api/v1/*` usan `{message, code, errors}`:
 
 Todos los recursos de negocio operan sobre el **tenant activo** del usuario. Las rutas NO llevan
 `{tenantId}` en el path (evita confusión cross-tenant): el tenant lo decide el middleware.
-Excepción: los endpoints de **usuarios/roles** (FASE 4), **business profile** (FASE 5) y
-**WhatsApp** (FASE 6) llevan `{tenant}` en el path por claridad REST, pero el enforcement sigue
-exigiendo que `{tenant}` sea el tenant activo del usuario (otro tenant al que se pertenezca →
-**404**; ver §3.2, §3.3 y §3.4).
+Excepción: los endpoints de **usuarios/roles** (FASE 4), **business profile** (FASE 5),
+**WhatsApp** (FASE 6) y **contactos** (FASE 7) llevan `{tenant}` en el path por claridad REST,
+pero el enforcement sigue exigiendo que `{tenant}` sea el tenant activo del usuario (otro tenant
+al que se pertenezca → **404**; ver §3.2, §3.3, §3.4 y §3.5).
 
 ### 3.1 Tenants (implementado en FASE 3)
 
@@ -115,8 +115,8 @@ tenant **activo** del usuario; otro tenant → **404**; sin permiso → **403** 
 `permissions` (matriz de permisos del rol activo) e `is_super_admin`.
 
 Roles por tenant (matriz ADR-026): `owner` = todos los permisos; `admin` = gestión operativa y de
-agentes (sin `roles.assign`); `agent` = solo lectura (`tenants.view` + `business_profile.view`).
-`super_admin` es global de plataforma (sin permisos de tenant).
+agentes (sin `roles.assign`); `agent` = solo lectura (`tenants.view` + `business_profile.view` +
+`whatsapp.view` + `contacts.view`). `super_admin` es global de plataforma (sin permisos de tenant).
 
 ### 3.3 Business profile (implementado en FASE 5)
 
@@ -140,8 +140,8 @@ pendiente de la fase de storage).
 | Users/Agents | Ver §3.2: `GET/PATCH/DELETE /api/v1/tenants/{tenant}/users`, `GET/POST .../users/invitations`, `POST .../invitations/{id}/revoke|resend`, `GET /api/v1/invitations/{token}`, `POST /api/v1/invitations/{token}/accept` |
 | Business profile | Ver §3.3: `GET/PUT /api/v1/tenants/{tenant}/business-profile` |
 | WhatsApp | Ver §3.4: `GET /api/v1/tenants/{tenant}/whatsapp`, `POST .../connect`, `POST .../disconnect` |
-| Contacts | `GET/POST /api/v1/contacts`, `PATCH/DELETE /api/v1/contacts/{id}`, `POST /api/v1/contacts/import` |
-| Tags | `GET/POST /api/v1/tags`, `PATCH/DELETE /api/v1/tags/{id}` |
+| Contacts | Ver §3.5: `GET/POST /api/v1/tenants/{tenant}/contacts`, `GET/PATCH/DELETE /api/v1/tenants/{tenant}/contacts/{id}` (import pendiente) |
+| Tags | `GET/POST /api/v1/tags`, `PATCH/DELETE /api/v1/tags/{id}` (pendiente, FASE 20) |
 | Conversations | `GET /api/v1/conversations`, `GET/PATCH /api/v1/conversations/{id}`, `POST /api/v1/conversations/{id}/assign`, `POST .../transfer`, `POST .../close`, `POST .../reopen`, `POST .../resume-bot` |
 | Messages | `GET /api/v1/conversations/{id}/messages`, `POST /api/v1/conversations/{id}/messages` (enviar, con `Idempotency-Key`) |
 | Chatbots | `GET/POST /api/v1/chatbots`, `PATCH/DELETE /api/v1/chatbots/{id}` |
@@ -174,6 +174,28 @@ Códigos de error WhatsApp (HTTP + `code`): **401** `WHATSAPP_AUTH_FAILED` (toke
 (sin cuenta), **502** `WHATSAPP_MESSAGE_FAILED` (fallo permanente en envío; `retryable` indica si
 es reintentable). Verificación GET webhook: 403 `WHATSAPP_WEBHOOK_INVALID`; firma POST: 401
 `WHATSAPP_SIGNATURE_INVALID`.
+
+### 3.5 Contactos (implementado en FASE 7)
+
+CRM básico. Mismas reglas de enforcement que §3.2–§3.4: `{tenant}` debe ser el **activo**; otro
+tenant → **404**; sin permiso → **403** `PERMISSION_DENIED`. El `{contact}` del path se resuelve
+por el servicio filtrando SIEMPRE por `tenant_id` autorizado (sin route-model binding implícito:
+`SubstituteBindings` corre antes que el middleware `tenant`); contacto de otro tenant o inexistente
+→ **404** (oculta existencia, ADR-010/023). El `tenant_id` nunca se acepta del frontend.
+
+| Método | Ruta | Permiso | Descripción |
+|---|---|---|---|
+| GET | `/api/v1/tenants/{tenant}/contacts` | `contacts.view` (todos los roles) | Listado paginado + filtros. Query: `search` (nombre/teléfono/email, parcial), `phone` (prefijo, se normaliza a E.164), `email` (parcial), `page`, `per_page` (1..100). Respuesta: `{contacts: ContactResource[], meta: {current_page, last_page, per_page, total}}` |
+| POST | `/api/v1/tenants/{tenant}/contacts` | `contacts.manage` (owner/admin) | Crea → **201**. Body: `{name*, phone*, email?, avatar_url?, metadata?, provider_contact_id?}`. `phone` libre (`+`, dígitos, espacios, `().-`) con **7–15 dígitos**; se normaliza a E.164 con `+`. Duplicado activo → **409** `CONTACT_DUPLICATE`. Audita `contact.created` |
+| GET | `/api/v1/tenants/{tenant}/contacts/{contact}` | `contacts.view` | Detalle del contacto. 404 si no existe/no es del tenant |
+| PATCH | `/api/v1/tenants/{tenant}/contacts/{contact}` | `contacts.manage` | Actualización **parcial** (mismos campos que store, todos opcionales). `phone` se normaliza y valida unicidad → **409** `CONTACT_DUPLICATE`. Audita `contact.updated` |
+| DELETE | `/api/v1/tenants/{tenant}/contacts/{contact}` | `contacts.manage` | **Soft delete**: libera el teléfono (índice único parcial) y permite re-crear el contacto. Las filas de `contact_tag` se conservan (sin cascade hasta el borrado físico). Audita `contact.deleted` |
+
+`ContactResource`: `{id, phone, name, email, avatar_url, metadata, provider_contact_id,
+last_interaction_at, created_at, updated_at}` (jamás incluye `tenant_id`).
+
+`provider_contact_id` se rellena en FASE 9 (correlación outbound con el `wa_id` de Meta);
+`findOrCreateForPhone` (uso interno, sin auth) ya está disponible para los jobs del webhook.
 
 ## 4. Webhooks (sin auth Bearer; autenticados por firma y dedupe)
 

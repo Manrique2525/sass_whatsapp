@@ -127,6 +127,31 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - **DoS**: los payloads de webhook se procesan en la cola (nunca trabajo pesado en el request);
   eventos desconocidos/malformados responden 200 (Meta no reintenta en bucle).
 
+### Contactos (FASE 7)
+- **Autorización**: `contacts.view` (todos los roles del tenant) y `contacts.manage`
+  (owner/admin: crear, editar, eliminar) en la matriz ADR-026 (→ 17 permisos). Agent → solo
+  lectura; cualquier mutación → 403 `PERMISSION_DENIED`.
+- **Aislamiento**: `contacts`/`tags` usan `BelongsToTenant` (scope global + forzado de
+  `tenant_id` por `TenantContext`). El `tenant_id` no es fillable ni tiene regla de validación:
+  un `tenant_id` enviado en el body se ignora (test CONTACT-13). El `{contact}` del path se
+  resuelve SIN route-model binding implícito (evita el bug de orden `SubstituteBindings` →
+  `tenant`): el servicio filtra SIEMPRE por `tenant_id` del tenant autorizado; contacto ajeno o
+  inexistente → **404** (no revela existencia, ADR-010/023; test CRITICO CONTACT-12).
+- **Normalización de teléfono**: `ContactService::normalizePhone` convierte a E.164 canónico con
+  `+` y solo dígitos; la unicidad se protege en DB con índice único **parcial**
+  `(tenant_id, phone) WHERE deleted_at IS NULL` y en app con `assertPhoneUnique` (backstop ante
+  carreras). Duplicado activo → 409 `CONTACT_DUPLICATE`. Un contacto soft-deleted libera el
+  teléfono (se puede re-crear).
+- **Validación (backend)**: `StoreContactRequest`/`UpdateContactRequest` validan `phone`
+  (regex `/^\+?[0-9\s().\-]+$/` + **7–15 dígitos** por closure), `name` (255), `email`,
+  `avatar_url` (URL máx 2048), `metadata` (JSON). `ContactIndexRequest` acota `per_page` a 100.
+- **Uso interno sin auth**: `findOrCreateForPhone` (FASE 9) busca fuera del scope pero SIEMPRE
+  filtrando por `tenant_id`; setea y libera `TenantContext` en `finally` (sin contaminación
+  entre jobs). Ante una carrera (`QueryException` por el índice único) re-consulta; si sigue sin
+  existir, relanza (no traga excepciones).
+- **Auditoría FASE 7**: `contact.created`, `contact.updated` (con `changed`), `contact.deleted`
+  (con `phone`).
+
 ### Inyección SQL
 - Eloquent/Query Builder con bindings. Sin concatenación de SQL.
 - `phpstan` + revisión en code review.

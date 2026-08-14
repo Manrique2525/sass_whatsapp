@@ -56,6 +56,23 @@ Pirámide de tests con prioridad en lo crítico:
   (`graph.facebook.com/*/phone-1*`); los `Http::fake` se registran en UNA sola llamada (los
   callbacks se acumulan, no se reemplazan).
 
+### Contactos (FASE 7, 19 tests CONTACT-1..19 + 13 vitest en `contactUtils.test.ts`)
+- CRUD por rol: agent no crea/edita/borra (403 `PERMISSION_DENIED`), owner/admin sí (`CONTACT-2/7/14`).
+- Validación backend: teléfono inválido (<7 o >15 dígitos, caracteres raros) → 422 (`CONTACT-4`);
+  nombre/email/metadata/avatar validados (`CONTACT-16`).
+- **Normalización E.164**: `'+54 9 1155 5554-444'` → `+5491155554444`; email parcial
+  (`?email=carla`) filtra (`CONTACT-3/9`); dedupe activo → 409 `CONTACT_DUPLICATE` (`CONTACT-6`);
+  soft delete libera el teléfono para re-crear (`CONTACT-11`); `provider_contact_id` único
+  (`CONTACT-18`).
+- **Aislamiento CRITICO**: Tenant A jamás lee/modifica/elimina contactos de B (404 y B intacto,
+  `CONTACT-12`); `tenant_id` del body ignorado (`CONTACT-13`).
+- `findOrCreateForPhone`: crea bajo el tenant indicado y devuelve el existente (idempotente);
+  libera `TenantContext` en `finally` (`CONTACT-19`).
+- Auditoría `contact.created/updated/deleted` con `changed` (`CONTACT-15`).
+- Paginación con `meta` explícito (`CONTACT-10`); 404 en contacto inexistente/ajeno (`CONTACT-8`).
+- Frontend (Vitest): `normalizePhone`, `hasValidPhoneDigits`, `buildContactQuery`,
+  `extractErrorMessage`, `parseMetadata`.
+
 ### Chatbot engine (crítico)
 - Secuencia lineal, ramas condition, question→variable, delay, human, end.
 - Loop detection / límite de pasos.

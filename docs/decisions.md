@@ -415,6 +415,46 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   `Illuminate\Foundation\Bus\Queueable`/`Illuminate\Queue\Queueable` no existe en esta versión de
   Laravel (se usa solo Dispatchable/InteractsWithQueue/SerializesModels + TenantAwareJob).
 
+## ADR-030 · Contactos FASE 7: CRM básico con teléfono E.164 y soft delete
+
+- **Estado**: Aceptado · FASE 7
+- **Contexto**: El roadmap pide un CRM mínimo (contactos) antes del inbox (FASE 9). El usuario
+  solicitó `GET /api/v1/contacts`, pero la convención establecida desde FASE 4 es
+  `/api/v1/tenants/{tenant}/contacts` (enforcement del tenant activo), por lo que se adoptó esa
+  forma y se flagueó en el reporte de fase.
+- **Decisión**:
+  - **Tablas**: `contacts` (UUID PK, `tenant_id` FK `cascadeOnDelete`, `phone` E.164 máx 40,
+    `name`, `email`, `avatar_url` máx 2048, `metadata` JSON, `provider_contact_id`,
+    `last_interaction_at`, soft deletes), `tags` (`tenant_id` + `name` UNIQUE) y pivot
+    `contact_tag` (PK compuesta, FKs cascade) para FASE 20. `Tenant::contacts()` (hasMany).
+  - **Unicidad por tenant con soft delete**: índice UNIQUE **parcial**
+    `(tenant_id, phone) WHERE deleted_at IS NULL` (soportado en postgres y sqlite). Un contacto
+    borrado libera el teléfono; los duplicados activos se rechazan con 409 `CONTACT_DUPLICATE`
+    (guard `assertPhoneUnique` + backstop `QueryException` en `findOrCreateForPhone` ante carreras).
+  - **Normalización E.164**: `ContactService::normalizePhone` (dígitos + `+`). Validación backend:
+    regex `/^\+?[0-9\s().\-]+$/` + 7–15 dígitos. Espejo TS `normalizePhone` en frontend. Un
+    teléfono vacío se guarda como `'Desconocido'` como nombre por defecto.
+  - **Sin route-model binding implícito**: `SubstituteBindings` corre antes que el middleware
+    `tenant`, así que los controllers reciben `string $contact` y el servicio resuelve con
+    `withoutTenantScope()->where('tenant_id', $tenant->id)->whereKey($id)`. Contacto ajeno o
+    inexistente → 404 (ADR-010/023, test CRITICO CONTACT-12). El `tenant_id` del body se ignora
+    (no fillable, sin regla de validación; CONTACT-13).
+  - **Permisos** en la matriz ADR-026: `contacts.view` (todos los roles, incl. agent) y
+    `contacts.manage` (owner/admin) → **17 permisos**; `TenantPermission::all()` alimenta el
+    seeder automáticamente.
+  - **Paginación**: el index devuelve `{contacts, meta:{current_page,last_page,per_page,total}}`
+    (envolver `AnonymousResourceCollection` en un array pierde el meta).
+  - **`findOrCreateForPhone(Tenant, string)`**: preparado para los jobs del webhook (FASE 9).
+    Consulta sin scope pero SIEMPRE filtrando `tenant_id`; setea `TenantContext` solo alrededor
+    del create y lo libera en `finally` (sin contaminar el contexto del job).
+  - **Auditoría**: `contact.created`, `contact.updated` (con `changed`), `contact.deleted` (con
+    `phone`).
+- **Consecuencias**: 3 migraciones; 19 tests backend CONTACT-1..19 + 13 tests Vitest
+  (`resources/js/features/contacts/contactUtils.test.ts`, vitest@^3) → suite 196 tests / 693
+  assertions; el frontend (`Settings/Contacts.vue`) usa `can('contacts.view'/'contacts.manage')`
+  y `usePage().props.auth.can` (la matriz es la fuente de verdad). Tests en SQLite in-memory: el
+  filtro de email usa `like` (no `ilike`, solo postgres).
+
 ## Pendientes de decisión
 
 - Proveedor de email en producción (mailpit en dev; SES/Resend/SMTP en prod) → FASE 22.

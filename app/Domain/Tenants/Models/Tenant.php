@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Tenants\Models;
 
 use App\Domain\Business\Models\BusinessProfile;
+use App\Domain\Contacts\Models\Contact;
 use App\Domain\Tenants\Enums\TenantStatus;
 use App\Domain\Users\Models\TenantUser;
 use App\Domain\Users\Models\User;
@@ -115,5 +116,15 @@ class Tenant extends Model
     public function whatsappPhoneNumbers(): HasMany
     {
         return $this->hasMany(WhatsAppPhoneNumber::class);
+    }
+
+    /**
+     * Contactos del CRM básico (FASE 7, ADR-030).
+     *
+     * @return HasMany<Contact, $this>
+     */
+    public function contacts(): HasMany
+    {
+        return $this->hasMany(Contact::class);
     }
 }

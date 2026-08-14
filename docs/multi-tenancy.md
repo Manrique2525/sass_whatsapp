@@ -1,7 +1,7 @@
 # Multi-tenancy
 
-Estado: **implementado en FASE 3 + FASE 4 + FASE 5 + FASE 6**. Este documento describe el diseño y cómo
-quedó materializado en código (rutas, clases y semántica HTTP reales).
+Estado: **implementado en FASE 3 + FASE 4 + FASE 5 + FASE 6 + FASE 7**. Este documento describe el
+diseño y cómo quedó materializado en código (rutas, clases y semántica HTTP reales).
 
 ## 1. Estrategia
 
@@ -33,9 +33,15 @@ y tiene un **tenant activo** seleccionable:
 - `whatsapp_accounts` / `whatsapp_phone_numbers` / `message_send_attempts` (FASE 6, ADR-029):
   modelos con trait `BelongsToTenant` en `app/Domain/WhatsApp/Models`. Una cuenta por tenant con
   el `access_token` cifrado; `whatsapp_phone_numbers.phone_id` (id de Meta) es la **clave de
-  resolución del webhook**. `webhook_events` es tabla de **plataforma** (sin scope): un evento de
+  resolución del webhook**.   `webhook_events` es tabla de **plataforma** (sin scope): un evento de
   Meta es único a nivel global y llega sin tenant resuelto; el `tenant_id` se rellena al
   resolver el `metadata.phone_number_id`.
+- `contacts` / `tags` / `contact_tag` (FASE 7, ADR-030): `contacts` con trait `BelongsToTenant`
+  (scope + forzado de `tenant_id`) y **soft delete**. La unicidad del teléfono es por tenant y
+  solo entre contactos activos (índice UNIQUE parcial `(tenant_id, phone) WHERE deleted_at IS
+  NULL`): un contacto borrado libera el número. `Tenant::contacts()` (hasMany). `findOrCreateForPhone`
+  (uso interno de los jobs del webhook, FASE 9) busca fuera del scope pero SIEMPRE filtrando por
+  `tenant_id` del tenant resuelto.
 - Roles por tenant: se implementa con **spatie/laravel-permission en modo `teams`**
   (`team_id = tenant_id`). Así `owner/admin/agent` se asignan por tenant. `super_admin` es un
   rol global de plataforma (sin team). Ver ADR-012, ADR-018 y ADR-025 (migración de
@@ -44,8 +50,9 @@ y tiene un **tenant activo** seleccionable:
   `TenantContext::id()` → `users.current_tenant_id` → `null` (roles globales).
 - La autorización por tenant (FASE 4, ADR-026) exige SIEMPRE tres condiciones:
   `current_tenant_id == tenant` (tenant activo) + `tenant_users.status = active` + permiso en la
-  matriz de código   `TenantPermission::permissionsForRole(rol)` (15 permisos; FASE 5 añade
-  `business_profile.view/update`; FASE 6 añade `whatsapp.view`/`whatsapp.manage`). Sin membresía
+  matriz de código   `TenantPermission::permissionsForRole(rol)` (17 permisos; FASE 5 añade
+  `business_profile.view/update`; FASE 6 añade `whatsapp.view`/`whatsapp.manage`; FASE 7 añade
+  `contacts.view`/`contacts.manage`). Sin membresía
   o inactivo → **404**; sin permiso → **403**
   `PERMISSION_DENIED`. Los roles spatie se mantienen como espejo de `tenant_users.role` vía
   `TenantRoleManager` (`syncRoles` reemplaza, nunca suma).
@@ -194,6 +201,15 @@ Nunca se acepta `tenant_id` desde el request (se ignora o se rechaza — test
   tenant por `phone_id` sin contexto; los jobs `ProcessIncomingWhatsAppMessage` /
   `ProcessWhatsAppStatusUpdate` usan `TenantAwareJob` con el tenant resuelto (aislamiento
   garantizado por diseño).
+- **Contactos (FASE 7)**: `contacts`/`tags` con trait `BelongsToTenant`; los endpoints
+  `/tenants/{tenant}/contacts*` exigen `{tenant}` activo (otro → 404) y permiso
+  `contacts.view` (lectura) / `contacts.manage` (owner/admin). El `{contact}` del path NO usa
+  route-model binding implícito (el middleware `SubstituteBindings` corre antes que `tenant`):
+  el servicio resuelve el contacto con `withoutTenantScope()` pero filtrando SIEMPRE por
+  `tenant_id` del tenant autorizado → contacto ajeno o inexistente → **404** (no revela
+  existencia; CONTACT-12 CRITICO). El `tenant_id` del body se ignora (CONTACT-13).
+  `findOrCreateForPhone` (webhook, FASE 9) consulta sin scope con filtro por `tenant_id` y setea
+  `TenantContext` solo alrededor del create, liberándolo en `finally` (no contamina jobs).
 
 ## 5. Aislamiento en colas, eventos y notificaciones
 
@@ -257,6 +273,10 @@ tenant distinto del propietario:
 12. (FASE 5) Tenant A NO lee ni modifica el perfil de negocio de Tenant B: 404 en GET y PUT, y el
     perfil de B queda intacto (`BP-6`, CRITICO). El `tenant_id` enviado en el body es ignorado
     (`BP-8`).
-13. (FASE 6) El webhook de un número del tenant B jamás escribe en datos del tenant A: resuelve el
+ 13. (FASE 6) El webhook de un número del tenant B jamás escribe en datos del tenant A: resuelve el
     tenant por `phone_id` y encola un job con `forTenant(B)` (`WHATSAPP-11`, CRITICO); Tenant A no
     ve ni desconecta la cuenta de B (404 en GET/POST, `WHATSAPP-20`).
+14. (FASE 7) Tenant A jamás lee, modifica ni elimina contactos de Tenant B: 404 en
+    GET/PATCH/DELETE y el contacto de B queda intacto (`CONTACT-12`, CRITICO). El `tenant_id`
+    enviado en el body se ignora (`CONTACT-13`). `findOrCreateForPhone` crea/consulta siempre bajo
+    el tenant indicado y deja el contexto limpio (`CONTACT-19`).

@@ -6,6 +6,7 @@ use App\Domain\Tenants\Models\Tenant;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\PasswordController;
 use App\Http\Controllers\Api\V1\BusinessProfileController;
+use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\InvitationController;
 use App\Http\Controllers\Api\V1\MemberController;
 use App\Http\Controllers\Api\V1\MemberInvitationController;
@@ -75,6 +76,13 @@ Route::prefix('v1')->group(function (): void {
                 Route::get('{tenant}/whatsapp', [WhatsAppController::class, 'show']);
                 Route::post('{tenant}/whatsapp/connect', [WhatsAppController::class, 'connect']);
                 Route::post('{tenant}/whatsapp/disconnect', [WhatsAppController::class, 'disconnect']);
+
+                // FASE 7 — CRM de contactos.
+                Route::get('{tenant}/contacts', [ContactController::class, 'index']);
+                Route::post('{tenant}/contacts', [ContactController::class, 'store']);
+                Route::get('{tenant}/contacts/{contact}', [ContactController::class, 'show']);
+                Route::patch('{tenant}/contacts/{contact}', [ContactController::class, 'update']);
+                Route::delete('{tenant}/contacts/{contact}', [ContactController::class, 'destroy']);
             });
         });
     });

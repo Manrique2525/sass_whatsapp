@@ -13,6 +13,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\Invitations\InvitationWebController;
 use App\Http\Controllers\Settings\BusinessProfileSettingsController;
+use App\Http\Controllers\Settings\ContactSettingsController;
 use App\Http\Controllers\Settings\UserSettingsController;
 use App\Http\Controllers\Settings\WhatsAppSettingsController;
 use Illuminate\Support\Facades\Route;
@@ -72,4 +73,8 @@ Route::middleware('auth')->group(function (): void {
     Route::get('settings/whatsapp', [WhatsAppSettingsController::class, 'show'])
         ->middleware(['verified', 'tenant'])
         ->name('settings.whatsapp');
+
+    Route::get('settings/contacts', [ContactSettingsController::class, 'show'])
+        ->middleware(['verified', 'tenant'])
+        ->name('settings.contacts');
 });

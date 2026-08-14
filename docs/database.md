@@ -193,12 +193,38 @@ período se actualiza con UPSERT atómico (`quantity = quantity + N`), nunca con
   `attempted_at`. Registra CADA llamada al provider; el backoff de cola real llega en FASE 9.
   Índice `(tenant_id, status)`.
 
+### `contacts` / `tags` / `contact_tag` (FASE 7, ADR-030)
+```
+contacts
+  id uuid PK
+  tenant_id FK → tenants (cascadeOnDelete)
+  phone varchar(40)              → E.164 canónico con '+' y sin separadores (normalizado)
+  name varchar(255)
+  email varchar(255) nullable
+  avatar_url varchar(2048) nullable
+  metadata JSON nullable         → custom fields del tenant
+  provider_contact_id varchar(255) nullable → correlación wa_id de Meta (FASE 9)
+  last_interaction_at timestamp nullable
+  created_at / updated_at / deleted_at (soft delete)
+```
+- Unicidad por tenant entre activos: índice UNIQUE **parcial**
+  `contacts_tenant_phone_unique ON contacts (tenant_id, phone) WHERE deleted_at IS NULL`
+  → un contacto soft-deleted libera el teléfono (se puede re-crear).
+- Índices: `(tenant_id, created_at)` y `(tenant_id, name)`.
+
+```
+tags                 → id uuid PK, tenant_id FK, name varchar(100), UNIQUE (tenant_id, name)
+contact_tag          → PK (contact_id, tag_id), FKs cascadeOnDelete
+```
+`tags`/`contact_tag` existen desde FASE 7 pero sin API/UI (preparadas para FASE 20).
+
 ## 5. Índices y constraints recomendados
 
 - `conversations (tenant_id, status, last_message_at DESC)` + `(tenant_id, contact_id)`
 - `messages (tenant_id, conversation_id, created_at DESC)`
 - `messages` UNIQUE parcial `(tenant_id, provider_message_id) WHERE provider_message_id IS NOT NULL`
-- `contacts (tenant_id, phone)` UNIQUE (phone normalizado E.164)
+- `contacts (tenant_id, phone)` UNIQUE **parcial** `WHERE deleted_at IS NULL` (FASE 7, ADR-030)
+  + índices `(tenant_id, created_at)` y `(tenant_id, name)`
 - `flow_nodes (flow_id)`; `flow_nodes` UNIQUE parcial `(flow_id) WHERE is_start`
 - `flow_connections (flow_id)`
 - `flow_executions (tenant_id, conversation_id)` UNIQUE parcial `WHERE status IN ('running','waiting')`
@@ -210,6 +236,7 @@ período se actualiza con UPSERT atómico (`quantity = quantity + N`), nunca con
 - `usage_records (tenant_id, subscription_id, feature, period_start)` UNIQUE
 - `audit_logs (tenant_id, created_at DESC)`
 - `tags (tenant_id, name)` UNIQUE
+- `contact_tag` PK `(contact_id, tag_id)` + índices por ambas FKs
 - `leads (tenant_id, status)`
 - `users (email)` UNIQUE + índice `(current_tenant_id)`
 
