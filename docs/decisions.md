@@ -516,6 +516,58 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   `agent` siempre (null si no cargado) y `participants`/`assignments` como arrays
   (`->values()->all()`) por covarianza de PHPStan nivel 6.
 
+## ADR-032 · Mensajes FASE 9: persistencia inbound/outbound, status y outbox
+
+- **Estado**: Aceptado · FASE 9
+- **Contexto**: El webhook (FASE 6) recibía y encolaba eventos pero los jobs solo los marcaban
+  `processed` (TODO marcado). FASE 9 debía persistir los mensajes: inbound (webhook →
+  contact/conversation/message con idempotencia), status updates de Meta (sent/delivered/read/
+  failed) y envío saliente asíncrono con reintentos reales. Se exige garantía de entrega (no perder
+  eventos si el proceso cae entre el insert y el encolado).
+- **Decisión**:
+  - **Tabla `messages`**: UUID PK, `tenant_id` FK `cascadeOnDelete`, `conversation_id` FK
+    `cascadeOnDelete` (**el contacto se resuelve por la conversación; no se duplica en la tabla**),
+    `provider_message_id` (id de Meta), `direction`/`type`/`status`, `body`, columnas propias
+    `media_url`/`media_mime`/`media_size` y `metadata` JSONB (`from`, `provider_timestamp`, payload
+    del tipo), una **columna temporal por estado** `sent_at`/`delivered_at`/`read_at`/`failed_at`
+    (ADR-032; `MessageStatus::columnFor()`), timestamps. Sin soft delete (los mensajes son
+    inmutables; el borrado UI llega, si acaso, en fases posteriores). Índices
+    `(tenant_id, conversation_id, created_at)` y `(conversation_id)`.
+  - **Idempotencia inbound**: UNIQUE `(tenant_id, provider_message_id)` (composite, sin cláusula
+    parcial: los NULL no colisionan → los outbound sin id de Meta son válidos) + backstop
+    `QueryException` → re-consulta (carrera entre workers). Tipos de Meta no soportados →
+    `UnsupportedMessageTypeException` → evento `failed` (permanente), webhook sigue 200.
+  - **Status nunca crea**: un `statuses[]` update localiza por `provider_message_id` y rellena
+    `status` + `columnFor()`. `failed` además pasa la conversación a `pending`
+    (`markConversationPending`). El detalle de error del envío vive en `message_send_attempts`
+    (FASE 6), no en `messages`.
+  - **Dedupe de status en la plataforma**: Meta reusa `statuses[].id` (= id del mensaje) en
+    `delivered`/`read` del mismo mensaje → un UNIQUE simple en `provider_event_id` colisionaba.
+    Clave compuesta `id|status|timestamp` (formato `%s|%s|%s`).
+  - **Outbound asíncrono**: `SendWhatsAppMessage` (ShouldBeUnique por `message_id`, `uniqueFor`
+    300, timeout 60, `tries()` = `WHATSAPP_MAX_ATTEMPTS`, backoff `[10,30,60]`). **CAS**
+    `pending → sending` con update atómico (job duplicado/concurrente = no-op; impide doble
+    envío). Re-valida en el worker cuenta conectada + número default conectado + tipo text.
+    Éxito → `sent` + `provider_message_id` + audita `message.sent`. Error retryable y quedan
+    intentos → rethrow (reintento con backoff); si no → `failed` + `failed_at` + audita
+    `message.failed`. El `to` sale del contacto de la conversación (E.164).
+  - **Outbox sweeper**: `whatsapp:reprocess-webhook-events` (every 1 min, `withoutOverlapping`)
+    re-encola `webhook_events` con `status='received'` y `created_at` < ahora − 5 min (limit 100)
+    vía `WhatsAppWebhookService::reprocessEvent()` → `enqueued` + dispatch (o `failed` si el evento
+    es desconocido). `created_at`/`updated_at` no son `$fillable` de `WebhookEvent` → los tests
+    usan `DB::table()->insert()`.
+  - **`MessageService`**: un service de aplicación por flujo (inbound/status/outbound) con
+    `TenantContext` seteado SOLO alrededor de los creates y liberado en `finally`; toda resolución
+    filtra SIEMPRE `tenant_id` (`withoutTenantScope()->where(...)`). El audit de FASE 9 pasa
+    `tenantId:` explícito (el contexto se limpia antes de auditar).
+  - **Jobs**: `ProcessIncomingWhatsAppMessage`/`ProcessWhatsAppStatusUpdate` delegan en
+    `MessageService` (nuevo `tries=3`, backoff `[5,15,60]`) y hacen `markProcessed()` real.
+- **Consecuencias**: 1 migración (creada, revertida y re-aplicada en postgres); 28 tests backend
+  MSG-1..9 / STAT-1..8 / OUT-1..7 / OUTBOX-1..4 → suite **248 tests / 934 assertions**; helpers
+  compartidos movidos a `tests/Support/helpers.php`; PHPStan exige `@param array<string, mixed>`
+  en los extractores y `public int` en `tries`/`timeout` de jobs. Los REST
+  `conversations/{id}/messages` quedan para FASE 10 (bandeja de entrada).
+
 ## Pendientes de decisión
 
 - Proveedor de email en producción (mailpit en dev; SES/Resend/SMTP en prod) → FASE 22.

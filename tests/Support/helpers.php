@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Domain\Contacts\Models\Contact;
+use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Models\User;
 use App\Domain\Users\Notifications\InvitationNotification;
@@ -12,6 +14,90 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
+use Illuminate\Testing\TestResponse;
+
+/**
+ * URL y helpers del webhook de WhatsApp (FASE 6). Compartidos por los tests de
+ * FASE 6 (ingesta) y FASE 9 (mensajes): firma HMAC, POST con body CRUDO y
+ * payload oficial de Meta.
+ */
+const WEBHOOK_URL = '/api/webhooks/whatsapp';
+
+function whatsapp_secret(): string
+{
+    return 'test-app-secret';
+}
+
+function whatsapp_signature(string $body): string
+{
+    return 'sha256='.hash_hmac('sha256', $body, whatsapp_secret());
+}
+
+/**
+ * POST al webhook con el body JSON CRUDO y la firma X-Hub-Signature-256
+ * correcta, tal como hace Meta.
+ */
+function post_whatsapp_webhook(string $body): TestResponse
+{
+    return test()->call(
+        'POST',
+        WEBHOOK_URL,
+        [],
+        [],
+        [],
+        ['CONTENT_TYPE' => 'application/json', 'HTTP_X_HUB_SIGNATURE_256' => whatsapp_signature($body)],
+        $body,
+    );
+}
+
+/**
+ * Payload oficial de Meta para pruebas: un mensaje de texto opcionalmente
+ * acompañado de un status delivered.
+ */
+function whatsapp_webhook_payload(string $messageId, string $phoneNumberId, bool $withStatus = false): string
+{
+    $messages = [[
+        'from' => '15550000001',
+        'id' => $messageId,
+        'timestamp' => '1725000000',
+        'type' => 'text',
+        'text' => ['body' => 'Hola'],
+    ]];
+
+    $payload = [
+        'object' => 'whatsapp_business_account',
+        'entry' => [[
+            'id' => '104000000000000',
+            'changes' => [[
+                'field' => 'messages',
+                'value' => [
+                    'messaging_product' => 'whatsapp',
+                    'metadata' => [
+                        'display_phone_number' => '15550000002',
+                        'phone_number_id' => $phoneNumberId,
+                    ],
+                    'contacts' => [[
+                        'profile' => ['name' => 'Cliente'],
+                        'wa_id' => '15550000001',
+                    ]],
+                    'messages' => $messages,
+                ],
+            ]],
+        ]],
+    ];
+
+    if ($withStatus) {
+        $payload['entry'][0]['changes'][0]['value']['statuses'] = [[
+            'id' => 'status-'.$messageId,
+            'recipient_id' => '15550000002',
+            'status' => 'delivered',
+            'timestamp' => '1725000001',
+        ]];
+    }
+
+    return json_encode($payload, JSON_THROW_ON_ERROR);
+}
 
 /**
  * Crea la tabla de `ScopedWidget` si no existe (por test, dentro de la
@@ -57,6 +143,40 @@ function make_tenant_member(User $user, Tenant $tenant, string $role): void
     ]);
 
     $user->forceFill(['current_tenant_id' => $tenant->id])->save();
+}
+
+/**
+ * Crea un contacto del tenant con el TenantContext activo (como en producción).
+ */
+function make_contact(Tenant $tenant, array $attributes = []): Contact
+{
+    TenantContext::setId($tenant->id);
+
+    try {
+        return Contact::query()->create(array_merge([
+            'name' => 'Cliente '.substr((string) Str::uuid(), 0, 8),
+            'phone' => '+5411'.random_int(1000000, 9999999),
+        ], $attributes));
+    } finally {
+        TenantContext::clear();
+    }
+}
+
+/**
+ * Crea una conversación del tenant con el TenantContext activo.
+ */
+function make_conversation(Tenant $tenant, Contact $contact, array $attributes = []): Conversation
+{
+    TenantContext::setId($tenant->id);
+
+    try {
+        return Conversation::query()->create(array_merge([
+            'contact_id' => $contact->id,
+            'status' => 'open',
+        ], $attributes));
+    } finally {
+        TenantContext::clear();
+    }
 }
 
 /**

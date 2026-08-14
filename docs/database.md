@@ -71,7 +71,9 @@ tenants
 
 ```
 id uuid PK
-provider_event_id varchar(255) UNIQUE   → id de Meta: messages[].id o statuses[].id
+provider_event_id varchar(255) UNIQUE   → messages[].id para mensajes; para statuses la clave
+                                        → compuesta "id|status|timestamp" (Meta reusa el id de
+                                        → mensaje en delivered/read → UNIQUE simple colisionaba)
 tenant_id FK → tenants (nullable, se resuelve por metadata.phone_number_id)
 payload JSONB                            → crudo (mínimo necesario)
 status enum(received, enqueued, processed, failed)
@@ -83,7 +85,9 @@ created_at / updated_at
 ```
 
 Índices: `webhook_events_provider_event_id_unique` (UNIQUE) + `(status, created_at)` para el
-sweeper/outbox (FASE 9).
+sweeper/outbox. **FASE 9**: el comando `whatsapp:reprocess-webhook-events` (programado cada minuto,
+`withoutOverlapping`) re-encola eventos `status='received'` con `created_at` anterior a 5 minutos
+(limit 100); `created_at`/`updated_at` no son `$fillable` (se insertan por query-builder).
 
 ## 4. Columnas críticas
 
@@ -128,20 +132,30 @@ conversation_assignments                       → historial acumulativo de asig
   índices (conversation_id, assigned_at) y (agent_id, assigned_at)
 ```
 
-### `messages`
+### `messages` (FASE 9, ADR-032)
 ```
 id uuid PK
-tenant_id FK
-conversation_id FK
-provider_message_id varchar(255) nullable  → idempotencia (unique con tenant)
-direction enum(inbound, outbound)
-type enum(text, image, audio, video, document, location, interactive, template)
-status enum(pending, sent, delivered, read, failed)
-body text
-media_url / media_mime / media_size nullable
-metadata JSONB
-sent_at, delivered_at, read_at, failed_at nullable
+tenant_id FK → tenants (cascadeOnDelete)
+conversation_id FK → conversations (cascadeOnDelete)   → el contacto se resuelve por la conversación
+provider_message_id varchar(255) nullable  → idempotencia (UNIQUE (tenant_id, provider_message_id))
+direction varchar(10) → inbound/outbound
+type varchar(20) → text, image, audio, video, document, location, interactive, template
+status varchar(20) → pending, sending, sent, delivered, read, failed
+body text nullable                         → texto, caption/filename de media o address de location
+media_url varchar(2048) nullable
+media_mime varchar(100) nullable
+media_size bigint nullable
+metadata JSONB nullable                    → from, provider_timestamp + payload del tipo (media,
+                                           →   location, interactive, template)
+sent_at, delivered_at, read_at, failed_at nullable   → columna por estado (ADR-032)
+created_at / updated_at
 ```
+- UNIQUE `(tenant_id, provider_message_id)`: los NULL no colisionan (mensajes outbound aún sin id
+  de Meta). Índices: `(tenant_id, conversation_id, created_at)` y `(conversation_id)`.
+- Los status de Meta **actualizan** la fila por `provider_message_id` (nunca crean mensajes);
+  `sending` es el estado CAS del job `SendWhatsAppMessage` (`pending → sending` atómico).
+- El detalle de error de un envío (error_code/error_message del proveedor, intentos) vive en
+  `message_send_attempts`, no en `messages`.
 
 ### `flow_nodes`
 ```
@@ -216,8 +230,9 @@ período se actualiza con UPSERT atómico (`quantity = quantity + N`), nunca con
 - `message_send_attempts`: `tenant_id` FK, `whatsapp_phone_number_id` FK `cascadeOnDelete`,
   `provider_message_id`, `to`, `type`, `payload` (sin secretos), `status`
   (pending/sent/failed), `error_code` (`WHATSAPP_*`), `error_message`, `attempt`/`max_attempts`,
-  `attempted_at`. Registra CADA llamada al provider; el backoff de cola real llega en FASE 9.
-  Índice `(tenant_id, status)`.
+  `attempted_at`. Registra CADA llamada al provider. **FASE 9**: `SendWhatsAppMessage` rellena
+  `attempt`/`max_attempts`/`attempted_at` reales y el detalle del error (retryable/error_code) en
+  `payload`; el backoff de cola usa `tries()`/`backoff()` del job. Índice `(tenant_id, status)`.
 
 ### `contacts` / `tags` / `contact_tag` (FASE 7, ADR-030)
 ```
@@ -229,7 +244,7 @@ contacts
   email varchar(255) nullable
   avatar_url varchar(2048) nullable
   metadata JSON nullable         → custom fields del tenant
-  provider_contact_id varchar(255) nullable → correlación wa_id de Meta (FASE 9)
+  provider_contact_id varchar(255) nullable → correlación wa_id de Meta (pendiente, FASE 10+)
   last_interaction_at timestamp nullable
   created_at / updated_at / deleted_at (soft delete)
 ```
@@ -250,8 +265,9 @@ contact_tag          → PK (contact_id, tag_id), FKs cascadeOnDelete
   `(tenant_id, agent_id)` + `(tenant_id, last_interaction_at)` (FASE 8, ADR-031)
 - `conversation_participants (conversation_id, user_id)` UNIQUE + índice `(user_id, conversation_id)`
 - `conversation_assignments (conversation_id, assigned_at)` + `(agent_id, assigned_at)`
-- `messages (tenant_id, conversation_id, created_at DESC)`
-- `messages` UNIQUE parcial `(tenant_id, provider_message_id) WHERE provider_message_id IS NOT NULL`
+- `messages (tenant_id, conversation_id, created_at DESC)` + `(conversation_id)` (FASE 9, ADR-032)
+- `messages` UNIQUE `(tenant_id, provider_message_id)` (composite; los NULL no colisionan →
+  los outbound sin id de Meta son válidos) (FASE 9, ADR-032)
 - `contacts (tenant_id, phone)` UNIQUE **parcial** `WHERE deleted_at IS NULL` (FASE 7, ADR-030)
   + índices `(tenant_id, created_at)` y `(tenant_id, name)`
 - `flow_nodes (flow_id)`; `flow_nodes` UNIQUE parcial `(flow_id) WHERE is_start`

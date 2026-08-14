@@ -12,7 +12,6 @@ use App\Domain\Users\Models\User;
 use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
 
@@ -27,20 +26,6 @@ function contact_url(Tenant $tenant, ?string $contactId = null): string
     $base = '/api/v1/tenants/'.$tenant->id.'/contacts';
 
     return $contactId === null ? $base : $base.'/'.$contactId;
-}
-
-function make_contact(Tenant $tenant, array $attributes = []): Contact
-{
-    TenantContext::setId($tenant->id);
-
-    try {
-        return Contact::query()->create(array_merge([
-            'name' => 'Cliente '.substr((string) Str::uuid(), 0, 8),
-            'phone' => '+5411'.random_int(1000000, 9999999),
-        ], $attributes));
-    } finally {
-        TenantContext::clear();
-    }
 }
 
 test('CONTACT-1: crear un contacto devuelve 201 y lo persiste normalizado', function (): void {

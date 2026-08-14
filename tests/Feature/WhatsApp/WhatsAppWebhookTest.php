@@ -10,7 +10,6 @@ use App\Jobs\ProcessIncomingWhatsAppMessage;
 use App\Jobs\ProcessWhatsAppStatusUpdate;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
-use Illuminate\Testing\TestResponse;
 
 uses(RefreshDatabase::class);
 
@@ -19,79 +18,6 @@ uses(RefreshDatabase::class);
 | FASE 6 — WHATSAPP WEBHOOK
 |--------------------------------------------------------------------------
 */
-
-const WEBHOOK_URL = '/api/webhooks/whatsapp';
-
-function whatsapp_secret(): string
-{
-    return 'test-app-secret';
-}
-
-function whatsapp_signature(string $body): string
-{
-    return 'sha256='.hash_hmac('sha256', $body, whatsapp_secret());
-}
-
-/**
- * POST al webhook con el body JSON CRUDO y la firma X-Hub-Signature-256
- * correcta, tal como hace Meta.
- */
-function post_whatsapp_webhook(string $body): TestResponse
-{
-    return test()->call(
-        'POST',
-        WEBHOOK_URL,
-        [],
-        [],
-        [],
-        ['CONTENT_TYPE' => 'application/json', 'HTTP_X_HUB_SIGNATURE_256' => whatsapp_signature($body)],
-        $body,
-    );
-}
-
-function whatsapp_webhook_payload(string $messageId, string $phoneNumberId, bool $withStatus = false): string
-{
-    $messages = [[
-        'from' => '15550000001',
-        'id' => $messageId,
-        'timestamp' => '1725000000',
-        'type' => 'text',
-        'text' => ['body' => 'Hola'],
-    ]];
-
-    $payload = [
-        'object' => 'whatsapp_business_account',
-        'entry' => [[
-            'id' => '104000000000000',
-            'changes' => [[
-                'field' => 'messages',
-                'value' => [
-                    'messaging_product' => 'whatsapp',
-                    'metadata' => [
-                        'display_phone_number' => '15550000002',
-                        'phone_number_id' => $phoneNumberId,
-                    ],
-                    'contacts' => [[
-                        'profile' => ['name' => 'Cliente'],
-                        'wa_id' => '15550000001',
-                    ]],
-                    'messages' => $messages,
-                ],
-            ]],
-        ]],
-    ];
-
-    if ($withStatus) {
-        $payload['entry'][0]['changes'][0]['value']['statuses'] = [[
-            'id' => 'status-'.$messageId,
-            'recipient_id' => '15550000002',
-            'status' => 'delivered',
-            'timestamp' => '1725000001',
-        ]];
-    }
-
-    return json_encode($payload, JSON_THROW_ON_ERROR);
-}
 
 test('WHATSAPP-1: la verificación GET responde el challenge como texto plano', function (): void {
     config(['whatsapp.verify_token' => 'mi-verify-token']);
@@ -164,10 +90,11 @@ test('WHATSAPP-7: los status updates se ingesan y procesan', function (): void {
     $body = whatsapp_webhook_payload('msg-2', 'phone-1', withStatus: true);
     post_whatsapp_webhook($body)->assertOk();
 
-    expect(WebhookEvent::query()->where('provider_event_id', 'status-msg-2')->exists())->toBeTrue();
+    expect(WebhookEvent::query()->where('event_type', 'status')->exists())->toBeTrue();
 
-    $statusEvent = WebhookEvent::query()->where('provider_event_id', 'status-msg-2')->firstOrFail();
-    expect($statusEvent->event_type->value)->toBe('status')
+    $statusEvent = WebhookEvent::query()->where('event_type', 'status')->firstOrFail();
+    expect($statusEvent->provider_event_id)->toBe('status-msg-2|delivered|1725000001')
+        ->and($statusEvent->event_type->value)->toBe('status')
         ->and($statusEvent->status->value)->toBe('processed');
 });
 

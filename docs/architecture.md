@@ -1,6 +1,6 @@
 # Arquitectura
 
-Estado: **Borrador aprobado** · Última revisión: FASE 8
+Estado: **Borrador aprobado** · Última revisión: FASE 9
 
 ## 1. Objetivo
 
@@ -109,15 +109,18 @@ Flujo del mensaje entrante (WhatsApp → Inbox):
 3. Responde `200` de inmediato y despacha `ProcessIncomingWhatsAppMessage` a la cola
    (`forTenant($tenantId)`). Un **sweeper (outbox)** re-encola eventos huérfanos para no perder
    ninguno. **FASE 6**: ingestión + acuse (jobs marcan `processed`) y encolado en el mismo
-   request; el sweeper llega con la fase de mensajería (FASE 9).
+   request; **FASE 9**: outbox `whatsapp:reprocess-webhook-events` (cada minuto) + los jobs
+   delegan en `MessageService` (persistencia real de mensajes).
 4. El worker (con `TenantContext` propio): localiza número → busca o crea Contact → crea
    Conversation si aplica → guarda Message → ejecuta el motor de flujos **bajo lock de Redis
    por conversación** o notifica a agentes → emite eventos/broadcasts.
     **FASE 7**: contactos implementados (el find-or-create por teléfono E.164 que usa el worker
-    ya existe, ver `ContactService::findOrCreateForPhone`). Conversation/Message/engine en FASE 9+.
+    ya existe, ver `ContactService::findOrCreateForPhone`).
     **FASE 8**: conversaciones implementadas (CRUD, estados, asignación/transferencia y
-    `ConversationService::findOrCreateActiveForContact` listo para el worker). Message/engine en
-    FASE 9+.
+    `ConversationService::findOrCreateActiveForContact` listo para el worker).
+    **FASE 9**: mensajes persistidos (inbound con dedupe por `provider_message_id`, status
+    updates que nunca crean, outbound asíncrono `SendWhatsAppMessage` con CAS + retry).
+    El motor de flujos se conecta en FASE 11.
 
 Autenticación (dos modos, ADR-011):
 
@@ -139,7 +142,7 @@ Aislamiento de infraestructura compartida:
 | WhatsApp | Cuentas/números, webhooks (dedupe + outbox), envío | `WhatsAppProviderInterface` |
 | Contacts | CRM mínimo: contactos (E.164, soft delete, unique parcial por tenant), etiquetas | — |
 | Conversations | Sesiones de chat (FASE 8): estados, asignación/transferencia, participantes, historial de asignaciones, pause/resume de bot | — |
-| Messages | Historial, estados (sent/delivered/read) | — |
+| Messages | Historial (FASE 9): inbound con idempotencia, status por columna temporal, outbound asíncrono con CAS y retry; `MessageService` | — |
 | Chatbots | Chatbots, flujos, triggers | `ChatbotEngine` |
 | Flows | Definición de nodos/conexiones (Flow Builder) | — |
 | Agents | Usuarios que atienden conversaciones | — |

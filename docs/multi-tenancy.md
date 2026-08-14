@@ -1,6 +1,6 @@
 # Multi-tenancy
 
-Estado: **implementado en FASE 3 + FASE 4 + FASE 5 + FASE 6 + FASE 7 + FASE 8**. Este documento describe el
+Estado: **implementado en FASE 3 + FASE 4 + FASE 5 + FASE 6 + FASE 7 + FASE 8 + FASE 9**. Este documento describe el
 diseño y cómo quedó materializado en código (rutas, clases y semántica HTTP reales).
 
 ## 1. Estrategia
@@ -231,6 +231,16 @@ Nunca se acepta `tenant_id` desde el request (se ignora o se rechaza — test
   `AGENT_NOT_IN_TENANT` en caso contrario). `findOrCreateActiveForContact` (webhook, FASE 9)
   consulta sin scope con filtro por `tenant_id` y setea `TenantContext` solo alrededor del create,
   liberándolo en `finally`.
+- `messages` (FASE 9, ADR-032): tabla con trait `BelongsToTenant`, `tenant_id` FK
+  `cascadeOnDelete` y `conversation_id` FK→`conversations` del **mismo tenant** (cascade; el
+  contacto se resuelve por la conversación, no se duplica). `Tenant::messages()` (hasMany). La
+  idempotencia es por tenant: UNIQUE `(tenant_id, provider_message_id)` (mensaje duplicado =
+  no-op, backstop `QueryException`). Los jobs del webhook (`ProcessIncomingWhatsAppMessage`/
+  `ProcessWhatsAppStatusUpdate`) y el de envío (`SendWhatsAppMessage`) usan `TenantAwareJob` con
+  el tenant resuelto/encolado; `MessageService` resuelve SIEMPRE con
+  `withoutTenantScope()->where('tenant_id', ...)` y setea `TenantContext` solo alrededor de los
+  creates (liberado en `finally`) → el webhook del número de B jamás persiste en datos de A
+  (MSG-6, STAT-8, CRITICO).
 
 ## 5. Aislamiento en colas, eventos y notificaciones
 
@@ -306,3 +316,7 @@ tenant distinto del propietario:
     sobre un contacto del Tenant B → 404 (`CONV-18`, CRITICO). El `tenant_id` enviado en el body
     se ignora (`CONV-20`). `findOrCreateActiveForContact` crea/consulta siempre bajo el tenant
     indicado y deja el contexto limpio (`CONV-24`).
+16. (FASE 9) El webhook de un número del tenant B jamás persiste mensajes/contactos/
+    conversaciones en el tenant A (`MSG-6`, CRITICO); los status de B no tocan mensajes de A
+    (`STAT-8`, CRITICO). `MessageService` y los jobs de mensajes resuelven siempre con filtro por
+    `tenant_id` y dejan el contexto limpio en `finally`.

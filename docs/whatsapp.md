@@ -1,9 +1,10 @@
 # WhatsApp (Meta Cloud API)
 
-Estado: **FASE 6 COMPLETADA** (provider, webhook, conexión y envío) y **FASE 7 COMPLETADA**
-(CRM de contactos: el find-or-create por teléfono ya está disponible para los jobs del webhook).
-Lo pendiente de diseño (media, outbox sweeper, plantillas, conversaciones/mensajes, rate limits,
-lock de conversación) se detalla abajo con su fase de implementación.
+Estado: **FASE 6 COMPLETADA** (provider, webhook, conexión y envío), **FASE 7 COMPLETADA**
+(CRM de contactos: el find-or-create por teléfono ya está disponible para los jobs del webhook) y
+**FASE 9 COMPLETADA** (mensajes: persistencia inbound/outbound, status updates y outbox sweeper).
+Lo pendiente de diseño (media, plantillas, motor de flujos, rate limits, lock de conversación) se
+detalla abajo con su fase de implementación.
 
 ## 1. Regla
 
@@ -91,7 +92,9 @@ GET /api/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=...&hub.challenge
    **cuerpo crudo exacto** (`$request->getContent()`); jamás sobre un re-serializado del JSON.
    Firma ausente/incorrecta → **401** `WHATSAPP_SIGNATURE_INVALID` (nunca procesar).
 2. Leer `entry[].changes[].value.messages[]` y `...statuses[]`. Extraer el identificador:
-   `messages[].id` para mensajes, `statuses[].id` para estados. Otros `field` se ignoran.
+   `messages[].id` para mensajes; para `statuses[]` la clave de dedupe es compuesta
+   `id|status|timestamp` (Meta reusa el id de mensaje en `delivered`/`read` → un UNIQUE simple
+   sobre `statuses[].id` colisionaba). Otros `field` se ignoran.
 3. **Dedupe**: `webhook_events` (plataforma) con UNIQUE `provider_event_id`. Insert con
    `ON CONFLICT DO NOTHING`; si ya existía → responde `200` con `duplicate = true` sin reprocesar.
    Esto cubre eventos duplicados y POSTs concurrentes (la violación de unique es el dedupe).
@@ -101,28 +104,33 @@ GET /api/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=...&hub.challenge
    reintentar infinitamente).
 5. Marcar `webhook_events.status=enqueued` y despachar
    `ProcessIncomingWhatsAppMessage` / `ProcessWhatsAppStatusUpdate` a la cola
-   (`forTenant($tenantId)`, TenantAwareJob).
+   (`forTenant($tenantId)`, TenantAwareJob). (`WhatsAppWebhookService::resolveAndEnqueue()` +
+   `reprocessEvent()` público para el outbox, FASE 9.)
 6. Responder `200`. **El request del webhook nunca hace trabajo pesado.**
 
-Los jobs (FASE 6) solo marcan `processed` el evento si sigue `enqueued` + `event_type` + `tenant_id`
-coinciden (idempotencia). **FASE 7**: el find-or-create de contacto por teléfono E.164 ya existe
-(`ContactService::findOrCreateForPhone(Tenant, string)`, ADR-030) y se usará en el job.
-**TODO FASE 9**: persistir el mensaje/conversación y ejecutar el motor de flujos (§5).
+Los jobs (FASE 9) delegan en `MessageService`: mensaje entrante → find-or-create contacto
+(`ContactService::findOrCreateForPhone`, FASE 7) + conversación activa (`findOrCreateActiveForContact`,
+FASE 8) + mensaje con dedupe por `provider_message_id` + auditoría `message.received`; status →
+update por `provider_message_id` (nunca crea). El tipo no soportado de Meta lanza
+`UnsupportedMessageTypeException` → el job marca el evento `failed` (permanente). Luego el evento
+pasa a `processed`. El motor de flujos (§5) se conecta en FASE 11.
 
-### 4.3 Outbox (no perder eventos)
+### 4.3 Outbox (no perder eventos) — FASE 9
 
-`webhook_events.status` ∈ {received, enqueued, processed, failed}. Un comando programado
-(every 1 min) re-encola eventos con `status='received'` con `created_at` anterior a X minutos.
-Así, si el proceso cae entre el insert y el encolado, el evento no se pierde.
-**Pendiente**: el sweeper/outbox se implementará con la fase de mensajería (FASE 9). Hoy el
-encolado ocurre dentro del mismo request (cola `sync` en tests).
+`webhook_events.status` ∈ {received, enqueued, processed, failed}. El comando
+`whatsapp:reprocess-webhook-events` (programado cada 1 minuto con `withoutOverlapping` en
+`routes/console.php`) re-encola eventos con `status='received'` y `created_at` anterior a 5 minutos
+(limit 100), usando `WhatsAppWebhookService::reprocessEvent()`. Así, si el proceso cae entre el
+insert y el encolado, el evento no se pierde. Exitoso → marca `enqueued` y despacha el job;
+evento desconocido → `failed` con `error_code`.
 
 ### 4.4 Idempotencia
 
-- `webhook_events.provider_event_id` UNIQUE (id global de Meta) → dedupe a nivel plataforma.
-- `messages` UNIQUE parcial `(tenant_id, provider_message_id) WHERE provider_message_id IS NOT NULL`
-  → el mensaje inbound se crea una sola vez por worker.
-- Un evento de `status` (delivered/read/failed) **actualiza** el mensaje existente por
+- `webhook_events.provider_event_id` UNIQUE (id global de Meta; compuesto `id|status|timestamp`
+  para statuses) → dedupe a nivel plataforma.
+- `messages` UNIQUE `(tenant_id, provider_message_id)` (los NULL no colisionan)
+  → el mensaje inbound se crea una sola vez por worker (backstop `QueryException`).
+- Un evento de `status` (sent/delivered/read/failed) **actualiza** el mensaje existente por
   `provider_message_id`, no crea mensajes.
 
 ## 5. Flujo de mensaje entrante (worker)
@@ -131,11 +139,11 @@ encolado ocurre dentro del mismo request (cola `sync` en tests).
 ProcessIncomingWhatsAppMessage
  ├─ set TenantContext (por tenant_id resuelto en el webhook)  [finally: clear()]
  ├─ localizar whatsapp_phone_number (phone_number_id)
- ├─ find-or-create Contact (tenant + phone E.164)  → dedupe  [FASE 7: ContactService::findOrCreateForPhone]
- ├─ find-or-create Conversation (abierta o nueva)  [FASE 9]
- ├─ persist Message (inbound)
- ├─ marcar contexto de conversación
- ├─ decidir acción (bajo LOCK de conversación, ver §7):
+ ├─ find-or-create Contact (tenant + phone E.164)  → dedupe  [FASE 7]
+ ├─ find-or-create Conversation (abierta o nueva)  [FASE 8]
+ ├─ persist Message (inbound, dedupe por provider_message_id)  [FASE 9]
+ ├─ marcar contexto de conversación (reabre resolved/archived)
+ ├─ decidir acción (bajo LOCK de conversación, ver §7):   [PENDIENTE FASE 11]
  │    ├─ bot activo y no pausada → FlowEngine::handleMessage()
  │    ├─ keyword trigger → arrancar flow
  │    └─ sin bot → asignación/notificación a agentes
@@ -152,15 +160,18 @@ ProcessIncomingWhatsAppMessage
   timeout/5xx/429 → `retryable=true`.
 - **FASE 9**: el job `SendWhatsAppMessage` encolado con `tenant_id`, `conversation_id`,
   `message_id` y `ShouldBeUnique` por `message_id` (impide envíos concurrentes duplicados del
-  mismo mensaje). Worker re-valida límite de uso y permisos (nunca confiar en estado previo).
+  mismo mensaje). Worker re-valida cuenta conectada + número default conectado + tipo text
+  (nunca confiar en estado previo).
 - **CAS**: el envío solo procede si `message.status === 'pending'` (update atómico
   `where status='pending'` → `sending`). Si otro proceso ya lo tomó, se ignora.
-- Llama al provider con el token del tenant → persiste `provider_message_id`, `sent`.
-- Estados posteriores vía webhook de status: `delivered` → `read` (por `statuses[].id`,
-  actualizando el mensaje por `provider_message_id`). `failed` → marca `failed`, log, y la
-  conversación pasa a `pending` con aviso a agentes.
-- Fallo → reintento con backoff (cola `retry`, registrado en `message_send_attempts`),
-  `failed` tras N intentos (`WHATSAPP_MAX_ATTEMPTS`).
+- Llama al provider con el token del tenant → persiste `provider_message_id`, `sent` (+ audita
+  `message.sent`). Registra `message_send_attempts` (attempt/max_attempts, `attempted_at`).
+- Estados posteriores vía webhook de status: `delivered` → `read` (por `statuses[].id` compuesto,
+  actualizando el mensaje por `provider_message_id`). `failed` → marca `failed` + `failed_at`
+  (detalle del error en el attempt), y la conversación pasa a `pending` con aviso a agentes.
+- Fallo → reintento con backoff `[10,30,60]` (cola `retry`, registrado en `message_send_attempts`),
+  `failed` tras N intentos (`WHATSAPP_MAX_ATTEMPTS`, `SendWhatsAppMessage::tries()`); fallo
+  permanente (4xx) → `failed` sin reintento.
 - `markAsRead` se dispara cuando un agente abre la conversación (usa el phone id del tenant).
 
 ## 7. Concurrencia en la conversación
@@ -217,6 +228,9 @@ webhook a registrar en Meta es `https://<dominio>/api/webhooks/whatsapp`.
 - Aislamiento: webhook de un número de B jamás toca datos de A (WHATSAPP-11, CRITICO).
 - Conexión: token cifrado, 401/404 en Meta, 409 sin cuenta, aislamiento A/B (WHATSAPP-15..30).
 - Provider: payload oficial, mapeo de errores retryable/no-retryable, timeout (WHATSAPP-31..40).
-- Pendiente (FASE 9): mensaje entrante crea conversation+message una sola vez (el contacto ya lo
-  crea `findOrCreateForPhone`); status delivered/read/failed actualiza mensajes; outbox sweeper;
-  lock de conversación; rate limits.
+- FASE 9: mensaje entrante crea contact+conversation+message una sola vez (dedupe por
+  `provider_message_id`, MSG-1..9); status delivered/read/failed actualiza mensajes y `failed`
+  pasa la conversación a `pending` (STAT-1..8); outbound con CAS `pending → sending`, attempts,
+  reintento retryable y fallo permanente (OUT-1..7); outbox sweeper (OUTBOX-1..4).
+- Pendiente (FASE 10+): media outbound, templates, lock de conversación, rate limits, REST
+  `conversations/{id}/messages`.

@@ -105,13 +105,26 @@ final class WhatsAppWebhookService
      */
     private function ingest(WebhookEventType $type, array $item, ?string $phoneNumberId): void
     {
-        $providerEventId = isset($item['id']) && is_scalar($item['id']) ? (string) $item['id'] : '';
+        $id = isset($item['id']) && is_scalar($item['id']) ? (string) $item['id'] : '';
 
-        if ($providerEventId === '') {
+        if ($id === '') {
             Log::warning('whatsapp.webhook_missing_event_id', ['type' => $type->value]);
 
             return;
         }
+
+        // Meta envía `statuses[].id` = id del MENSAJE: delivered/read/... del
+        // mismo mensaje comparten id. Para no descartar updates posteriores como
+        // "duplicados", la clave de dedupe de status es compuesta id|status|timestamp.
+        $providerEventId = match ($type) {
+            WebhookEventType::Message => $id,
+            WebhookEventType::Status => sprintf(
+                '%s|%s|%s',
+                $id,
+                (string) ($item['status'] ?? ''),
+                (string) ($item['timestamp'] ?? ''),
+            ),
+        };
 
         $inserted = WebhookEvent::query()->insertOrIgnore([
             'id' => (string) Str::uuid(),
@@ -142,10 +155,36 @@ final class WhatsAppWebhookService
         /** @var WebhookEvent $event */
         $event = WebhookEvent::query()->where('provider_event_id', $providerEventId)->firstOrFail();
 
+        $this->resolveAndEnqueue($event, $phoneNumberId);
+    }
+
+    /**
+     * Re-procesa un evento que quedó en `received` (outbox, FASE 9).
+     *
+     * Lo invoca el sweeper programado cuando el proceso murió entre el insert y
+     * el encolado del job. Resuelve el tenant por `phone_number_id` del payload
+     * y encola; si el número ya no existe, marca `failed` (no reintenta en bucle).
+     */
+    public function reprocessEvent(WebhookEvent $event): void
+    {
+        if ($event->status !== WebhookEventStatus::Received) {
+            return;
+        }
+
+        $payload = $event->payload;
+        $phoneNumberId = is_array($payload) && isset($payload['phone_number_id']) && is_scalar($payload['phone_number_id'])
+            ? (string) $payload['phone_number_id']
+            : null;
+
+        $this->resolveAndEnqueue($event, $phoneNumberId);
+    }
+
+    private function resolveAndEnqueue(WebhookEvent $event, ?string $phoneNumberId): void
+    {
         if ($phoneNumberId === null || $phoneNumberId === '') {
             $event->markFailed('missing_phone_number_id');
 
-            Log::warning('whatsapp.webhook_missing_phone_number_id', ['provider_event_id' => $providerEventId]);
+            Log::warning('whatsapp.webhook_missing_phone_number_id', ['provider_event_id' => $event->provider_event_id]);
 
             return;
         }
@@ -159,7 +198,7 @@ final class WhatsAppWebhookService
             $event->markFailed('unknown_phone_number_id');
 
             Log::warning('whatsapp.webhook_unknown_phone_number_id', [
-                'provider_event_id' => $providerEventId,
+                'provider_event_id' => $event->provider_event_id,
                 'phone_number_id' => $phoneNumberId,
             ]);
 
@@ -170,6 +209,14 @@ final class WhatsAppWebhookService
             'status' => WebhookEventStatus::Enqueued,
             'tenant_id' => $phone->tenant_id,
         ])->save();
+
+        $type = $event->event_type;
+
+        if ($type === null) {
+            $event->markFailed('invalid_payload');
+
+            return;
+        }
 
         match ($type) {
             WebhookEventType::Message => dispatch((new ProcessIncomingWhatsAppMessage($event->id))->forTenant($phone->tenant_id)),

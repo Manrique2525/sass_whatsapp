@@ -97,6 +97,29 @@ Pirámide de tests con prioridad en lo crítico:
 - Frontend (Vitest): `buildConversationQuery`, `formatLastInteraction`, `canClose/canReopen`,
   `CONVERSATION_STATUS_META`, `extractErrorMessage`.
 
+### Mensajes (FASE 9, 28 tests MSG-1..9 / STAT-1..8 / OUT-1..7 / OUTBOX-1..4)
+- Inbound (`MSG-1..9`): el webhook de Meta persiste contact+conversation+message e2e (`MSG-1`);
+  dedupe por `provider_message_id` (mismo evento dos veces → mismo mensaje, `MSG-2`, y a nivel
+  de servicio `MSG-3`); **aislamiento CRITICO** `MSG-6` (webhook de un número de B nunca toca
+  datos de A); tipo no soportado → evento `failed` (`MSG-4`); payload sin id/from → no-op con log
+  (`MSG-5`); media image persiste `media_mime`/`media_size` + metadata (`MSG-7`); conversación
+  `resolved` se reabre (`MSG-8`); audita `message.received` (`MSG-9`).
+- Status (`STAT-1..8`): `delivered`/`read` actualizan estado + columna temporal e2e (`STAT-1/2`);
+  clave compuesta `id|status|timestamp` permite delivered+read del mismo mensaje (`STAT-4`);
+  repetición idéntica → idempotente (`STAT-3`); `failed` → conversación `pending` (`STAT-5`);
+  sin mensaje → no-op con log (`STAT-6`); status desconocido → no-op (`STAT-7`); aislamiento A/B
+  (`STAT-8`).
+- Outbound (`OUT-1..7`): `createOutbound` encola `SendWhatsAppMessage` con mensaje `pending`
+  (`OUT-1`); éxito → `sent` + `provider_message_id` + attempt + audita `message.sent` (`OUT-2`);
+  error permanente de Meta → `failed` (`OUT-3`); error retryable → rethrow y el mensaje queda
+  `sending` (`OUT-4`); CAS: job duplicado no re-envía (`OUT-5`); sin cuenta conectada →
+  `failed` `whatsapp_not_connected` (`OUT-6`); tipo no-text → `failed` (`OUT-7`).
+- Outbox (`OUTBOX-1..4`): reprocesa eventos `received` viejos (`OUTBOX-1`); ignora recientes y
+  `processed` (`OUTBOX-2/3`); límite 100 y exit codes (`OUTBOX-4`).
+- Helpers de test compartidos en `tests/Support/helpers.php` (autoload-dev `files`): `make_contact`,
+  `make_conversation`, webhook (firma/secreto/payload); `created_at`/`updated_at` de
+  `webhook_events` no son `$fillable` → los tests de outbox insertan con `DB::table(...)->insert()`.
+
 ### Chatbot engine (crítico)
 - Secuencia lineal, ramas condition, question→variable, delay, human, end.
 - Loop detection / límite de pasos.

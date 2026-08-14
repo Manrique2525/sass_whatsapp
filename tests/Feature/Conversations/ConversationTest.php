@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Application\Conversations\Services\ConversationService;
-use App\Domain\Contacts\Models\Contact;
 use App\Domain\Conversations\Enums\ConversationStatus;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Tenants\Models\Tenant;
@@ -28,20 +27,6 @@ function conversation_url(Tenant $tenant, ?string $conversationId = null): strin
     $base = '/api/v1/tenants/'.$tenant->id.'/conversations';
 
     return $conversationId === null ? $base : $base.'/'.$conversationId;
-}
-
-function make_conversation(Tenant $tenant, Contact $contact, array $attributes = []): Conversation
-{
-    TenantContext::setId($tenant->id);
-
-    try {
-        return Conversation::query()->create(array_merge([
-            'contact_id' => $contact->id,
-            'status' => 'open',
-        ], $attributes));
-    } finally {
-        TenantContext::clear();
-    }
 }
 
 test('CONV-1: crear una conversación para un contacto del tenant devuelve 201', function (): void {

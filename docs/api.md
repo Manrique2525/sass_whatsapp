@@ -194,7 +194,8 @@ por el servicio filtrando SIEMPRE por `tenant_id` autorizado (sin route-model bi
 `ContactResource`: `{id, phone, name, email, avatar_url, metadata, provider_contact_id,
 last_interaction_at, created_at, updated_at}` (jamás incluye `tenant_id`).
 
-`provider_contact_id` se rellena en FASE 9 (correlación outbound con el `wa_id` de Meta);
+`provider_contact_id` es un campo editable por el owner/admin (correlación manual con el `wa_id`
+de Meta); el outbound aún no lo rellena automáticamente (pendiente, FASE 10+).
 `findOrCreateForPhone` (uso interno, sin auth) ya está disponible para los jobs del webhook.
 
 ### 3.6 Conversaciones (implementado en FASE 8)
@@ -226,6 +227,26 @@ estado es **no-op (200)**; una transición inválida → **409** `CONVERSATION_I
 email} | null, last_message_at, last_interaction_at, auto_assigned, bot_paused, context,
 flow_execution_id, participants[], assignments[], created_at, updated_at}` (jamás incluye
 `tenant_id`). `context`/`flow_execution_id` los gestionará el motor de flujos (FASE 10+).
+
+### 3.7 Mensajes (persistencia en FASE 9; REST en FASE 10)
+
+En FASE 9 los mensajes se **persisten y procesan por backend** (sin endpoints REST todavía):
+
+- **Inbound** (webhook `POST /api/webhooks/whatsapp`): el job `ProcessIncomingWhatsAppMessage`
+  ejecuta `MessageService::handleInboundMessage()` → find-or-create contacto (FASE 7) →
+  find-or-create conversación (FASE 8) → crea el mensaje con idempotencia por
+  `provider_message_id` (UNIQUE `(tenant_id, provider_message_id)` + backstop `QueryException`).
+  Tipo no soportado → `UnsupportedMessageTypeException` → el evento se marca `failed` y el webhook
+  responde 200. Reabre conversaciones `resolved`/`archived`. Audita `message.received`.
+- **Status** (mismo webhook): `MessageService::handleStatusUpdate()` actualiza el mensaje por
+  `provider_message_id` (nunca crea): `sent`/`delivered`/`read` rellenan su columna temporal y
+  `failed` pasa la conversación a `pending`. Audita `message.status_updated`.
+- **Outbound**: `MessageService::createOutbound()` crea el mensaje `pending` y encola
+  `SendWhatsAppMessage` (CAS `pending → sending`, `message_send_attempts`, reintento retryable con
+  backoff; éxito → `sent` + `provider_message_id`, fallo permanente → `failed`).
+
+Los endpoints REST `GET/POST /api/v1/conversations/{id}/messages` (con `Idempotency-Key` en el
+POST, tabla resumen de arriba) se implementan en **FASE 10** (bandeja de entrada).
 
 ## 4. Webhooks (sin auth Bearer; autenticados por firma y dedupe)
 

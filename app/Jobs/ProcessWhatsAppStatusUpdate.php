@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Application\Messages\Services\MessageService;
+use App\Domain\Tenants\Models\Tenant;
 use App\Domain\WhatsApp\Enums\WebhookEventStatus;
 use App\Domain\WhatsApp\Enums\WebhookEventType;
 use App\Domain\WhatsApp\Models\WebhookEvent;
@@ -14,13 +16,12 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Procesa un status update (sent/delivered/read/failed) de Meta (FASE 6).
+ * Procesa un status update (sent/delivered/read/failed) de Meta (FASE 6 + FASE 9).
  *
- * Idempotente: solo marca `processed` un evento `enqueued` del tenant correcto.
- *
- * TODO FASE 9 (Mensajes): actualizar el mensaje persistido por
- * `provider_message_id` (delivered → read → failed). La FASE 6 implementa la
- * ingesta y el acuse sin tocar la tabla `messages`.
+ * FASE 6: ingesta + acuse idempotente. FASE 9 (ADR-032): actualiza el mensaje
+ * persistido por `provider_message_id` (nunca crea mensajes); `failed` además
+ * pasa la conversación a `pending`. Si el mensaje no existe, el evento se marca
+ * `processed` igualmente (no-op) para no reintentar en bucle.
  */
 final class ProcessWhatsAppStatusUpdate implements ShouldQueue
 {
@@ -28,6 +29,16 @@ final class ProcessWhatsAppStatusUpdate implements ShouldQueue
     use InteractsWithQueue;
     use SerializesModels;
     use TenantAwareJob;
+
+    public int $tries = 3;
+
+    /**
+     * @return array<int, int>
+     */
+    public function backoff(): array
+    {
+        return [5, 15, 60];
+    }
 
     public function __construct(public readonly string $webhookEventId) {}
 
@@ -45,6 +56,20 @@ final class ProcessWhatsAppStatusUpdate implements ShouldQueue
 
         if ($event->tenant_id !== $this->tenantId) {
             return;
+        }
+
+        $tenant = Tenant::query()->find($event->tenant_id);
+
+        if ($tenant === null) {
+            $event->markFailed('tenant_not_found');
+
+            return;
+        }
+
+        $data = $event->payload['data'] ?? null;
+
+        if (is_array($data)) {
+            app(MessageService::class)->handleStatusUpdate($tenant, $data);
         }
 
         $event->markProcessed();

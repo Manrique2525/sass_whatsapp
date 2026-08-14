@@ -6,6 +6,7 @@ namespace App\Domain\Conversations\Models;
 
 use App\Domain\Contacts\Models\Contact;
 use App\Domain\Conversations\Enums\ConversationStatus;
+use App\Domain\Messages\Models\Message;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Tenants\Traits\BelongsToTenant;
 use App\Domain\Users\Models\User;
@@ -109,5 +110,13 @@ final class Conversation extends Model
     public function assignments(): HasMany
     {
         return $this->hasMany(ConversationAssignment::class);
+    }
+
+    /**
+     * @return HasMany<Message, $this>
+     */
+    public function messages(): HasMany
+    {
+        return $this->hasMany(Message::class);
     }
 }

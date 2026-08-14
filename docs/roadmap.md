@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 8 COMPLETADA** (Conversaciones). Solo se trabaja sobre la fase activa.
+Estado general: **FASE 9 COMPLETADA** (Mensajes). Solo se trabaja sobre la fase activa.
 
 ## Fases
 
@@ -15,7 +15,7 @@ Estado general: **FASE 8 COMPLETADA** (Conversaciones). Solo se trabaja sobre la
 | 6 | WhatsApp (webhooks, provider) | COMPLETADA |
 | 7 | Contactos | COMPLETADA |
 | 8 | Conversaciones | COMPLETADA |
-| 9 | Mensajes (jobs async) | PENDIENTE |
+| 9 | Mensajes (jobs async) | COMPLETADA |
 | 10 | Bandeja de entrada (UI + Reverb) | PENDIENTE |
 | 11 | Chatbot engine | PENDIENTE |
 | 12 | Flow Builder (Vue Flow) | PENDIENTE |
@@ -308,7 +308,7 @@ COMPLETADO / BLOQUEADO
 
 - [x] Migraciones (3): `contacts` (UUID, `tenant_id` FK `cascadeOnDelete`, `phone` E.164 canónico
       con `+` y sin separadores, `name`, `email`, `avatar_url` (2048), `metadata` JSON,
-      `provider_contact_id` (preparado para correlación outbound FASE 9), `last_interaction_at`,
+      `provider_contact_id` (preparado para correlación outbound FASE 10+), `last_interaction_at`,
       timestamps, softDeletes, índices `(tenant_id, created_at)` y `(tenant_id, name)` y UNIQUE
       PARCIAL `(tenant_id, phone) WHERE deleted_at IS NULL` = unicidad por tenant entre activos),
       `tags` (`(tenant_id, name)` UNIQUE) y `contact_tag` (PK `(contact_id, tag_id)`); tablas de
@@ -408,3 +408,66 @@ COMPLETADO / BLOQUEADO
       en postgres sin errores; suite completa verde; `health:check` ok
 - [x] Documentación: `database.md`, `api.md` (§3.6), `security.md`, `multi-tenancy.md`,
       `testing.md`, `architecture.md`, `roadmap.md`, `decisions.md` (ADR-031)
+
+## Fase 9 — Mensajes (estado)
+
+- [x] Migración `messages` (UUID, `tenant_id` FK `cascadeOnDelete`, `conversation_id` FK
+      `cascadeOnDelete` — el contacto se resuelve vía la conversación, no se duplica en la tabla;
+      `type` text/image/audio/video/document/location/interactive/template, `direction`
+      inbound/outbound, `status` pending/sending/sent/delivered/read/failed, `body` TEXT,
+      `provider_message_id` (id de Meta; idempotencia con `UNIQUE (tenant_id, provider_message_id)`,
+      los NULL no colisionan), `media_url` (2048)/`media_mime` (100)/`media_size` (bigint) como
+      columnas propias, `metadata` JSONB (`from`, `provider_timestamp` y payload del tipo:
+      media/location/interactive/template), `sent_at`/`delivered_at`/`read_at`/`failed_at`
+      (columna por estado, ADR-032), timestamps, índices `(tenant_id, conversation_id, created_at)`
+      y `(conversation_id)`)
+- [x] `MessageStatus` enum ampliado con `Sending = 'sending'` (estado CAS del job de envío) y
+      `columnFor()` → `sent_at`/`delivered_at`/`read_at`/`failed_at` (null para pending/sending)
+- [x] Modelos en `app/Domain/Messages/Models`: `Message` (BelongsToTenant + HasUuids + SoftDeletes,
+      casts type/direction/status/metadata/timestamps, relaciones contact/conversation) y
+      `Tenant::messages()`
+- [x] `MessageService` (Application): `handleInboundMessage(tenant, eventData)` → find-or-create
+      contacto (FASE 7) → find-or-create conversación activa (FASE 8) → dedupe por
+      `provider_message_id` (mensaje duplicado = no-op + audita `message.duplicate`) → crea mensaje
+      inbound (extrae body/media según tipo; `UnsupportedMessageTypeException` para tipos no
+      soportados; metadata sin secretos) → `touchConversation` (reabre resolved/archived, actualiza
+      `last_message_at`/`last_interaction_at`) → audita `message.received`. `handleStatusUpdate(tenant,
+      eventData)` → update por `provider_message_id` (nunca crea; actualiza `columnFor` y estado,
+      `failed` → conversación `pending`; audita `message.status_updated`). `createOutbound(tenant,
+      conversation, text)` → crea mensaje `pending` + dispatch `SendWhatsAppMessage` (FASE 10 usará
+      esta vía)
+- [x] Jobs: `ProcessIncomingWhatsAppMessage` y `ProcessWhatsAppStatusUpdate` (TenantAwareJob +
+      ShouldQueue, `tries=3`, backoff `[5,15,60]`, guard de estado `Enqueued`) ahora DELEGAN en
+      `MessageService` y hacen `markProcessed()`/`markFailed()` real (sin TODOs pendientes).
+      `SendWhatsAppMessage` (ShouldBeUnique `send:{id}` uniqueFor 300, timeout 60, `tries` de
+      config, backoff `[10,30,60]`): CAS `pending → sending` con update atómico (job duplicado =
+      no-op, evita doble envío), valida tipo text + cuenta conectada + teléfono conectado default,
+      llama a `MetaWhatsAppProvider::sendText` con el token del WABA del tenant, registra
+      `message_send_attempts` (attempt/max_attempts, `attempted_at`, `error_code`/`error_message`
+      del proveedor en el intento fallido), éxito → `sent` + `provider_message_id` + audita
+      `message.sent`; fallo permanente → `failed` + `failed_at` (el detalle del error queda en el
+      attempt, no en `messages`) + audita `message.failed`; fallo retryable → rethrow (reintento
+      real con backoff)
+- [x] `WhatsAppWebhookService` refactorizado: `resolveAndEnqueue()` (resuelve tenant por
+      `phone_number_id`, marca `enqueued`, dispatch por tipo) + `reprocessEvent()` público para el
+      outbox. Dedupe de estados: Meta reusa el id de mensaje en `statuses` (delivered/read del mismo
+      mensaje colisionaban en `provider_event_id` UNIQUE) → clave compuesta `id|status|timestamp`
+- [x] Outbox (sweeper): comando `whatsapp:reprocess-webhook-events` (reprocesa eventos
+      `received` de más de 5 minutos, limit 100) + `Schedule::command(...)->everyMinute()
+      ->withoutOverlapping()` en `routes/console.php` (ADR-032: garantía de entrega ante fallos de
+      resolución de tenant/jobs)
+- [x] Tests (28 nuevos en FASE 9 → **248 total, 934 assertions**): MSG-1..9 (inbound e2e vía
+      webhook: persistencia contacto/conversación/mensaje, dedupe, aislamiento CRITICO MSG-6 A/B,
+      tipo no soportado → failed, media image, reabrir resolved, auditoría), STAT-1..8 (delivered/
+      read/failed e2e, clave compuesta dedupe, idempotencia, no-op sin mensaje, aislamiento A/B),
+      OUT-1..7 (dispatch, éxito con attempt+auditoría, fallo permanente, fallo retryable rethrow +
+      queda `sending`, CAS no re-envía, no conectado, no-text), OUTBOX-1..4 (reprocesa `received`
+      viejos, ignora nuevos/`processed`, límite 100, exit codes)
+- [x] Helpers de test movidos a `tests/Support/helpers.php` (composer autoload-dev `files`):
+      `make_contact`, `make_conversation`, webhook (`post_whatsapp_webhook`,
+      `whatsapp_webhook_payload`, firma/secreto); suites FASE 7/8 actualizadas
+- [x] Pint + PHPStan (nivel 6, larastan) + `vue-tsc` + `vite build` + `vitest` sin errores
+- [x] Regresión Docker: `migrate`/`rollback` de `messages` en postgres sin errores (JSONB ok),
+      suite completa verde en el contenedor, `health:check` ok (app/database/redis/queue)
+- [x] Documentación: `database.md`, `whatsapp.md`, `api.md` (§3.7), `multi-tenancy.md`,
+      `security.md`, `testing.md`, `roadmap.md`, `decisions.md` (ADR-032)

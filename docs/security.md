@@ -183,6 +183,33 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
   `conversation.transferred`, `conversation.closed`, `conversation.reopened`,
   `conversation.bot_paused`, `conversation.bot_resumed`.
 
+### Mensajes (FASE 9)
+- **Aislamiento**: `messages` usa `BelongsToTenant` (scope global + forzado de `tenant_id` por
+  `TenantContext`). `MessageService` y los jobs (`ProcessIncomingWhatsAppMessage`,
+  `ProcessWhatsAppStatusUpdate`, `SendWhatsAppMessage`) resuelven SIEMPRE con
+  `withoutTenantScope()->where('tenant_id', ...)` del tenant resuelto/encolado → un webhook de un
+  número del tenant B jamás persiste en datos del A (tests CRITICOS MSG-6 y STAT-8 A/B).
+  `TenantContext` se setea solo alrededor de los creates y se libera en `finally` (sin
+  contaminación entre jobs; el audit pasa `tenantId:` explícito porque el contexto ya se limpió).
+- **Idempotencia / anti-duplicados**: UNIQUE `(tenant_id, provider_message_id)` (mensaje inbound
+  creado una sola vez; backstop `QueryException` → re-consulta, ADR-032) + dedupe de plataforma
+  `webhook_events.provider_event_id` (para statuses, clave compuesta `id|status|timestamp`: Meta
+  reusa el id de mensaje en delivered/read). Un status update NUNCA crea mensajes (solo actualiza
+  por `provider_message_id`).
+- **Envío sin doble entrega**: `SendWhatsAppMessage` es `ShouldBeUnique` por `message_id` (300s)
+  y usa CAS `pending → sending` con update atómico: un job duplicado/concurrente no re-envía.
+  Reintento solo de errores retryable de Meta (timeout/5xx/429) con backoff; errores permanentes o
+  intentos agotados → `failed` (sin reintento en bucle). El worker re-valida cuenta conectada +
+  número default + tipo text (nunca confía en estado previo).
+- **Nunca confiar en el frontend**: los mensajes inbound provienen del webhook firmado; el
+  outbound se crea por servicio (sin campos del request en FASE 9). El `tenant_id`/`conversation_id`
+  jamás se aceptan del frontend (FASE 10).
+- **DoS / entrega**: el request del webhook no hace trabajo pesado; eventos desconocidos/
+  malformados → 200. El outbox (`whatsapp:reprocess-webhook-events`, cada minuto) re-encola
+  eventos `received` viejos para no perder mensajes si el proceso cae entre insert y encolado.
+- **Auditoría FASE 9**: `message.received`, `message.status_updated`, `message.sent`,
+  `message.failed`, `message.duplicate` (no-op).
+
 ### Inyección SQL
 - Eloquent/Query Builder con bindings. Sin concatenación de SQL.
 - `phpstan` + revisión en code review.
