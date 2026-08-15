@@ -68,8 +68,17 @@ handleMessage(conversation, inboundMessage):
 
 - Fuentes: `{{contact.name}}`, `{{contact.phone}}`, `{{business.name}}`,
   `{{conversation.id}}`, `{{custom.<field>}}` (capturadas por nodos `question`).
-- Sustitución en textos y payloads. `conversation.context` (JSONB) persiste `custom.*`.
+- Sustitución en textos y payloads. `custom.*` se lee SOLO de `flow_executions.variables`
+  (única fuente, decisión FASE 11 + ADR-046; no hay espejo hacia `conversation.context`).
 - Sanitización: output escapado; prohibido exponer tokens/secrets en textos.
+- DSL (FASE 13, UNIDAD 2): `{{variable|default:'valor'}}` usa `valor` cuando la variable no
+  existe, es `null` o está vacía (`''` o `[]`); comillas escapables con `\'`; caracteres de
+  control del resultado eliminados; sin `eval`.
+- Default runtime (FASE 13, UNIDAD 6, ADR-046): una respuesta **vacía** a una pregunta con
+  `question.config.default` usable persiste el default **coerceado al tipo declarado** en
+  `flow_executions.variables.custom.<field>`. Una respuesta no vacía siempre gana (aunque falle
+  la coerción se conserva la cadena en bruto). `default` ausente/`null`/`''` = sin valor por
+  defecto (comportamiento previo intacto).
 
 ## 6. Triggers
 
@@ -147,6 +156,9 @@ objetivo completo; las diferencias marcadas abajo). Referencias: ADR-034..039.
   `execution.variables` (respuestas de `question`); no hay espejo hacia `conversation.context`
   (decisión FASE 11 — ver FLOW-2 en tests). FASE 13: `{{contact.<campo>}}` es alias de
   `contact.metadata[<campo>]` (ADR-045); la traversión `contact.metadata.<clave>` sigue bloqueada.
+  FASE 13 (UNIDAD 6, ADR-046): la captura de `question` aplica `question.config.default`
+  coerceado al tipo declarado cuando la respuesta es vacía (sin default → comportamiento previo;
+  una respuesta no vacía siempre gana).
 - `FlowValidator` (FASE 13, ADR-045): límites de longitud (textos ≤ 4096, campo de condition
   ≤ 128, URL webhook ≤ 2048), `question` valida `type` (`VariableType`) y `default` (coercible al
   tipo declarado o `string`), escaneo de referencias con error duro solo para segmentos

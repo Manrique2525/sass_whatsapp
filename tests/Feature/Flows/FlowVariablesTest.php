@@ -465,3 +465,243 @@ test('VAR-3: el nodo condition con starts_with funciona end-to-end', function ()
     expect($execution->status)->toBe(FlowExecutionStatus::Completed)
         ->and($outbound->last()->body)->toBe('Email corporativo');
 });
+
+/*
+|--------------------------------------------------------------------------
+| FASE 13 — UNIDAD 6: contrato runtime de defaults (VAR-35/36)
+|--------------------------------------------------------------------------
+*/
+
+/**
+ * Publica un flujo Inicio → question (config dada, con field/type/default)
+ * → resto del grafo.
+ */
+function publish_runtime_default_flow(Tenant $tenant, array $questionConfig, array $tail): Flow
+{
+    $chatbot = make_chatbot($tenant);
+    $flow = make_flow($tenant, $chatbot);
+
+    make_flow_graph($flow, array_merge([
+        ['id' => 'n1', 'type' => 'message', 'name' => 'Inicio', 'config' => ['text' => 'Hola'], 'is_start' => true],
+        ['id' => 'n2', 'type' => 'question', 'name' => 'Dato', 'config' => $questionConfig],
+    ], $tail['nodes']), array_merge([['from' => 'n1', 'to' => 'n2']], $tail['connections']));
+
+    $flow->forceFill(['status' => FlowStatus::Published->value])->save();
+
+    make_trigger($flow, ['type' => FlowTriggerType::Start->value]);
+
+    return $flow;
+}
+
+test('VAR-35: una respuesta vacía persiste el default coerceado al tipo declarado', function (): void {
+    Queue::fake();
+
+    $tenant = Tenant::factory()->create();
+    publish_runtime_default_flow($tenant, [
+        'prompt' => '¿Edad?',
+        'field' => 'edad',
+        'type' => 'integer',
+        'default' => '42',
+    ], [
+        'nodes' => [
+            ['id' => 'n3', 'type' => 'message', 'name' => 'Resultado', 'config' => ['text' => 'Edad {{custom.edad}}']],
+            ['id' => 'n4', 'type' => 'end', 'name' => 'Fin'],
+        ],
+        'connections' => [
+            ['from' => 'n2', 'to' => 'n3'],
+            ['from' => 'n3', 'to' => 'n4'],
+        ],
+    ]);
+
+    $execution = answer_typed_question($tenant, '');
+    $outbound = flow_variables_outbound($tenant);
+
+    expect($execution->variables['custom']['edad'])->toBe(42)
+        ->and($execution->variables['custom']['edad'])->toBeInt()
+        ->and($outbound->last()->body)->toBe('Edad 42');
+});
+
+test('VAR-35: el default boolean se persiste con su tipo real', function (): void {
+    Queue::fake();
+
+    $tenant = Tenant::factory()->create();
+    publish_runtime_default_flow($tenant, [
+        'prompt' => '¿VIP?',
+        'field' => 'vip',
+        'type' => 'boolean',
+        'default' => 'true',
+    ], [
+        'nodes' => [['id' => 'n3', 'type' => 'end', 'name' => 'Fin']],
+        'connections' => [['from' => 'n2', 'to' => 'n3']],
+    ]);
+
+    $execution = answer_typed_question($tenant, '');
+
+    expect($execution->variables['custom']['vip'])->toBeTrue();
+});
+
+test('VAR-35: el default date se persiste con su tipo real', function (): void {
+    Queue::fake();
+
+    $tenant = Tenant::factory()->create();
+    publish_runtime_default_flow($tenant, [
+        'prompt' => '¿Fecha?',
+        'field' => 'fecha',
+        'type' => 'date',
+        'default' => '2024-01-01',
+    ], [
+        'nodes' => [['id' => 'n3', 'type' => 'end', 'name' => 'Fin']],
+        'connections' => [['from' => 'n2', 'to' => 'n3']],
+    ]);
+
+    $execution = answer_typed_question($tenant, '');
+
+    expect($execution->variables['custom']['fecha'])->toBe('2024-01-01');
+});
+
+test('VAR-35: el default string se persiste ante respuesta vacía', function (): void {
+    Queue::fake();
+
+    $tenant = Tenant::factory()->create();
+    publish_runtime_default_flow($tenant, [
+        'prompt' => '¿Nombre?',
+        'field' => 'nombre',
+        'type' => 'string',
+        'default' => 'invitado',
+    ], [
+        'nodes' => [['id' => 'n3', 'type' => 'end', 'name' => 'Fin']],
+        'connections' => [['from' => 'n2', 'to' => 'n3']],
+    ]);
+
+    $execution = answer_typed_question($tenant, '');
+
+    expect($execution->variables['custom']['nombre'])->toBe('invitado');
+});
+
+test('VAR-35: sin default, una respuesta vacía conserva el comportamiento previo', function (): void {
+    Queue::fake();
+
+    $tenant = Tenant::factory()->create();
+    publish_runtime_default_flow($tenant, [
+        'prompt' => '¿Apodo?',
+        'field' => 'apodo',
+        'type' => 'string',
+    ], [
+        'nodes' => [['id' => 'n3', 'type' => 'end', 'name' => 'Fin']],
+        'connections' => [['from' => 'n2', 'to' => 'n3']],
+    ]);
+
+    $execution = answer_typed_question($tenant, '');
+
+    expect($execution->variables['custom']['apodo'])->toBe('');
+});
+
+test('VAR-35: una respuesta NO vacía siempre gana al default, aunque falle la coerción', function (): void {
+    Queue::fake();
+
+    $tenant = Tenant::factory()->create();
+    publish_runtime_default_flow($tenant, [
+        'prompt' => '¿Edad?',
+        'field' => 'edad',
+        'type' => 'integer',
+        'default' => '42',
+    ], [
+        'nodes' => [['id' => 'n3', 'type' => 'end', 'name' => 'Fin']],
+        'connections' => [['from' => 'n2', 'to' => 'n3']],
+    ]);
+
+    $execution = answer_typed_question($tenant, 'abc');
+
+    expect($execution->variables['custom']['edad'])->toBe('abc');
+});
+
+test('VAR-36: los defaults inline se resuelven en runtime en el motor (múltiples variables)', function (): void {
+    Queue::fake();
+
+    $tenant = Tenant::factory()->create();
+    $chatbot = make_chatbot($tenant);
+    $flow = make_flow($tenant, $chatbot);
+
+    make_flow_graph($flow, [
+        ['id' => 'n1', 'type' => 'message', 'name' => 'Inicio', 'config' => ['text' => 'Hola'], 'is_start' => true],
+        ['id' => 'n2', 'type' => 'message', 'name' => 'Saludo', 'config' => [
+            'text' => "{{custom.a|default:'A'}} {{custom.b|default:'B'}}",
+        ]],
+        ['id' => 'n3', 'type' => 'end', 'name' => 'Fin'],
+    ], [
+        ['from' => 'n1', 'to' => 'n2'],
+        ['from' => 'n2', 'to' => 'n3'],
+    ]);
+
+    $flow->forceFill(['status' => FlowStatus::Published->value])->save();
+
+    make_trigger($flow, ['type' => FlowTriggerType::Start->value]);
+
+    $first = make_inbound_message($tenant, 'Hola');
+    $conversation = Conversation::query()->withoutTenantScope()->whereKey($first->conversation_id)->firstOrFail();
+    run_flow_engine($tenant, $first, $conversation);
+
+    $outbound = flow_variables_outbound($tenant, $conversation->id);
+
+    expect($outbound->last()->body)->toBe('A B');
+});
+
+test('VAR-36: el valor capturado gana al default inline y el default del nodo llena el hueco', function (): void {
+    Queue::fake();
+
+    $tenant = Tenant::factory()->create();
+    publish_runtime_default_flow($tenant, [
+        'prompt' => '¿Nombre?',
+        'field' => 'a',
+        'type' => 'string',
+        'default' => 'X',
+    ], [
+        'nodes' => [
+            ['id' => 'n3', 'type' => 'message', 'name' => 'Saludo', 'config' => [
+                'text' => "{{custom.a|default:'A'}} {{custom.b|default:'B'}}",
+            ]],
+            ['id' => 'n4', 'type' => 'end', 'name' => 'Fin'],
+        ],
+        'connections' => [
+            ['from' => 'n2', 'to' => 'n3'],
+            ['from' => 'n3', 'to' => 'n4'],
+        ],
+    ]);
+
+    $execution = answer_typed_question($tenant, '');
+    $outbound = flow_variables_outbound($tenant);
+
+    expect($execution->variables['custom']['a'])->toBe('X')
+        ->and($outbound->last()->body)->toBe('X B');
+});
+
+test('VAR-36: los caracteres de control del default inline se eliminan en runtime', function (): void {
+    Queue::fake();
+
+    $tenant = Tenant::factory()->create();
+    $chatbot = make_chatbot($tenant);
+    $flow = make_flow($tenant, $chatbot);
+
+    make_flow_graph($flow, [
+        ['id' => 'n1', 'type' => 'message', 'name' => 'Inicio', 'config' => ['text' => 'Hola'], 'is_start' => true],
+        ['id' => 'n2', 'type' => 'message', 'name' => 'Saludo', 'config' => [
+            'text' => "Hola {{custom.x|default:'a\x00b'}}",
+        ]],
+        ['id' => 'n3', 'type' => 'end', 'name' => 'Fin'],
+    ], [
+        ['from' => 'n1', 'to' => 'n2'],
+        ['from' => 'n2', 'to' => 'n3'],
+    ]);
+
+    $flow->forceFill(['status' => FlowStatus::Published->value])->save();
+
+    make_trigger($flow, ['type' => FlowTriggerType::Start->value]);
+
+    $first = make_inbound_message($tenant, 'Hola');
+    $conversation = Conversation::query()->withoutTenantScope()->whereKey($first->conversation_id)->firstOrFail();
+    run_flow_engine($tenant, $first, $conversation);
+
+    $outbound = flow_variables_outbound($tenant, $conversation->id);
+
+    expect($outbound->last()->body)->toBe('Hola ab');
+});

@@ -241,10 +241,22 @@ final class FlowEngine
 
             if (VariableGuard::isValidKey($field)) {
                 $type = VariableType::tryFrom((string) ($node->config['type'] ?? '')) ?? VariableType::String;
-                $coerced = $type->coerce(VariableGuard::truncateValue(trim((string) $inbound->body)));
+                $raw = VariableGuard::truncateValue(trim((string) $inbound->body));
+
+                // FASE 13 (UNIDAD 6): contrato runtime del default. Si la
+                // respuesta está vacía (null/'' → "sin respuesta") y el nodo
+                // declara un `question.config.default` usable, se persiste el
+                // default coerceado al tipo declarado (nunca el raw vacío).
+                // Una respuesta NO vacía siempre gana, aunque falle la
+                // coerción (se conserva la cadena en bruto, contrato VAR-2).
+                $candidate = $raw === '' && $this->hasUsableDefault($node->config)
+                    ? VariableGuard::truncateValue(trim((string) $node->config['default']))
+                    : $raw;
+
+                $coerced = $type->coerce($candidate);
 
                 $variables = $execution->variables;
-                $variables['custom'][$field] = $coerced->ok ? $coerced->value : trim((string) $inbound->body);
+                $variables['custom'][$field] = $coerced->ok ? $coerced->value : $candidate;
                 $execution->forceFill(['variables' => $variables])->save();
             }
         }
@@ -266,6 +278,20 @@ final class FlowEngine
         ], event: 'step_completed', nodeId: $node->id, payload: ['next' => $next]);
 
         $this->run($tenant, $execution, $conversation, $inbound);
+    }
+
+    /**
+     * ¿El nodo `question` declara un default runtime usable? Solo un string
+     * no vacío tras trim cuenta como default: `null` o `''` significan "sin
+     * valor por defecto" (coincide con el editor, que normaliza '' → null).
+     *
+     * @param  array<string, mixed>  $config
+     */
+    private function hasUsableDefault(array $config): bool
+    {
+        return isset($config['default'])
+            && is_string($config['default'])
+            && trim($config['default']) !== '';
     }
 
     /**

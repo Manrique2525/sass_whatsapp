@@ -353,6 +353,13 @@ editor los conserva y edita al guardar. Límites de validación: textos ≤ 4096
 con esquema `http(s)` y host literal (sin variables, sin credenciales). Los logs/auditoría del
 webhook usan URLs saneadas (sin userinfo/query/fragment).
 
+**FASE 13, UNIDAD 6 (ADR-046)**: `default` también tiene efecto en runtime: ante una respuesta
+**vacía** a un nodo `question` con `question.config.default` usable, el motor persiste el default
+**coerceado al tipo declarado** en `flow_executions.variables.custom.<field>` (con su tipo real,
+p. ej. `integer` `'42'` → `42` int), que luego fluye a interpolación y condiciones. Sin default o
+con respuesta no vacía, el comportamiento de la UNIDAD 2/5 no cambia. El endpoint del catálogo
+sigue siendo de solo lectura (definiciones, nunca valores de ejecución).
+
 **Editor visual (FASE 12)**: el frontend edita sobre los endpoints de la tabla (página
 `settings/flows/{chatbot}/{flow}`, ADR-040..044). El editor envía ids de nodo UUID, posiciones
 enteras, aristas con `label` (`true`/`false` para ramas de condición) y `base_updated_at`

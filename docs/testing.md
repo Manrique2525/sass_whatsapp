@@ -218,6 +218,23 @@ Pirámide de tests con prioridad en lo crítico:
   `Map` y es inmune a `custom.__proto__`/`constructor`/`prototype` (sin prototype pollution).
 - Suite total UNIDAD 5 (backend): **425 tests / 2001 assertions**; frontend **147 tests Vitest**.
 
+### Contrato runtime de variables (FASE 13, UNIDAD 6, ADR-046)
+- **Runtime default** (`FlowVariablesTest`, VAR-35, 6 tests): una respuesta **vacía** a una
+  pregunta con `question.config.default` usable persiste el default coerceado al tipo declarado
+  (integer `'42'` → `42` int y se interpola `Edad 42`; boolean `'true'` → `true`; date
+  `'2024-01-01'` → `'2024-01-01'`; string `'invitado'` → `'invitado'`). Sin default (`''`/ausente)
+  la respuesta vacía conserva el comportamiento previo (`''`). Una respuesta **no vacía** siempre
+  gana al default aunque falle la coerción (`'abc'` con default integer → raw `'abc'`, contrato
+  VAR-2 intacto).
+- **Inline default end-to-end** (`FlowVariablesTest`, VAR-36, 3 tests): `{{custom.a|default:'A'}}
+  {{custom.b|default:'B'}}` se resuelve en el motor con múltiples variables (`A B`); el valor
+  capturado gana al default inline y el default del nodo llena el hueco (`X B`); los caracteres de
+  control del default inline se eliminan en runtime (`Hola ab`).
+- **Concurrencia/aislamiento**: no se tocó el modelo de captura (VAR-24/25/26) ni los accesos
+  multi-tenant (VAR-29/30) — siguen verdes sin cambios.
+- Suite total UNIDAD 6 (backend): **434 tests / 2013 assertions**; frontend **147 tests Vitest**
+  (sin cambios de frontend).
+
 ### Auth
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 

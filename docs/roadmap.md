@@ -628,7 +628,7 @@ COMPLETADO / BLOQUEADO
       `architecture.md` (frontend editor), `roadmap.md`, `decisions.md` (ADR-040..044)
 - [ ] FASE 12 termina SIN push a origin (reporte final en PASO 13)
 
-> ## Fase 13 — Variables, validación y Flow Builder (estado, UNIDAD 5)
+> ## Fase 13 — Variables, validación y Flow Builder (estado, UNIDAD 6)
 
 - [x] **Catálogo de variables** (UNIDAD 3/4, ADR-046): endpoint
       `GET /api/v1/tenants/{tenant}/flows/{flow}/variables` (solo lectura `flows.view`, definiciones
@@ -655,7 +655,18 @@ COMPLETADO / BLOQUEADO
       `useVariableCatalog` inmune a `__proto__`/`constructor`/`prototype`.
 - [x] **Gates**: `php artisan test` (425/2001 assertions) + Pint + PHPStan nivel 6 + `vitest`
       (147) + `vue-tsc` + `vite build` verdes.
-- [x] **Documentación**: `decisions.md` (ADR-045), `chatbot-engine.md` (§10.2/§11), `api.md`
-      (§3.8), `security.md` (SSRF + logs), `testing.md`.
-- [ ] FASE 13 **PENDIENTE** (no marcada completada): falta UNIDAD 6 autorización + push.
+- [x] **Documentación (UNIDAD 5)**: `decisions.md` (ADR-045), `chatbot-engine.md` (§10.2/§11),
+      `api.md` (§3.8), `security.md` (SSRF + logs), `testing.md`.
+- [x] **UNIDAD 6 — Contrato runtime de variables** (ADR-046): `question.config.default` se aplica
+      en runtime — una respuesta **vacía** a una pregunta con default usable persiste el default
+      **coerceado al tipo declarado** (`integer` `'42'` → `42` int) en `execution.variables`;
+      sin default o con respuesta no vacía el comportamiento previo queda intacto (VAR-2
+      conservado). El DSL inline `{{variable|default:'valor'}}` se verifica end-to-end en el
+      motor (múltiples variables, valor capturado gana, caracteres de control eliminados).
+      No toca tipos, condiciones, webhook ni API.
+- [x] **UNIDAD 6 — Gates**: `php artisan test` (434/2013 assertions) + Pint + PHPStan nivel 6 +
+      `vitest` (147) + `vue-tsc` + `vite build` verdes. Frontend sin cambios.
+- [x] **UNIDAD 6 — Documentación**: `decisions.md` (ADR-046, repara la referencia colgante a
+      "ADR-046" del catálogo), `chatbot-engine.md` (§5/§10.2), `api.md` (§3.8), `testing.md`.
+- [ ] FASE 13 **PENDIENTE** (no marcada completada): falta UNIDAD 7 autorización + push.
 - [ ] FASE 13 termina SIN push a origin (reporte final en PASO 13)

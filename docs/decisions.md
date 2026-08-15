@@ -936,3 +936,36 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   mantiene `type`/`default`; VAR-24/25/26 (concurrencia) y VAR-29/30 (aislamiento tenant) se
   prueban explícitamente. Suite backend 425 tests / 2001 assertions; frontend 147 tests.
 
+## ADR-046 · FASE 13: catálogo de variables y contrato runtime de defaults (UNIDAD 3/4 y UNIDAD 6)
+
+- **Estado**: Aceptado → FASE 13
+- **Contexto**: (1) La UNIDAD 3/4 introdujo el catálogo derivado de variables
+  (`VariableCatalogService`), al que `docs/roadmap.md` y `docs/api.md` ya referenciaban como
+  "ADR-046" pero el ADR nunca se escribió (referencia colgante). (2) La UNIDAD 6 debía completar
+  el **contrato runtime** de variables: `question.config.default` se validaba al publicar
+  (ADR-045), se exponía en el catálogo y lo conservaba el editor, pero el motor **nunca lo
+  aplicaba** en runtime: ante una respuesta vacía se persistía `''`/raw en vez del default.
+- **Decisión**:
+  - **Catálogo (UNIDAD 3/4)**: `GET /api/v1/tenants/{tenant}/flows/{flow}/variables` expone
+    definiciones derivadas (nunca valores de ejecución) construidas íntegramente server-side;
+    `custom.*` se deriva de los nodos `question` (field/type/default), `business.*` SOLO vía
+    `BusinessProfile::PUBLIC_FIELDS`; el Resource expone únicamente `VariableDefinition` (nunca
+    `tenant_id`, config de nodos, headers/body de webhook ni secretos).
+  - **Default en runtime (UNIDAD 6)**: en `FlowEngine::resumeAfterAnswer` (rama `question`), si
+    la respuesta recortada es vacía (`''` → "sin respuesta") y el nodo declara un
+    `question.config.default` usable (string no vacío tras trim), el motor persiste el default
+    **coerceado al tipo declarado** (misma coerción determinista de `VariableType`, con fallback a
+    la cadena en bruto si los datos publicados estuvieran corruptos). Sin default (ausente, `null`
+    o `''`) el comportamiento previo queda intacto. Una respuesta **no vacía siempre gana** al
+    default, incluida la conservación de la cadena en bruto cuando falla la coerción (contrato
+    VAR-2 intacto).
+  - **Frontera del alcance**: la UNIDAD 6 no toca el DSL inline `{{variable|default:'valor'}}`
+    (ya existente, UNIDAD 2, se verifica end-to-end), ni los tipos, ni las condiciones
+    (AND/all/any/not/starts_with/ends_with), ni el webhook (el URL sigue literal, sin SSRF por
+    variables). Sin `eval`, sin tabla ni DDL nuevos, sin cambios de API.
+- **Consecuencias**: una respuesta vacía a una pregunta tipada con default produce la variable
+  con el tipo real (p. ej. `integer` `'42'` → `42` int) y fluye a interpolación y condiciones;
+  la suite pasa a 434 tests backend / 2013 assertions y se documenta el contrato runtime en
+  `chatbot-engine.md` §5/§10.2 y `api.md` §3.8.
+
+
