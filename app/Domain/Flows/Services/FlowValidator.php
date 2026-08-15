@@ -177,6 +177,7 @@ final class FlowValidator
                 break;
 
             case FlowNodeType::Condition:
+                $this->validateConditionMatch($config['match'] ?? null, $name, $errors);
                 $this->validateConditionRules($config['rules'] ?? null, $name, $errors);
                 break;
 
@@ -238,6 +239,18 @@ final class FlowValidator
     }
 
     /**
+     * `match` opcional en 'all' (por defecto) o 'any' (FASE 13).
+     *
+     * @param  list<string>  $errors
+     */
+    private function validateConditionMatch(mixed $match, string $name, array &$errors): void
+    {
+        if ($match !== null && ! in_array($match, ['all', 'any'], true)) {
+            $errors[] = "El nodo \"{$name}\" (condición) tiene un 'match' no válido (debe ser 'all' o 'any').";
+        }
+    }
+
+    /**
      * @param  list<string>  $errors
      */
     private function validateConditionRules(mixed $rules, string $name, array &$errors): void
@@ -272,6 +285,10 @@ final class FlowValidator
 
             if ($operator->needsValue() && ! array_key_exists('value', $rule)) {
                 $errors[] = "El nodo \"{$name}\" (condición) tiene una regla sin 'value' para el operador '{$operator->value}'.";
+            }
+
+            if (array_key_exists('not', $rule) && ! is_bool($rule['not'])) {
+                $errors[] = "El nodo \"{$name}\" (condición) tiene una regla con 'not' no booleano.";
             }
         }
     }

@@ -91,3 +91,60 @@ test('VAR-7: rechaza field peligrosos o fuera del patrón', function (): void {
         );
     }
 });
+
+/**
+ * @param  array<string, mixed>  $conditionConfig
+ * @return list<string>
+ */
+function validate_condition_config(array $conditionConfig): array
+{
+    $nodes = [
+        make_validator_node('n1', 'message', ['text' => 'Hola'], true),
+        make_validator_node('n2', 'condition', $conditionConfig),
+        make_validator_node('n3', 'message', ['text' => 'Sí']),
+        make_validator_node('n4', 'message', ['text' => 'No']),
+        make_validator_node('n5', 'end'),
+    ];
+
+    return app(FlowValidator::class)->validate($nodes, [
+        make_validator_edge('n1', 'n2'),
+        make_validator_edge('n2', 'n3', 'true'),
+        make_validator_edge('n2', 'n4', 'false'),
+        make_validator_edge('n3', 'n5'),
+        make_validator_edge('n4', 'n5'),
+    ]);
+}
+
+test('VAR-7: las reglas de condition aceptan starts_with/ends_with y match all/any', function (): void {
+    foreach (['starts_with', 'ends_with'] as $operator) {
+        expect(validate_condition_config(['rules' => [
+            ['field' => 'custom.email', 'operator' => $operator, 'value' => 'ana'],
+        ]]))->toBe([]);
+    }
+
+    expect(validate_condition_config(['match' => 'any', 'rules' => [
+        ['field' => 'custom.plan', 'operator' => 'equals', 'value' => 'pro'],
+        ['field' => 'custom.plan', 'operator' => 'equals', 'value' => 'admin'],
+    ]]))->toBe([])
+        ->and(validate_condition_config(['match' => 'all', 'rules' => [
+            ['field' => 'custom.a', 'operator' => 'equals', 'value' => '1', 'not' => true],
+        ]]))->toBe([]);
+});
+
+test('VAR-7: un condition con match no válido o not no booleano se rechaza', function (): void {
+    $matchErrors = validate_condition_config(['match' => 'alguno', 'rules' => [
+        ['field' => 'custom.a', 'operator' => 'equals', 'value' => '1'],
+    ]]);
+
+    expect($matchErrors)->toContain(
+        "El nodo \"Nodo n2\" (condición) tiene un 'match' no válido (debe ser 'all' o 'any').",
+    );
+
+    $notErrors = validate_condition_config(['rules' => [
+        ['field' => 'custom.a', 'operator' => 'equals', 'value' => '1', 'not' => 'si'],
+    ]]);
+
+    expect($notErrors)->toContain(
+        "El nodo \"Nodo n2\" (condición) tiene una regla con 'not' no booleano.",
+    );
+});

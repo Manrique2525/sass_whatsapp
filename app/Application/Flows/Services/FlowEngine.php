@@ -8,6 +8,7 @@ use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Flows\Enums\FlowExecutionStatus;
 use App\Domain\Flows\Enums\FlowNodeType;
 use App\Domain\Flows\Enums\FlowStatus;
+use App\Domain\Flows\Enums\VariableType;
 use App\Domain\Flows\Exceptions\FlowWebhookRequestFailedException;
 use App\Domain\Flows\Exceptions\WebhookUrlBlockedException;
 use App\Domain\Flows\Models\Flow;
@@ -227,17 +228,23 @@ final class FlowEngine
         Message $inbound,
     ): void {
         if ($node->type === FlowNodeType::Question) {
-            // FASE 13 (fix C8): normalización de la clave a snake_case estricto
-            // + defensa en profundidad con VariableGuard. La clave ya fue
-            // validada al publicar (FlowValidator), pero se normaliza y se
-            // revalida aquí para que ningún flujo con datos corruptos pueda
-            // escribir variables fuera de política. El valor se recorta y se
-            // limita en longitud (MAX_VALUE_LENGTH).
+            // FASE 13 (fix C8 + UNIDAD 2): normalización de la clave a
+            // snake_case estricto + defensa en profundidad con VariableGuard.
+            // La clave ya fue validada al publicar (FlowValidator), pero se
+            // normaliza y se revalida aquí para que ningún flujo con datos
+            // corruptos pueda escribir variables fuera de política. El valor se
+            // recorta, se limita en longitud (MAX_VALUE_LENGTH) y se coerce al
+            // tipo declarado en `question.config.type` (string por defecto);
+            // si la coerción falla se conserva la cadena en bruto y el siguiente
+            // nodo con condición numérica/boolean no puede igualar por error.
             $field = VariableGuard::normalizeKey((string) ($node->config['field'] ?? ''));
 
             if (VariableGuard::isValidKey($field)) {
+                $type = VariableType::tryFrom((string) ($node->config['type'] ?? '')) ?? VariableType::String;
+                $coerced = $type->coerce(VariableGuard::truncateValue(trim((string) $inbound->body)));
+
                 $variables = $execution->variables;
-                $variables['custom'][$field] = VariableGuard::truncateValue(trim((string) $inbound->body));
+                $variables['custom'][$field] = $coerced->ok ? $coerced->value : trim((string) $inbound->body);
                 $execution->forceFill(['variables' => $variables])->save();
             }
         }

@@ -19,6 +19,8 @@ enum FlowConditionOperator: string
     case NotEquals = 'not_equals';
     case Contains = 'contains';
     case NotContains = 'not_contains';
+    case StartsWith = 'starts_with';
+    case EndsWith = 'ends_with';
     case GreaterThan = 'greater_than';
     case LessThan = 'less_than';
     case GreaterOrEqual = 'greater_or_equal';
@@ -43,6 +45,8 @@ enum FlowConditionOperator: string
             self::NotEquals => 'distinto de',
             self::Contains => 'contiene',
             self::NotContains => 'no contiene',
+            self::StartsWith => 'empieza por',
+            self::EndsWith => 'termina en',
             self::GreaterThan => 'mayor que',
             self::LessThan => 'menor que',
             self::GreaterOrEqual => 'mayor o igual que',

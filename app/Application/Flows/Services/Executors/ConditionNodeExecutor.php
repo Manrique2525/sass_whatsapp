@@ -14,9 +14,9 @@ use App\Domain\Flows\ValueObjects\NodeExecutionResult;
  * Ejecutor del nodo `condition`: evalúa las reglas contra las variables
  * disponibles y avanza por la arista `true` o `false`.
  *
- * La evaluación es pura (`ConditionEvaluator`, AND implícito entre reglas).
- * El mapa de variables usa claves dotted (`contact.name`, `custom.<field>`,
- * `business.<campo>`, `conversation.id`).
+ * La evaluación es pura (`ConditionEvaluator`). Soporta `match: 'all'|'any'`
+ * (FASE 13) y `not` por regla. El mapa de variables usa claves dotted
+ * (`contact.name`, `custom.<field>`, `business.<campo>`, `conversation.id`).
  */
 final class ConditionNodeExecutor implements NodeExecutorInterface
 {
@@ -35,7 +35,10 @@ final class ConditionNodeExecutor implements NodeExecutorInterface
         $rules = is_array($config['rules'] ?? null) ? $config['rules'] : [];
         $variables = $this->buildVariables($context);
 
-        $result = $this->evaluator->evaluate($variables, $rules);
+        $result = $this->evaluator->evaluateGroup($variables, [
+            'match' => $config['match'] ?? 'all',
+            'rules' => $rules,
+        ]);
 
         return NodeExecutionResult::continue($result ? 'true' : 'false');
     }
