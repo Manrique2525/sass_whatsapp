@@ -90,6 +90,16 @@ describe('nodeConfigSummary', () => {
         expect(nodeConfigSummary('end', {})).toBe('');
         expect(nodeConfigSummary('human', { nota: 'x' })).toBe('');
     });
+
+    it('no resuelve variables ni expone metadatos de definición (VAR-33)', () => {
+        expect(nodeConfigSummary('message', { text: 'Hola {{contact.name}}' })).toBe('Hola {{contact.name}}');
+        expect(nodeConfigSummary('question', { prompt: '¿X?', field: 'nombre', type: 'integer', default: 18 })).toBe(
+            '¿X? — campo "nombre"',
+        );
+        expect(nodeConfigSummary('buttons', { text: 'Elegí:', buttons: [{ id: 'opcion_1', title: 'Sí' }] })).toBe(
+            'Elegí: — Opciones: Sí',
+        );
+    });
 });
 
 describe('buildChatbotQuery', () => {

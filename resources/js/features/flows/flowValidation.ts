@@ -51,6 +51,82 @@ export function isValidVariableKey(value: string): boolean {
     );
 }
 
+// FASE 13 (UNIDAD 4): referencia `{{...}}` (espejo del `TOKEN_PATTERN` de
+// `VariableResolver`; el filtro `|default:'...'` se ignora).
+const VARIABLE_REFERENCE_RE = /\{\{\s*([a-z][a-z0-9_.]*)[^}]*\}\}/gi;
+
+export const VARIABLE_NAMESPACES = ['contact', 'business', 'conversation', 'custom'] as const;
+
+/**
+ * Campos públicos del negocio (espejo de `BusinessProfile::PUBLIC_FIELDS`).
+ * La autoridad es el backend: aquí solo se anticipan warnings de UX.
+ */
+export const BUSINESS_PUBLIC_FIELDS = ['name', 'description', 'category', 'address', 'website', 'email', 'phone'] as const;
+
+function extractVariableReferences(text: string): string[] {
+    const references: string[] = [];
+
+    for (const match of text.matchAll(VARIABLE_REFERENCE_RE)) {
+        const key = match[1].toLowerCase();
+
+        if (references.indexOf(key) === -1) {
+            references.push(key);
+        }
+    }
+
+    return references;
+}
+
+/**
+ * Warnings (NUNCA errores) de referencias a variables que el motor no podrá
+ * resolver en el flujo actual. No bloquean la edición ni el guardado; el
+ * backend sigue siendo la autoridad (los textos con refs desconocidas se
+ * envían tal cual / vacías).
+ *
+ * @param  ReadonlySet<string>  $customKeys  claves `custom.*` capturadas por
+ *        nodos `question` del propio flujo.
+ */
+export function variableReferenceWarnings(
+    type: FlowNodeType,
+    config: Record<string, unknown> | null,
+    customKeys: ReadonlySet<string>,
+): string[] {
+    const c = config ?? {};
+    const text =
+        type === 'message' || type === 'buttons'
+            ? (typeof c.text === 'string' ? c.text : '')
+            : type === 'question'
+              ? (typeof c.prompt === 'string' ? c.prompt : '')
+              : '';
+
+    const warnings: string[] = [];
+
+    for (const key of extractVariableReferences(text)) {
+        const parts = key.split('.');
+        const namespace = parts[0];
+        const rest = parts.slice(1).join('.');
+        const token = `{{${key}}}`;
+
+        let message: string | null = null;
+
+        if ((VARIABLE_NAMESPACES as readonly string[]).includes(namespace) === false) {
+            message = `"${token}" usa un namespace desconocido ("${namespace}"); solo se soportan contact, business, conversation y custom.`;
+        } else if (namespace === 'custom' && !customKeys.has(rest)) {
+            message = `"${token}" no se captura en ningún nodo "pregunta" de este flujo.`;
+        } else if (namespace === 'business' && !(BUSINESS_PUBLIC_FIELDS as readonly string[]).includes(rest)) {
+            message = `"${token}" no es un campo público del negocio.`;
+        } else if (namespace === 'conversation' && rest !== 'id') {
+            message = `"${token}" no existe en la conversación (solo conversation.id).`;
+        }
+
+        if (message !== null && warnings.indexOf(message) === -1) {
+            warnings.push(message);
+        }
+    }
+
+    return warnings;
+}
+
 /**
  * Anticipa errores de config del nodo (espejo de `FlowValidator::validateNodeConfig`).
  * Devuelve mensajes en español listos para mostrar en el panel.
@@ -186,11 +262,22 @@ export function localGraphIssues(nodes: FlowEditorNode[], edges: FlowEditorEdge[
         });
     }
 
+    const customKeys = new Set(
+        nodes
+            .filter((candidate) => candidate.data.type === 'question')
+            .map((candidate) => (typeof candidate.data.config?.field === 'string' ? candidate.data.config.field : ''))
+            .filter((key) => isValidVariableKey(key)),
+    );
+
     for (const node of nodes) {
         const outgoing = edges.filter((edge) => edge.source === node.id);
 
         for (const issue of configIssuesForNode(node.data.type, node.data.config)) {
             issues.push({ nodeId: node.id, severity: 'warning', code: 'CONFIG', message: issue });
+        }
+
+        for (const warning of variableReferenceWarnings(node.data.type, node.data.config, customKeys)) {
+            issues.push({ nodeId: node.id, severity: 'warning', code: 'VARIABLE_REFERENCE', message: warning });
         }
 
         if (isTerminalNodeType(node.data.type)) {

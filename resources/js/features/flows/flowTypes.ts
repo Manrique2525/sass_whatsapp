@@ -122,3 +122,29 @@ export interface ExecutionFilters {
     page?: number;
     perPage?: number;
 }
+
+/**
+ * Tipos de variable del motor (FASE 13). Espejo de `VariableType` backend.
+ */
+export type VariableType = 'string' | 'integer' | 'decimal' | 'boolean' | 'date' | 'datetime' | 'array' | 'object' | 'null';
+
+/**
+ * Namespaces del catálogo de variables (FASE 13, UNIDAD 4). Espejo de
+ * `VariableCatalogService`/`VariableResolver`.
+ */
+export type VariableNamespace = 'contact' | 'business' | 'conversation' | 'custom';
+
+/**
+ * Definición de una variable del catálogo (FASE 13, UNIDAD 3/4). Espejo de
+ * `VariableDefinitionResource` backend: SOLO la definición derivada, nunca
+ * valores runtime ni datos sensibles.
+ */
+export interface VariableDefinition {
+    key: string;
+    label: string;
+    namespace: VariableNamespace;
+    source: string;
+    type: VariableType;
+    default: unknown;
+    writable: boolean;
+}

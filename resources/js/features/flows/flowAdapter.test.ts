@@ -118,6 +118,22 @@ describe('apiToGraph / graphToDraft', () => {
     });
 });
 
+describe('createEditorNode', () => {
+    it('usa DEFAULT_NODE_CONFIG cuando no se pasa config (fix C7)', () => {
+        const buttons = createEditorNode('buttons', 'b1', { x: 0, y: 0 });
+        expect(buttons.data.config).toEqual({ text: '', buttons: [{ id: 'opcion_1', title: '' }] });
+
+        const question = createEditorNode('question', 'q1', { x: 0, y: 0 });
+        expect(question.data.config).toEqual({ text: '', prompt: '', field: '' });
+    });
+
+    it('respeta el config explícito', () => {
+        const node = createEditorNode('message', 'm1', { x: 0, y: 0 }, { text: 'Hola' });
+
+        expect(node.data.config).toEqual({ text: 'Hola' });
+    });
+});
+
 describe('graphSignature', () => {
     it('no depende del orden de nodos/aristas', () => {
         const a = graphSignature([startNode('b'), messageNode('a')], []);

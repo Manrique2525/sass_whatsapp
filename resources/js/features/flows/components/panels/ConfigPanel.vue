@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { FlowEditorNodeData } from '../../flowEditorTypes';
+import type { FlowEditorNodeData, NodeConfigContext } from '../../flowEditorTypes';
 import MessageNodeConfig from './config/MessageNodeConfig.vue';
 import ButtonsNodeConfig from './config/ButtonsNodeConfig.vue';
 import QuestionNodeConfig from './config/QuestionNodeConfig.vue';
@@ -11,7 +11,7 @@ import WebhookNodeConfig from './config/WebhookNodeConfig.vue';
 import HumanNodeConfig from './config/HumanNodeConfig.vue';
 import EndNodeConfig from './config/EndNodeConfig.vue';
 
-const props = defineProps<{ data: FlowEditorNodeData }>();
+const props = defineProps<{ data: FlowEditorNodeData; context: NodeConfigContext }>();
 
 const emit = defineEmits<{ (e: 'update', value: Record<string, unknown>): void }>();
 
@@ -22,10 +22,10 @@ const config = computed({
 </script>
 
 <template>
-    <MessageNodeConfig v-if="data.type === 'message'" v-model="config" />
-    <ButtonsNodeConfig v-else-if="data.type === 'buttons'" v-model="config" />
-    <QuestionNodeConfig v-else-if="data.type === 'question'" v-model="config" />
-    <ConditionNodeConfig v-else-if="data.type === 'condition'" v-model="config" />
+    <MessageNodeConfig v-if="data.type === 'message'" v-model="config" :context="context" />
+    <ButtonsNodeConfig v-else-if="data.type === 'buttons'" v-model="config" :context="context" />
+    <QuestionNodeConfig v-else-if="data.type === 'question'" v-model="config" :context="context" />
+    <ConditionNodeConfig v-else-if="data.type === 'condition'" v-model="config" :context="context" />
     <DelayNodeConfig v-else-if="data.type === 'delay'" v-model="config" />
     <TagNodeConfig v-else-if="data.type === 'tag'" v-model="config" />
     <WebhookNodeConfig v-else-if="data.type === 'webhook'" v-model="config" />

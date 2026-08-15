@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+    BUSINESS_PUBLIC_FIELDS,
     CONDITION_OPERATORS,
     configIssuesForNode,
     isValidVariableKey,
     localGraphIssues,
     mapBackendErrors,
     nodeConfigValid,
+    variableReferenceWarnings,
 } from './flowValidation';
 import { createEditorNode } from './flowAdapter';
 import type { FlowEditorEdge } from './flowEditorTypes';
@@ -111,6 +113,77 @@ describe('nodeConfigValid', () => {
     it('es true solo cuando no hay issues', () => {
         expect(nodeConfigValid('message', { text: 'ok' })).toBe(true);
         expect(nodeConfigValid('message', {})).toBe(false);
+    });
+});
+
+describe('variableReferenceWarnings', () => {
+    const customKeys = new Set(['nombre', 'edad']);
+
+    it('no advierte sobre referencias válidas y capturadas', () => {
+        expect(
+            variableReferenceWarnings(
+                'message',
+                { text: 'Hola {{contact.name}}, {{business.name}}, {{conversation.id}} y {{custom.nombre}}' },
+                customKeys,
+            ),
+        ).toHaveLength(0);
+    });
+
+    it('advierte sobre custom.* no capturado por ningún nodo pregunta', () => {
+        const warnings = variableReferenceWarnings('message', { text: 'Tu dato es {{custom.inexistente}}' }, customKeys);
+
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain('{{custom.inexistente}}');
+        expect(warnings[0]).toContain('ningún nodo "pregunta"');
+    });
+
+    it('advierte sobre namespaces desconocidos (node.*, unknown.*)', () => {
+        for (const ref of ['{{node.foo}}', '{{unknown.foo}}']) {
+            const warnings = variableReferenceWarnings('message', { text: ref }, customKeys);
+
+            expect(warnings).toHaveLength(1);
+            expect(warnings[0]).toContain('namespace desconocido');
+        }
+    });
+
+    it('advierte sobre business.* fuera de la whitelist pública', () => {
+        const warnings = variableReferenceWarnings('message', { text: '{{business.token_secreto}}' }, customKeys);
+
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain('no es un campo público');
+        expect(BUSINESS_PUBLIC_FIELDS).toContain('name');
+    });
+
+    it('advierte sobre conversation.* distinto de conversation.id', () => {
+        const warnings = variableReferenceWarnings('message', { text: '{{conversation.mensaje}}' }, customKeys);
+
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain('conversation.id');
+    });
+
+    it('no duplica el mismo warning repetido', () => {
+        const warnings = variableReferenceWarnings('message', { text: '{{custom.x}} {{custom.x}}' }, customKeys);
+
+        expect(warnings).toHaveLength(1);
+    });
+
+    it('escanea text de message/buttons y prompt de question (no el resto)', () => {
+        expect(variableReferenceWarnings('buttons', { text: '{{custom.x}}' }, customKeys)).toHaveLength(1);
+        expect(variableReferenceWarnings('question', { prompt: '{{custom.x}}' }, customKeys)).toHaveLength(1);
+        expect(variableReferenceWarnings('question', { text: '{{custom.x}}' }, customKeys)).toHaveLength(0);
+        expect(variableReferenceWarnings('delay', { seconds: 5 }, customKeys)).toHaveLength(0);
+    });
+
+    it('integra warnings en localGraphIssues con severidad warning', () => {
+        const message = createEditorNode('message', 'm1', { x: 0, y: 0 }, { text: 'Tu {{custom.inexistente}}' }, 'Mensaje');
+        message.data.isStart = true;
+        const question = createEditorNode('question', 'q1', { x: 0, y: 0 }, { prompt: '¿Nombre?', field: 'nombre' }, 'Pregunta');
+
+        const refWarnings = localGraphIssues([message, question], []).filter((i) => i.code === 'VARIABLE_REFERENCE');
+
+        expect(refWarnings).toHaveLength(1);
+        expect(refWarnings[0].nodeId).toBe('m1');
+        expect(refWarnings[0].severity).toBe('warning');
     });
 });
 

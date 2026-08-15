@@ -68,7 +68,11 @@ function onStartToggle(event: Event): void {
 
         <div class="border-t border-zinc-200 pt-4">
             <h4 class="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Configuración</h4>
-            <ConfigPanel :data="node.data" @update="updateConfig" />
+            <ConfigPanel
+                :data="node.data"
+                :context="{ tenantId: props.editor.tenantId, flowId: props.editor.flowId, readOnly: props.editor.readOnly.value }"
+                @update="updateConfig"
+            />
         </div>
 
         <div v-if="!editor.readOnly.value" class="flex gap-2 border-t border-zinc-200 pt-4">

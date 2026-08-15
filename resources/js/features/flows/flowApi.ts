@@ -1,4 +1,4 @@
-import type { Flow } from './flowTypes';
+import type { Flow, VariableDefinition } from './flowTypes';
 import type { ApiErrorPayload, FlowDraftPayload, FlowValidationResponse } from './flowEditorTypes';
 
 /**
@@ -75,5 +75,21 @@ export async function updateFlowMetadata(tenantId: string, flowId: string, data:
         return await unwrapFlow(window.axios.patch(`/api/v1/tenants/${tenantId}/flows/${flowId}`, data));
     } catch (err) {
         throw normalizeError(err, 'No se pudo actualizar el flujo.');
+    }
+}
+
+/**
+ * Catálogo de variables del flujo (FASE 13, UNIDAD 3): DEFINICIONES derivadas
+ * server-side (`VariableCatalogService`). El cliente nunca envía `tenant_id`,
+ * `namespace`, `type`, `writable` ni `source` — el backend es la autoridad y
+ * este GET es de solo lectura.
+ */
+export async function getFlowVariables(tenantId: string, flowId: string): Promise<VariableDefinition[]> {
+    try {
+        const res = await window.axios.get(`/api/v1/tenants/${tenantId}/flows/${flowId}/variables`);
+
+        return Array.isArray(res.data?.variables) ? (res.data.variables as VariableDefinition[]) : [];
+    } catch (err) {
+        throw normalizeError(err, 'No se pudo cargar el catálogo de variables.');
     }
 }

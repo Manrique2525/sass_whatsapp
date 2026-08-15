@@ -98,6 +98,17 @@ export interface FlowEditorContext {
     canManage: boolean;
 }
 
+/**
+ * Contexto que reciben los paneles de config de nodo (FASE 13, UNIDAD 4):
+ * datos del tenant/flujo para cargar el catálogo de variables y el modo de
+ * solo lectura (el picker se deshabilita si no se puede editar).
+ */
+export interface NodeConfigContext {
+    tenantId: string;
+    flowId: string;
+    readOnly: boolean;
+}
+
 export type ApiErrorCode =
     | 'FLOW_CONFLICT'
     | 'FLOW_PUBLISHED'

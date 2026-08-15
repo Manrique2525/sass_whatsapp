@@ -334,6 +334,17 @@ se omiten). El Resource expone únicamente `VariableDefinition`, por lo que nunc
 **El nodo `webhook` solo expone `method` + `url`** (el `config` completo no sale por API para no
 filtrar headers/secrets; el frontend muestra un resumen, no el config crudo).
 
+**Editor y catálogo de variables (FASE 13, UNIDAD 4)**: el editor consume el catálogo del
+endpoint de la UNIDAD 3 con un `VariablePicker` (agrupado por namespace, con búsqueda) que
+inserta la referencia literal `{{clave}}` en los campos que el motor resuelve:
+`message.text`, `buttons.text` y `question.prompt`. Los títulos de botón y el `field` de
+pregunta siguen siendo literales/validados (backend autoridad). En nodos `condition`, `field`
+se elige del catálogo (`contact.*`/`business.*`/`conversation.*`/`custom.*`) y se conservan
+`match`/`not`/operadores sin cambios. El cliente NUNCA envía `tenant_id`, `namespace`, `type`,
+`writable` ni `source`; el catálogo es de solo lectura. Las referencias que el motor no podrá
+resolver (`{{custom.inexistente}}`, `{{unknown.*}}`, `{{node.*}}`, `business.*` fuera de la
+whitelist) generan warnings locales (nunca errores) que no bloquean la edición ni el guardado.
+
 **Editor visual (FASE 12)**: el frontend edita sobre los endpoints de la tabla (página
 `settings/flows/{chatbot}/{flow}`, ADR-040..044). El editor envía ids de nodo UUID, posiciones
 enteras, aristas con `label` (`true`/`false` para ramas de condición) y `base_updated_at`

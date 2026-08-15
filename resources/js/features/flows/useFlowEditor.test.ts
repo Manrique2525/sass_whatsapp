@@ -266,6 +266,42 @@ describe('useFlowEditor', () => {
         expect(editor.edges.value).toHaveLength(2);
     });
 
+    it('addNode aplica la config por defecto y updateNodeConfig la persiste (VAR-34)', async () => {
+        installAxios(() => Promise.resolve({ data: { flow: makeFlow() } }));
+        const editor = useFlowEditor(context);
+        await editor.load();
+
+        const created = editor.addNode('question', { x: 0, y: 0 });
+        expect(created).not.toBeNull();
+        expect(editor.nodes.value.find((node) => node.id === created!.id)?.data.config).toEqual({
+            text: '',
+            prompt: '',
+            field: '',
+        });
+
+        editor.updateNodeConfig(created!.id, { text: 'Hola', prompt: '¿Cómo te llamás?', field: 'nombre' });
+
+        expect(editor.nodes.value.find((node) => node.id === created!.id)?.data.config).toEqual({
+            text: 'Hola',
+            prompt: '¿Cómo te llamás?',
+            field: 'nombre',
+        });
+        expect(editor.dirty.value).toBe(true);
+    });
+
+    it('updateNodeConfig no muta en modo solo lectura (VAR-34)', async () => {
+        installAxios(() => Promise.resolve({ data: { flow: makeFlow({ status: 'published', status_label: 'Publicado' }) } }));
+        const editor = useFlowEditor(context);
+        await editor.load();
+
+        expect(editor.readOnly.value).toBe(true);
+        const startId = editor.nodes.value[0].id;
+        editor.updateNodeConfig(startId, { text: 'cambiado' });
+
+        expect(editor.nodes.value[0].data.config).toEqual({ text: 'Hola' });
+        expect(editor.dirty.value).toBe(false);
+    });
+
     it('undo/redo restaura el grafo', async () => {
         const http = installAxios();
         http.get.mockResolvedValue({ data: { flow: makeFlow() } });

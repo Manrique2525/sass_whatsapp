@@ -1,6 +1,7 @@
 import { MarkerType } from '@vue-flow/core';
 import type { Connection } from '@vue-flow/core';
 import type { FlowConnection, FlowNode, FlowNodeType } from './flowTypes';
+import { DEFAULT_NODE_CONFIG } from './flowEditorTypes';
 import type { FlowDraftPayload, FlowEditorEdge, FlowEditorNode } from './flowEditorTypes';
 import { nodeTypeLabel } from './flowUtils';
 
@@ -131,7 +132,7 @@ export function createEditorNode(type: FlowNodeType, id: string, position: { x: 
             typeLabel: nodeTypeLabel(type),
             name: name ?? nodeTypeLabel(type),
             isStart: false,
-            config,
+            config: config ?? DEFAULT_NODE_CONFIG[type],
         },
     };
 }
