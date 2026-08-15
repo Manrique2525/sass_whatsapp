@@ -304,6 +304,22 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - **Sin secretos por API**: los `*Resource` de FASE 11 no incluyen `tenant_id`; el nodo
   `webhook` solo expone `method` + `url` (headers/body nunca salen del config); el frontend
   renderiza un resumen del config (`nodeConfigSummary`), no el config crudo.
+- **Triggers (FASE 14, UNIDAD 1, ADR-047)**:
+  - **Validación backend-first**: `TriggerValidator` valida la config por tipo al crear,
+    actualizar y publicar (422 `errors.config`); el frontend no decide nada. `tenant_id` nunca
+    se acepta del cliente.
+  - **Referencias seguras**: el trigger `schedule` referencia una conversación por UUID
+    verificado dentro del tenant (404 genérico si no existe o es cross-tenant — no filtra
+    existencia, patrón ADR-010/023). La resolución de conversación de `webhook` (U3) seguirá el
+    mismo principio: nunca se confía en `tenant_id` del payload.
+  - **Token de webhook**: generación CSPRNG (`bin2hex(random_bytes(32))`); en BD solo
+    `config.token_hash` (sha256). El token en claro se devuelve una única vez en la respuesta de
+    creación. `TriggerResource` redacta `token_hash`; jamás aparece en auditoría, logs o
+    recursos. El cliente no puede enviar `token`/`token_hash` (422); al actualizar se preserva
+    el hash existente (se regenera solo al pasar a `webhook`).
+  - **Regla de publicación**: validar la config de los triggers al publicar y bloquear un
+    segundo flujo con el mismo trigger genérico activo del mismo tipo (409
+    `FLOW_ALREADY_PUBLISHED`) previene comportamientos ambiguos e intersecciones no deseadas.
 - **Idempotencia y concurrencia**: dedupe de webhook de plataforma + `last_inbound_message_id`
   como barrera del motor (un inbound reprocesado jamás avanza dos veces) + UNIQUE parcial de
   ejecución activa por conversación + lock Redis por conversación. `pause/resume/cancel` solo

@@ -499,7 +499,7 @@ final class FlowEngine
             })
             ->with('flow')
             ->get()
-            ->filter(static fn (Trigger $trigger): bool => $trigger->type->isImplementedInPhaseEleven())
+            ->filter(static fn (Trigger $trigger): bool => $trigger->type->isMessageTrigger())
             ->values()
             ->all();
 

@@ -295,12 +295,12 @@ Permisos nuevos: `flows.view` (owner/admin/agent) y `flows.manage` (owner/admin)
 | PUT | `/api/v1/tenants/{tenant}/flows/{flow}/draft` | `flows.manage` | Reemplaza el grafo **atómicamente** (transacción nodes+connections). Body: `{nodes[]*, connections[], base_updated_at?}`. `base_updated_at` (ISO) es el lock optimista: si la versión guardada del cliente no coincide con `flows.updated_at` → **409** `FLOW_CONFLICT` sin escribir. Valida forma (422 `VALIDATION_ERROR`) y grafo (422 `FLOW_INVALID`). Publicado → **409**. Audita `flow.draft_replaced` |
 | GET | `/api/v1/tenants/{tenant}/flows/{flow}/validate` | `flows.view` | Valida el grafo SIN mutar → `{valid: bool, errors: string[]}` |
 | GET | `/api/v1/tenants/{tenant}/flows/{flow}/variables` | `flows.view` | Catálogo DERIVADO de variables del flujo (FASE 13, UNIDAD 3) → `{variables: VariableDefinitionResource[]}`. Devuelve definiciones, nunca valores runtime. `custom.*` se deriva de los nodos `question`; `business.*` está whitelistado (`BusinessProfile::PUBLIC_FIELDS`). Solo lectura (POST/PUT/PATCH/DELETE → **405**) |
-| POST | `/api/v1/tenants/{tenant}/flows/{flow}/publish` | `flows.manage` | Publica (valida grafo → 422 `FLOW_INVALID`). Otro flujo publicado con el mismo trigger genérico → **409** `FLOW_ALREADY_PUBLISHED`; transición inválida → **409** `FLOW_INVALID_STATE`. Audita `flow.published` |
+| POST | `/api/v1/tenants/{tenant}/flows/{flow}/publish` | `flows.manage` | Publica (valida grafo → 422 `FLOW_INVALID`). También valida la **config de los triggers** del flujo (422 `FLOW_INVALID` con los errores en `errors`) y aplica la regla de publicación: otro flujo publicado del mismo tenant con un **trigger genérico activo del mismo tipo** (`new_message`/`start`) → **409** `FLOW_ALREADY_PUBLISHED` (los triggers específicos `keyword`/`tag`/`schedule`/`webhook` pueden coexistir). Transición inválida → **409** `FLOW_INVALID_STATE`. Audita `flow.published` |
 | POST | `/api/v1/tenants/{tenant}/flows/{flow}/deactivate` | `flows.manage` | Desactiva (requiere `published`; si no → **409** `FLOW_INVALID_STATE`). Audita `flow.deactivated` |
 | DELETE | `/api/v1/tenants/{tenant}/flows/{flow}` | `flows.manage` | Elimina. Publicado → **409** `FLOW_PUBLISHED`. Audita `flow.deleted` |
-| GET | `/api/v1/tenants/{tenant}/flows/{flow}/triggers` | `flows.view` | Lista de triggers del flujo → `{triggers: TriggerResource[]}` |
-| POST | `/api/v1/tenants/{tenant}/flows/{flow}/triggers` | `flows.manage` | Crea `{type* (keyword/new_message/start/tag/schedule/webhook), keyword? (requerido si type=keyword), config?, priority?, active?}` → **201**. Flujo publicado → **409** `FLOW_PUBLISHED`. Audita `trigger.created` |
-| PATCH | `/api/v1/tenants/{tenant}/flows/{flow}/triggers/{trigger}` | `flows.manage` | Actualiza. Flujo publicado → **409**. Audita `trigger.updated` |
+| GET | `/api/v1/tenants/{tenant}/flows/{flow}/triggers` | `flows.view` | Lista de triggers del flujo → `{triggers: TriggerResource[]}`. La config del `webhook` **no incluye `token_hash`** |
+| POST | `/api/v1/tenants/{tenant}/flows/{flow}/triggers` | `flows.manage` | Crea `{type* (keyword/new_message/start/tag/schedule/webhook), keyword? (requerido si type=keyword), config?, priority?, active?}` → **201**. La config se valida por tipo (422 `VALIDATION_ERROR`, `errors.config`). Para `webhook` la respuesta incluye `webhook_token` (**única vez**): solo su hash se persiste. Flujo publicado → **409** `FLOW_PUBLISHED`. Audita `trigger.created` |
+| PATCH | `/api/v1/tenants/{tenant}/flows/{flow}/triggers/{trigger}` | `flows.manage` | Actualiza (misma validación de config por tipo). El `token_hash` de un webhook se preserva al actualizar; nunca es editable por el cliente. Flujo publicado → **409**. Audita `trigger.updated` |
 | DELETE | `/api/v1/tenants/{tenant}/flows/{flow}/triggers/{trigger}` | `flows.manage` | Elimina. Flujo publicado → **409**. Audita `trigger.deleted` |
 | GET | `/api/v1/tenants/{tenant}/flow-executions` | `flows.view` | Ejecuciones paginadas. Query: `status` (running/waiting/completed/failed/handed_off), `flow_id`, `chatbot_id`, `page`, `per_page` → `{executions: FlowExecutionResource[], meta}` |
 | GET | `/api/v1/tenants/{tenant}/flow-executions/{execution}` | `flows.view` | Detalle con `flow`. 404 si no existe/no es del tenant |
@@ -318,6 +318,21 @@ position_x, position_y, config, is_start}`; `FlowConnectionResource`
 `FlowExecutionResource` `{id, flow_id, conversation_id, status, status_label, current_node_id,
 variables, attempts, last_inbound_message_id, created_at, updated_at}`;
 `VariableDefinitionResource` `{key, label, namespace, source, type, default, writable}`.
+
+**Contrato de config de triggers (FASE 14, UNIDAD 1, ADR-047)**: el backend es la única
+autoridad; la config se valida con `TriggerValidator` al crear, actualizar y publicar. Por tipo:
+
+- `keyword`/`new_message`/`start`: sin `config`. `keyword` exige palabra no vacía (≤ 255).
+- `tag`: `config.tags` (lista de 1..10 etiquetas únicas, cada una ≤ 100 chars). Solo define el
+  contrato; la ejecución por etiqueta llega en FASE 20.
+- `schedule`: `config.cron` (expresión cron determinista de 5 campos; sin eval) +
+  `config.conversation_id` (UUID de una conversación **del tenant**; inexistente o de otro tenant
+  → **404** genérico, nunca filtra existencia cross-tenant).
+- `webhook`: `config.conversation_by` (`conversation_id`|`contact_id`|`phone`). El servidor
+  añade `config.token_hash` (sha256 del token CSPRNG); el cliente jamás envía `token`/
+  `token_hash` (422). El `webhook_token` en claro se devuelve una única vez en la respuesta de
+  creación y nunca aparece en `TriggerResource`, auditoría o logs. El endpoint público del
+  webhook es UNIDAD 3 (no implementado).
 
 **Catálogo de variables (FASE 13, UNIDAD 3)**: el endpoint
 `GET /api/v1/tenants/{tenant}/flows/{flow}/variables` expone **definiciones derivadas**

@@ -13,7 +13,9 @@ use App\Domain\Flows\Models\Trigger;
  *
  * Precedencia: triggers específicos (`keyword`) antes que genéricos
  * (`new_message`/`start`). Entre los genéricos, `new_message` se evalúa antes
- * que `start`. `tag`/`schedule`/`webhook` (FASE 14) jamás matchean aquí.
+ * que `start`. `tag`/`schedule`/`webhook` (FASE 14) jamás matchean un mensaje
+ * entrante: sus puntos de entrada son el etiquetado (FASE 20), el scheduler
+ * (U2) y el webhook público (U3).
  *
  * - `keyword`: solo dispara si el mensaje es el PRIMERO de la conversación y
  *   contiene la palabra clave (case-insensitive).
@@ -71,9 +73,11 @@ final class TriggerMatcher
     {
         return match ($type) {
             FlowTriggerType::Keyword => 1,
-            FlowTriggerType::NewMessage => 2,
-            FlowTriggerType::Start => 3,
-            default => 99,
+            FlowTriggerType::Tag => 2,
+            FlowTriggerType::Schedule => 3,
+            FlowTriggerType::Webhook => 4,
+            FlowTriggerType::NewMessage => 5,
+            FlowTriggerType::Start => 6,
         };
     }
 }

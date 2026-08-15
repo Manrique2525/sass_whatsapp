@@ -673,5 +673,40 @@ COMPLETADO / BLOQUEADO
       EDITOR, TIPOS, DSL, DEFAULTS) contra código + tests VAR-1..VAR-36 y FLOW-1..43; sin
       hallazgos pendientes, sin features nuevas, sin migraciones, sin permisos nuevos.
 - [x] **FASE 13 COMPLETADA y PUBLICADA**: push autorizado de los 6 commits FASE 13
-      (`53e459c`..`35743d4`) + commit de documentación `docs(flows): mark phase 13 complete`.
-      `HEAD` = `origin/master` = `35743d4` (ahead/behind 0/0, working tree limpio).
+      (`53e459c`..`35743d4`) + commit de documentación `docs(flows): mark phase 13 complete`
+      (`f262f20`). `HEAD` = `origin/master` = `f262f20` (ahead/behind 0/0, working tree limpio).
+
+### FASE 14 — Triggers (EN CURSO — requiere autorización explícita por unidad; SIN push)
+
+- [x] **UNIDAD 1 — Auditoría técnica previa** (read-only, sin código): especificación real =
+      disparo de `tag`/`schedule`/`webhook` (ADR-038). Contradicciones C1-C7 detectadas y
+      resueltas: C1 (regla `FLOW_ALREADY_PUBLISHED` documentada, nunca implementada) → se
+      implementa en U1; C3 (tags a nivel contacto) → la ejecución por etiqueta NO se implementa
+      (FASE 20); C4 (referencias seguras a conversación) → resuelto SIN migración con las
+      estructuras existentes. Unidades propuestas: U1 validación/endurecimiento, U2 scheduler,
+      U3 webhook público, U4/U5/U6 pendientes.
+- [x] **UNIDAD 1 — C4: auditoría de modelos/relaciones** (sin migración): `Conversation`
+      (tenant_id, contact_id, bot_paused, flow_execution_id, status), `Contact` (tenant_id,
+      phone E.164 único por tenant), `Chatbot`/`Flow`/`Trigger`/`FlowExecution` (tenant_id).
+      `schedule` referencia conversación por UUID verificada en tenant; `webhook` resolverá por
+      payload identificador en U3. NO se requieren columnas ni tablas nuevas.
+- [x] **UNIDAD 1 — Validación y endurecimiento de triggers** (ADR-047): `TriggerValidator`
+      (dominio puro, backend autoritativo) valida la config por tipo — `keyword`/`new_message`/
+      `start` sin config, `tag` con `config.tags` (1..10 únicas, ≤100), `schedule` con cron
+      determinista de 5 campos (sin eval) + `conversation_id` UUID verificado en tenant,
+      `webhook` con `conversation_by` y `token_hash` sha256 (token CSPRNG devuelto una única
+      vez; `TriggerResource` redacta `token_hash`; cliente jamás envía secretos). Se integra en
+      store/update y en publish. `isImplementedInPhaseEleven()` → `isMessageTrigger()`;
+      `TriggerMatcher::typeOrder` registra `tag`/`schedule`/`webhook` (que jamás matchean un
+      mensaje entrante). C1: publicar valida la config de los triggers (422 `FLOW_INVALID`) y
+      bloquea un segundo flujo publicado del mismo tenant con trigger genérico activo del mismo
+      tipo (409 `FLOW_ALREADY_PUBLISHED`); los específicos coexisten.
+- [x] **UNIDAD 1 — Gates**: `php artisan test` (476/2184 assertions) + Pint + PHPStan nivel 6 +
+      `vitest` (147) + `vue-tsc` + `vite build` verdes. Frontend sin cambios.
+- [x] **UNIDAD 1 — Documentación**: `decisions.md` (ADR-047 + actualización ADR-038),
+      `api.md` (§3.8 contrato de config + publish), `chatbot-engine.md` (§6), `security.md`,
+      `testing.md`. `roadmap.md` NO marca FASE 14 como completa.
+- [ ] **UNIDAD 1 — Commit local** `feat(flows): harden trigger validation` (SIN push).
+- [ ] **UNIDAD 2** — Scheduler (disparo por cron; pendiente).
+- [ ] **UNIDAD 3** — Webhook público (endpoint + verificación de token; pendiente).
+- [ ] **UNIDAD 4** — Ejecución por etiqueta (ver FASE 20; pendiente).

@@ -6,6 +6,7 @@ namespace App\Application\Flows\Services;
 
 use App\Application\Audit\Services\AuditLogger;
 use App\Application\Users\Services\AuthorizationService;
+use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Flows\Enums\FlowNodeType;
 use App\Domain\Flows\Enums\FlowStatus;
 use App\Domain\Flows\Enums\FlowTriggerType;
@@ -24,6 +25,7 @@ use App\Domain\Flows\Models\FlowConnection;
 use App\Domain\Flows\Models\FlowNode;
 use App\Domain\Flows\Models\Trigger;
 use App\Domain\Flows\Services\FlowValidator;
+use App\Domain\Flows\Services\TriggerValidator;
 use App\Domain\Flows\Services\VariableCatalogService;
 use App\Domain\Flows\ValueObjects\VariableDefinition;
 use App\Domain\Tenants\Models\Tenant;
@@ -33,6 +35,8 @@ use Illuminate\Database\ConnectionInterface;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * Casos de uso de chatbots y flujos (FASE 11, ADR-035).
@@ -57,6 +61,7 @@ final class FlowService
         private readonly AuthorizationService $authorization,
         private readonly AuditLogger $auditLogger,
         private readonly FlowValidator $validator,
+        private readonly TriggerValidator $triggerValidator,
         private readonly ConnectionInterface $db,
         private readonly VariableCatalogService $variableCatalog,
     ) {}
@@ -413,11 +418,13 @@ final class FlowService
             throw new FlowInvalidException('El flujo no es válido y no puede publicarse.', $errors);
         }
 
+        $this->assertPublishableTriggers($tenant, $flow);
+
         $flow->forceFill(['status' => FlowStatus::Published])->save();
 
         $this->auditLogger->record(
             action: 'flow.published',
-            data: ['tenant_id' => $tenant->id],
+            data: ['tenant_id' => $tenant->id, 'trigger_count' => $flow->triggers()->count()],
             subjectType: Flow::class,
             subjectId: $flow->id,
         );
@@ -484,9 +491,14 @@ final class FlowService
     }
 
     /**
+     * Crea un trigger validando su config (FASE 14 UNIDAD 1). Para `webhook`
+     * genera un token CSPRNG, lo persiste hasheado en `config.token_hash` y lo
+     * devuelve en texto plano una única vez (el recurso jamás lo expone).
+     *
      * @param  array<string, mixed>  $validated
+     * @return array{trigger: Trigger, webhook_token: string|null}
      */
-    public function createTrigger(User $user, Tenant $tenant, string $flowId, array $validated): Trigger
+    public function createTrigger(User $user, Tenant $tenant, string $flowId, array $validated): array
     {
         $this->authorization->authorize($user, TenantPermission::ManageFlows, $tenant);
 
@@ -494,10 +506,34 @@ final class FlowService
 
         $this->assertEditable($flow);
 
+        $type = FlowTriggerType::from((string) $validated['type']);
+        $keyword = is_string($validated['keyword'] ?? null) ? $validated['keyword'] : null;
+        $clientConfig = is_array($validated['config'] ?? null) ? $validated['config'] : null;
+
+        $this->assertValidTrigger($type, $keyword, $clientConfig, true);
+
+        $webhookToken = null;
+        $config = $clientConfig;
+
+        if ($type === FlowTriggerType::Webhook) {
+            $webhookToken = TriggerValidator::generateWebhookToken();
+            $config = array_merge($clientConfig ?? [], [
+                'token_hash' => TriggerValidator::hashWebhookToken($webhookToken),
+            ]);
+
+            $errors = $this->triggerValidator->validate($type, $keyword, $config);
+
+            if ($errors !== []) {
+                throw ValidationException::withMessages(['config' => $errors]);
+            }
+        }
+
+        $this->assertTriggerReferencesInTenant($tenant, $type, $config);
+
         $trigger = $flow->triggers()->create([
-            'type' => FlowTriggerType::from((string) $validated['type']),
-            'keyword' => $validated['keyword'] ?? null,
-            'config' => $validated['config'] ?? null,
+            'type' => $type,
+            'keyword' => $keyword,
+            'config' => $config,
             'priority' => (int) ($validated['priority'] ?? 0),
             'active' => (bool) ($validated['active'] ?? true),
         ]);
@@ -509,7 +545,7 @@ final class FlowService
             subjectId: $trigger->id,
         );
 
-        return $trigger;
+        return ['trigger' => $trigger, 'webhook_token' => $webhookToken];
     }
 
     /**
@@ -525,6 +561,8 @@ final class FlowService
 
         $trigger = $this->findTriggerForTenant($tenant, $triggerId, $flowId);
 
+        $storedConfig = is_array($trigger->config) ? $trigger->config : null;
+
         $changed = [];
 
         if (array_key_exists('type', $validated)) {
@@ -537,7 +575,9 @@ final class FlowService
             $changed[] = 'keyword';
         }
 
-        if (array_key_exists('config', $validated)) {
+        $configChanged = array_key_exists('config', $validated);
+
+        if ($configChanged) {
             $trigger->config = $validated['config'] === null ? null : (array) $validated['config'];
             $changed[] = 'config';
         }
@@ -555,6 +595,29 @@ final class FlowService
         if ($changed === []) {
             return $trigger;
         }
+
+        $this->assertValidTrigger($trigger->type, $trigger->keyword, $trigger->config, $configChanged);
+
+        if ($trigger->type === FlowTriggerType::Webhook) {
+            $existingHash = $storedConfig['token_hash'] ?? null;
+            $validHash = is_string($existingHash) && preg_match('/^[a-f0-9]{64}$/', $existingHash) === 1;
+
+            // El hash del servidor se preserva si ya existe; si el trigger pasa
+            // a webhook se genera uno nuevo. El cliente jamás lo aporta.
+            $trigger->config = array_merge($trigger->config ?? [], [
+                'token_hash' => $validHash
+                    ? $existingHash
+                    : TriggerValidator::hashWebhookToken(TriggerValidator::generateWebhookToken()),
+            ]);
+
+            $errors = $this->triggerValidator->validate($trigger->type, $trigger->keyword, $trigger->config);
+
+            if ($errors !== []) {
+                throw ValidationException::withMessages(['config' => $errors]);
+            }
+        }
+
+        $this->assertTriggerReferencesInTenant($tenant, $trigger->type, $trigger->config);
 
         $trigger->save();
 
@@ -589,6 +652,95 @@ final class FlowService
     }
 
     // ------------------------------------------------------------- Internals
+
+    /**
+     * Valida la config de un trigger con `TriggerValidator`. `$clientProvided`
+     * indica si la config viene del cliente (entonces los secretos como
+     * `token_hash` están prohibidos); con `false` se valida la config final
+     * (el servidor ya compuso el `token_hash` del webhook).
+     *
+     * @param  array<string, mixed>|null  $config
+     */
+    private function assertValidTrigger(FlowTriggerType $type, ?string $keyword, ?array $config, bool $clientProvided): void
+    {
+        $errors = $this->triggerValidator->validate($type, $keyword, $config, $clientProvided);
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages(['config' => $errors]);
+        }
+    }
+
+    /**
+     * Verifica que las referencias del trigger existan dentro del tenant:
+     * `config.conversation_id` (schedule) debe pertenecer al tenant. Un id
+     * inexistente o de otro tenant produce 404 genérico: no revela existencia
+     * cross-tenant (ADR-010/023).
+     *
+     * @param  array<string, mixed>|null  $config
+     */
+    private function assertTriggerReferencesInTenant(Tenant $tenant, FlowTriggerType $type, ?array $config): void
+    {
+        if ($type !== FlowTriggerType::Schedule || $config === null) {
+            return;
+        }
+
+        $conversationId = (string) ($config['conversation_id'] ?? '');
+
+        $exists = Conversation::query()
+            ->withoutTenantScope()
+            ->where('tenant_id', $tenant->id)
+            ->whereKey($conversationId)
+            ->exists();
+
+        if (! $exists) {
+            throw new NotFoundHttpException('La conversación referenciada no existe en este tenant.');
+        }
+    }
+
+    /**
+     * Valida la config de todos los triggers del flujo antes de publicar y
+     * aplica la regla de publicación (ADR-038/039): a lo sumo un flujo
+     * publicado por tenant puede tener un trigger genérico (`new_message`/
+     * `start`) activo del mismo tipo → `409 FLOW_ALREADY_PUBLISHED`. Los
+     * triggers específicos (`keyword`/`tag`/`schedule`/`webhook`) pueden
+     * coexistir entre flujos publicados.
+     */
+    private function assertPublishableTriggers(Tenant $tenant, Flow $flow): void
+    {
+        foreach ($flow->triggers()->get() as $trigger) {
+            $config = is_array($trigger->config) ? $trigger->config : null;
+
+            $errors = $this->triggerValidator->validate($trigger->type, $trigger->keyword, $config);
+
+            if ($errors !== []) {
+                throw new FlowInvalidException(
+                    sprintf('El trigger "%s" no es válido y el flujo no puede publicarse.', $trigger->type->value),
+                    $errors,
+                );
+            }
+
+            $this->assertTriggerReferencesInTenant($tenant, $trigger->type, $config);
+
+            if ($trigger->active && in_array($trigger->type, [FlowTriggerType::NewMessage, FlowTriggerType::Start], true)) {
+                $conflict = Trigger::query()
+                    ->withoutTenantScope()
+                    ->where('tenant_id', $tenant->id)
+                    ->where('type', $trigger->type->value)
+                    ->where('active', true)
+                    ->where('flow_id', '!=', $flow->id)
+                    ->whereHas('flow', function ($query): void {
+                        $query->where('status', FlowStatus::Published->value);
+                    })
+                    ->exists();
+
+                if ($conflict) {
+                    throw new FlowAlreadyPublishedException(
+                        sprintf('Ya existe otro flujo publicado con un trigger genérico "%s" activo en este tenant.', $trigger->type->value),
+                    );
+                }
+            }
+        }
+    }
 
     private function assertEditable(Flow $flow): void
     {

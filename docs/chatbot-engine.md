@@ -82,16 +82,35 @@ handleMessage(conversation, inboundMessage):
 
 ## 6. Triggers
 
-| Trigger | Disparo |
-|---|---|
-| `keyword` | Primer mensaje del cliente contiene palabra/patrón |
-| `new_message` | Cualquier mensaje entrante |
-| `start` | Primer mensaje de una conversación nueva |
-| `tag` | Conversación etiquetada |
-| `schedule` | Horario (cron) |
-| `webhook` | Evento externo entrante |
+| Trigger | Disparo | Estado |
+|---|---|---|
+| `keyword` | Primer mensaje del cliente contiene palabra/patrón | FASE 11 (matcher) |
+| `new_message` | Cualquier mensaje entrante | FASE 11 (matcher) |
+| `start` | Primer mensaje de una conversación nueva | FASE 11 (matcher) |
+| `tag` | Conversación etiquetada | FASE 14 UNIDAD 1: contrato validado, ejecución pendiente FASE 20 |
+| `schedule` | Horario (cron) | FASE 14 UNIDAD 1: contrato validado, ejecución pendiente UNIDAD 2 |
+| `webhook` | Evento externo entrante | FASE 14 UNIDAD 1: contrato + token validados, endpoint público pendiente UNIDAD 3 |
 
 Precedencia: triggers específicos (`keyword`) antes que genéricos (`new_message`/`start`).
+`TriggerMatcher` evalúa SOLO triggers de mensaje entrante (`isMessageTrigger`); `tag`/
+`schedule`/`webhook` jamás matchean un mensaje (sus puntos de entrada son otros: etiquetado,
+scheduler, webhook). `priority` desempata entre triggers del mismo tipo.
+
+Regla de publicación (ADR-038/047): a lo sumo un flujo publicado por tenant puede tener un
+trigger genérico activo del mismo tipo (`new_message`/`start`) → `409 FLOW_ALREADY_PUBLISHED`.
+Los triggers específicos (`keyword`/`tag`/`schedule`/`webhook`) pueden coexistir entre flujos
+publicados (incluso `keyword` con la misma palabra).
+
+Validación de config (FASE 14, UNIDAD 1, ADR-047): toda config de trigger se valida en backend
+con `TriggerValidator` al crear/actualizar/publicar (422 `errors.config`):
+
+- `keyword`/`new_message`/`start`: sin `config`; `keyword` no vacía (≤ 255 chars).
+- `tag`: `config.tags` (1..10 etiquetas únicas, ≤ 100 chars). Sin ejecución en esta unidad.
+- `schedule`: `config.cron` (cron determinista de 5 campos, sin eval) + `config.conversation_id`
+  (UUID verificado dentro del tenant; inexistente/cross-tenant → 404 genérico).
+- `webhook`: `config.conversation_by` (`conversation_id`|`contact_id`|`phone`); el servidor
+  persiste `config.token_hash` (sha256). El token en claro se devuelve una vez al crear; el
+  `TriggerResource` lo redacta y el cliente jamás puede enviarlo.
 
 ## 7. Handoff a humano
 

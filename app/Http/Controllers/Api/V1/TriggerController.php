@@ -52,7 +52,7 @@ final class TriggerController extends Controller
     public function store(StoreTriggerRequest $request, Tenant $tenant, string $flow): JsonResponse
     {
         try {
-            $trigger = $this->service->createTrigger($request->user(), $tenant, $flow, $request->validated());
+            $result = $this->service->createTrigger($request->user(), $tenant, $flow, $request->validated());
         } catch (TenantMembershipException) {
             throw new NotFoundHttpException('Tenant no encontrado.');
         } catch (PermissionDeniedException $e) {
@@ -65,10 +65,18 @@ final class TriggerController extends Controller
             return $this->published($e);
         }
 
-        return response()->json([
+        $response = [
             'message' => 'Trigger creado.',
-            'trigger' => new TriggerResource($trigger),
-        ], 201);
+            'trigger' => new TriggerResource($result['trigger']),
+        ];
+
+        // El token de webhook se devuelve una única vez; nunca vuelve a
+        // aparecer en recursos, logs o auditoría.
+        if ($result['webhook_token'] !== null) {
+            $response['webhook_token'] = $result['webhook_token'];
+        }
+
+        return response()->json($response, 201);
     }
 
     public function update(UpdateTriggerRequest $request, Tenant $tenant, string $flow, string $trigger): JsonResponse

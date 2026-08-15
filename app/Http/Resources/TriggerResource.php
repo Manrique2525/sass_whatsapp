@@ -24,11 +24,31 @@ final class TriggerResource extends JsonResource
             'type' => $this->type->value,
             'type_label' => $this->type->label(),
             'keyword' => $this->keyword,
-            'config' => $this->config,
+            'config' => $this->redactedConfig(),
             'priority' => $this->priority,
             'active' => $this->active,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];
+    }
+
+    /**
+     * Config del trigger con los secretos redactados: `token_hash` del webhook
+     * jamás se serializa (solo existe en BD; el token en claro se devuelve una
+     * única vez en la creación).
+     *
+     * @return array<string, mixed>|null
+     */
+    private function redactedConfig(): ?array
+    {
+        $config = $this->config;
+
+        if ($config === null) {
+            return null;
+        }
+
+        unset($config['token_hash']);
+
+        return $config;
     }
 }

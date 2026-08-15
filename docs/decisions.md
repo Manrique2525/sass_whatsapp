@@ -742,9 +742,10 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
     `TenantContext` del job.
   - Se guarda el `conversation_id` en la ejecución para que la reanudación sea directa; el
     matcher no se re-evalúa mientras exista ejecución activa.
-- **Consecuencias**: `TriggerMatcher` + `FlowTriggerType::isImplementedInPhaseEleven()`. El
-  matcher es puro y testeable unit. FASE 14 añadirá matchers nuevos sin tocar el pipeline de
-  ejecución (solo el punto de entrada correspondiente: tag assignment, scheduler, webhook).
+- **Consecuencias**: `TriggerMatcher` + `FlowTriggerType::isMessageTrigger()` (antes
+  `isImplementedInPhaseEleven()`; renombrado en FASE 14 UNIDAD 1). El matcher es puro y testeable
+  unit. FASE 14 añadirá matchers nuevos sin tocar el pipeline de ejecución (solo el punto de
+  entrada correspondiente: tag assignment, scheduler, webhook).
 
 ## ADR-039 · Motor de flujos FASE 11: permisos Flows.*, API REST y frontend read-only
 
@@ -967,5 +968,47 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   con el tipo real (p. ej. `integer` `'42'` → `42` int) y fluye a interpolación y condiciones;
   la suite pasa a 434 tests backend / 2013 assertions y se documenta el contrato runtime en
   `chatbot-engine.md` §5/§10.2 y `api.md` §3.8.
+
+## ADR-047 · FASE 14 UNIDAD 1: validación y endurecimiento de triggers
+
+- **Estado**: Aceptado → FASE 14 (UNIDAD 1, en curso)
+- **Contexto**: `docs/roadmap.md` especifica la FASE 14 (Triggers): disparo de `tag`/`schedule`/
+  `webhook`. La auditoría técnica detectó que `tag`/`schedule`/`webhook` se aceptaban en el CRUD
+  sin validar config, que `TriggerResource` exponía la config cruda, que el matcher no distinguía
+  los nuevos tipos y que la regla `FLOW_ALREADY_PUBLISHED` (un flujo publicado por tenant con
+  trigger genérico activo del mismo tipo) estaba documentada pero nunca implementada.
+- **Decisión** (UNIDAD 1 — solo contrato y validación; SIN puntos de entrada de ejecución):
+  - **`TriggerValidator` (dominio puro, backend autoritativo)**: validación por tipo —
+    `keyword`/`new_message`/`start` sin config (keyword no vacío, ≤ 255); `tag` con
+    `config.tags` (1..10 etiquetas únicas, ≤ 100 chars, sin ejecución — ejecución en FASE 20);
+    `schedule` con `config.cron` (cron determinista de 5 campos, sin eval) +
+    `config.conversation_id` (UUID); `webhook` con `config.conversation_by`
+    (`conversation_id`|`contact_id`|`phone`). Límite de config 4096 chars. Errores 422 con el
+    patrón de API existente (`errors.config`).
+  - **Webhook token**: generación CSPRNG (`bin2hex(random_bytes(32))`), persistido SOLO como
+    `config.token_hash = sha256(token)`, devuelto en claro una única vez en la respuesta de
+    creación. `TriggerResource` redacta `token_hash`; auditoría/logs jamás lo contienen. El
+    cliente no puede enviar `token`/`token_hash` (422). Al actualizar se preserva el hash
+    existente; se regenera solo si el trigger pasa a webhook. El endpoint público de webhook es
+    UNIDAD 3 (fuera de alcance).
+  - **C4 (referencias seguras)**: sin migración — `schedule` referencia una conversación por
+    UUID verificada dentro del tenant al crear/actualizar/publicar (404 genérico si no existe o
+    es de otro tenant); `webhook` resolverá la conversación desde el payload identificador en
+    UNIDAD 3. Nunca se confía en `tenant_id` del cliente.
+  - **C1 (regla de publicación)**: al publicar se valida la config de todos los triggers del
+    flujo (`422 FLOW_INVALID` si alguno es inválido) y se aplica la regla documentada: si el
+    flujo tiene un trigger genérico (`new_message`/`start`) activo y otro flujo publicado del
+    mismo tenant tiene un trigger activo del mismo tipo → `409 FLOW_ALREADY_PUBLISHED`. Los
+    triggers específicos (`keyword`/`tag`/`schedule`/`webhook`) pueden coexistir entre flujos
+    publicados (la regla NO bloquea `keyword`, ni siquiera con la misma palabra).
+  - **C3 (tags)**: NO se implementa el disparo por etiqueta en UNIDAD 1 (las etiquetas son a
+    nivel contacto; `TagNodeExecutor` no se toca). El matcher de mensaje excluye
+    `tag`/`schedule`/`webhook`; `isImplementedInPhaseEleven()` se renombra a
+    `isMessageTrigger()` y `TriggerMatcher::typeOrder` registra los tres tipos (que jamás
+    matchean un mensaje).
+- **Consecuencias**: suite backend 476 tests / 2184 assertions; U1 sin push (commit local
+  `feat(flows): harden trigger validation`). UNIDADES 2-6 (scheduler, webhook público,
+  ejecución por etiqueta, rotación de token, cleanup) quedan pendientes y se documentan al
+  implementarse.
 
 

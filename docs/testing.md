@@ -235,6 +235,37 @@ Pirámide de tests con prioridad en lo crítico:
 - Suite total UNIDAD 6 (backend): **434 tests / 2013 assertions**; frontend **147 tests Vitest**
   (sin cambios de frontend).
 
+### Validación y endurecimiento de triggers (FASE 14, UNIDAD 1, ADR-047)
+
+- **Unit `TriggerValidatorTest` (13 tests, dominio puro sin BD)**: keyword válido/inválido
+  (vacío/espacios/>255/con config); `new_message`/`start` sin config; tag válida (1..10 únicas)
+  e inválida (ausente/vacía/duplicadas/>100/11 items/no-string); schedule válido (cron
+  determinista + UUID) e inválido (cron mal formado, conversation_id ausente/no-UUID); cron
+  determinista acepta solo sintaxis soportada y nunca evalúa código (`@daily`, `* * * *`,
+  `1; rm -rf /` → false); webhook del cliente con `conversation_by` válido y rechazo de
+  `token`/`token_hash`/campos extra; config final de webhook exige `token_hash` sha256; límites
+  de config (4096) y cron (255); token CSPRNG 64 hex cuyo hash nunca revierte.
+- **Unit `TriggerMatcherTest` (7 tests)**: keyword solo en primer mensaje y case-insensitive;
+  `new_message`/`start`; precedencia keyword > new_message > start; `priority` desempata;
+  triggers inactivos nunca se evalúan; `tag`/`schedule`/`webhook` jamás matchean un mensaje; el
+  orden de tipo preserva específicos antes que genéricos.
+- **API `TriggerApiValidationTest` (12 tests)**: el `webhook_token` se devuelve una única vez y
+  el recurso redacta `token_hash` (persistido solo en BD); el token no reaparece en index ni en
+  auditoría; el cliente no envía `token`/`token_hash`; webhook con `conversation_by` ausente/
+  incorrecto; schedule válido/inválido; **CRÍTICO** schedule con conversación de otro tenant o
+  inexistente → 404 (sin filtrar existencia); tag válida/inválida; triggers de mensaje no admiten
+  config; actualizar webhook preserva `token_hash`; cambiar webhook a keyword sin palabra → 422;
+  el tenant B nunca lee/referencia triggers del tenant A (404).
+- **Publish `TriggerPublishTest` (10 tests)**: **CRÍTICO** a lo sumo un flujo publicado por
+  tenant con trigger genérico activo del mismo tipo → 409 `FLOW_ALREADY_PUBLISHED`; genéricos de
+  distinto tipo coexisten; `keyword` (incluso idéntica) coexiste; trigger genérico inactivo no
+  bloquea; deactivar libera el genérico; flujo sin triggers convive; **CRÍTICO** el conflicto es
+  por tenant (B publica con A publicado); publish valida la config de los triggers (keyword vacío
+  → 422 `FLOW_INVALID`); schedule con config inválida bloquea la publicación; flujos publicados
+  existentes no se ven afectados.
+- Suite total UNIDAD 1 (backend): **476 tests / 2184 assertions**; frontend **147 tests Vitest**
+  (sin cambios de frontend).
+
 ### Auth
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 
