@@ -190,6 +190,34 @@ Pirámide de tests con prioridad en lo crítico:
     válido/inválido, undo/redo, read-only ignora mutaciones (`window.axios` mockeado).
 - Suite total FASE 12: **307 tests backend / 1319 assertions**; frontend **117 tests Vitest**.
 
+### Variables, validación y seguridad (FASE 13, UNIDAD 5)
+- **Concurrencia** (`FlowConcurrencyTest`, VAR-24/25/26, 3 tests): dos mensajes secuenciales
+  acumulan variables en `execution.variables` y producen una sola ejecución + un solo outbound;
+  mismo `provider_message_id` deduplica (una fila) y re-entregas del mismo mensaje mientras la
+  ejecución está `waiting` son no-op (barrera `last_inbound_message_id`); el valor capturado
+  persiste waiting→delay→resume, el `ContinueFlowExecution` en modo `delay` se empuja, el continue
+  duplicado es no-op y el lock Redis de la conversación se libera.
+- **Aislamiento tenant** (`FlowTenantIsolationTest`, VAR-29/30, 5 tests): el motor del tenant A
+  jamás resuelve `contact.*`/`business.*`/`custom.*` del tenant B; el catálogo de A excluye los
+  `custom.*` de B; pedir el flow de B desde A → 404; con `TenantContext` de B no se leen nodos de
+  A (`VariableCatalogService::forFlow` bajo scope equivocado); el webhook de A recibe payload solo
+  con datos de A.
+- **Validación** (`FlowValidatorTest`, 17 tests): pregunta con `type`/`default` válido e
+  incompatible; `type` desconocido; límites de longitud (4096/128/2048); referencias peligrosas
+  (`__proto__`/`constructor`/`prototype`) en textos/headers/payload → error; `node.*`/namespaces
+  desconocidos → warnings; campo de condition con namespaces permitidos y segmentos seguros;
+  webhook sin credenciales, host literal (path `{{custom.plan}}` permitido, host no).
+- **Webhook guard + logs** (`WebhookUrlGuardTest` nuevo, 6 tests): localhost/IPs privadas/
+  reservadas bloqueadas, IP pública literal permitida, URLs inválidas bloqueadas, `sanitizeForLog`
+  limpia credenciales/query/fragment; en `FlowEngineTest`: la auditoría `flow.webhook_called` y el
+  error de reintento jamás contienen la query con secretos.
+- **Resolver** (`VariableResolverTest`): `{{contact.<campo>}}` se expone como
+  `contact.metadata[<campo>]` (VAR-1 UNIDAD 5).
+- **Frontend (Vitest)**: `QuestionNodeConfig.test.ts` (2): conserva y edita `type`/`default` sin
+  perderlos al guardar, default vacío → `null`. `useVariableCatalog.test.ts` (7): agrupa con
+  `Map` y es inmune a `custom.__proto__`/`constructor`/`prototype` (sin prototype pollution).
+- Suite total UNIDAD 5 (backend): **425 tests / 2001 assertions**; frontend **147 tests Vitest**.
+
 ### Auth
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import type { NodeConfigContext } from '../../../flowEditorTypes';
-import type { VariableDefinition } from '../../../flowTypes';
+import type { VariableDefinition, VariableType } from '../../../flowTypes';
 import VariablePicker from '../../VariablePicker.vue';
 
 const props = defineProps<{ modelValue: Record<string, unknown> | null; context: NodeConfigContext }>();
@@ -11,9 +11,20 @@ const fieldHint = 'Se guardará como {{custom.field}}';
 const fieldRules = 'Solo minúsculas, números y guión bajo (ej: nombre, dni_2).';
 const promptHint = 'La pregunta soporta variables ({{contact.name}}, {{custom.nombre}}).';
 
+const variableTypes: { value: VariableType; label: string }[] = [
+    { value: 'string', label: 'Texto' },
+    { value: 'integer', label: 'Entero' },
+    { value: 'decimal', label: 'Decimal' },
+    { value: 'boolean', label: 'Booleano' },
+    { value: 'date', label: 'Fecha' },
+    { value: 'datetime', label: 'Fecha y hora' },
+];
+
 const text = ref(typeof props.modelValue?.text === 'string' ? props.modelValue.text : '');
 const prompt = ref(typeof props.modelValue?.prompt === 'string' ? props.modelValue.prompt : '');
 const field = ref(typeof props.modelValue?.field === 'string' ? props.modelValue.field : '');
+const type = ref<VariableType>(typeof props.modelValue?.type === 'string' ? (props.modelValue.type as VariableType) : 'string');
+const defaultValue = ref(typeof props.modelValue?.default === 'string' ? props.modelValue.default : '');
 const textarea = ref<HTMLTextAreaElement | null>(null);
 
 watch(
@@ -22,11 +33,20 @@ watch(
         text.value = typeof value?.text === 'string' ? value.text : '';
         prompt.value = typeof value?.prompt === 'string' ? value.prompt : '';
         field.value = typeof value?.field === 'string' ? value.field : '';
+        type.value = typeof value?.type === 'string' ? (value.type as VariableType) : 'string';
+        defaultValue.value = typeof value?.default === 'string' ? value.default : '';
     },
 );
 
 function update(): void {
-    emit('update:modelValue', { text: text.value, prompt: prompt.value, field: field.value });
+    emit('update:modelValue', {
+        ...props.modelValue,
+        text: text.value,
+        prompt: prompt.value,
+        field: field.value,
+        type: type.value,
+        default: defaultValue.value === '' ? null : defaultValue.value,
+    });
 }
 
 function insertVariable(variable: VariableDefinition): void {
@@ -98,6 +118,29 @@ function insertVariable(variable: VariableDefinition): void {
                 @input="update"
             />
             <span class="mt-1 block text-[11px] text-zinc-400">{{ fieldHint }} · {{ fieldRules }}</span>
+        </label>
+        <label class="block">
+            <span class="mb-1 block text-xs font-medium text-zinc-600">Tipo de variable</span>
+            <select
+                v-model="type"
+                class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                @change="update"
+            >
+                <option v-for="option in variableTypes" :key="option.value" :value="option.value">
+                    {{ option.label }}
+                </option>
+            </select>
+        </label>
+
+        <label class="block">
+            <span class="mb-1 block text-xs font-medium text-zinc-600">Valor por defecto (opcional)</span>
+            <input
+                v-model="defaultValue"
+                type="text"
+                class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                placeholder="Se usa si el cliente no responde"
+                @input="update"
+            />
         </label>
     </div>
 </template>

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Application\Flows\Services\FlowEngine;
+use App\Domain\Audit\Models\AuditLog;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Flows\Enums\FlowExecutionStatus;
 use App\Domain\Flows\Enums\FlowStatus;
@@ -647,4 +648,85 @@ test('FLOW-15: sin trigger que matchee, el motor no crea ejecución', function (
 
     expect(FlowExecution::query()->withoutTenantScope()->where('tenant_id', $tenant->id)->count())->toBe(0)
         ->and($conversation->fresh()->flow_execution_id)->toBeNull();
+});
+
+test('UNIDAD 5: la auditoría del webhook nunca registra la query con secretos del URL', function (): void {
+    Queue::fake();
+    Http::fake(['https://example.com/hook*' => Http::response(['ok' => true], 200)]);
+
+    $tenant = Tenant::factory()->create();
+    $chatbot = make_chatbot($tenant);
+    $flow = make_flow($tenant, $chatbot);
+
+    publish_flow($flow, [
+        ['id' => 'n1', 'type' => 'message', 'name' => 'Inicio', 'config' => ['text' => 'Hola'], 'is_start' => true],
+        ['id' => 'n2', 'type' => 'webhook', 'name' => 'Hook', 'config' => [
+            'url' => 'https://example.com/hook?api_key=top-secret',
+            'method' => 'GET',
+        ]],
+        ['id' => 'n3', 'type' => 'end', 'name' => 'Fin'],
+    ], [
+        ['from' => 'n1', 'to' => 'n2'],
+        ['from' => 'n2', 'to' => 'n3'],
+    ]);
+
+    make_trigger($flow, ['type' => FlowTriggerType::Start->value]);
+
+    $first = make_inbound_message($tenant, 'Hola');
+    $conversation = engine_conversation_for($first);
+
+    run_flow_engine($tenant, $first, $conversation);
+
+    $execution = FlowExecution::query()->withoutTenantScope()->where('tenant_id', $tenant->id)->firstOrFail();
+    expect($execution->status)->toBe(FlowExecutionStatus::Completed);
+
+    $audit = AuditLog::query()->where('action', 'flow.webhook_called')->where('subject_id', $execution->id)->first();
+
+    expect($audit?->data['url'])->toBe('https://example.com/hook');
+
+    foreach (FlowExecutionLog::query()->withoutTenantScope()->where('execution_id', $execution->id)->get() as $log) {
+        expect(json_encode($log->payload))->not->toContain('top-secret');
+    }
+});
+
+test('UNIDAD 5: el error del webhook en logs no expone la query con secretos', function (): void {
+    Queue::fake();
+    Http::fake(['https://example.com/hook*' => Http::response(['error' => 'boom'], 500)]);
+
+    $tenant = Tenant::factory()->create();
+    $chatbot = make_chatbot($tenant);
+    $flow = make_flow($tenant, $chatbot);
+
+    publish_flow($flow, [
+        ['id' => 'n1', 'type' => 'message', 'name' => 'Inicio', 'config' => ['text' => 'Hola'], 'is_start' => true],
+        ['id' => 'n2', 'type' => 'webhook', 'name' => 'Hook', 'config' => [
+            'url' => 'https://example.com/hook?token=secreto-de-query',
+            'method' => 'POST',
+        ]],
+        ['id' => 'n3', 'type' => 'end', 'name' => 'Fin'],
+    ], [
+        ['from' => 'n1', 'to' => 'n2'],
+        ['from' => 'n2', 'to' => 'n3'],
+    ]);
+
+    make_trigger($flow, ['type' => FlowTriggerType::Start->value]);
+
+    $first = make_inbound_message($tenant, 'Hola');
+    $conversation = engine_conversation_for($first);
+
+    run_flow_engine($tenant, $first, $conversation);
+
+    $execution = FlowExecution::query()->withoutTenantScope()->where('tenant_id', $tenant->id)->firstOrFail();
+    expect($execution->attempts)->toBe(1);
+
+    $retryLog = FlowExecutionLog::query()->withoutTenantScope()->where('execution_id', $execution->id)->where('event', 'step_retry')->first();
+
+    expect($retryLog?->payload['error'])
+        ->toContain('https://example.com/hook')
+        ->not->toContain('secreto-de-query')
+        ->not->toContain('token=');
+
+    foreach (FlowExecutionLog::query()->withoutTenantScope()->where('execution_id', $execution->id)->get() as $log) {
+        expect(json_encode($log->payload))->not->toContain('secreto-de-query');
+    }
 });

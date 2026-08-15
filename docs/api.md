@@ -342,8 +342,16 @@ pregunta siguen siendo literales/validados (backend autoridad). En nodos `condit
 se elige del catálogo (`contact.*`/`business.*`/`conversation.*`/`custom.*`) y se conservan
 `match`/`not`/operadores sin cambios. El cliente NUNCA envía `tenant_id`, `namespace`, `type`,
 `writable` ni `source`; el catálogo es de solo lectura. Las referencias que el motor no podrá
-resolver (`{{custom.inexistente}}`, `{{unknown.*}}`, `{{node.*}}`, `business.*` fuera de la
-whitelist) generan warnings locales (nunca errores) que no bloquean la edición ni el guardado.
+  resolver (`{{custom.inexistente}}`, `{{unknown.*}}`, `{{node.*}}`, `business.*` fuera de la
+  whitelist) generan warnings locales (nunca errores) que no bloquean la edición ni el guardado.
+
+**FASE 13, UNIDAD 5 (ADR-045)**: `{{contact.<campo>}}` es alias de `contact.metadata[<campo>]`
+(la traversión `contact.metadata.<clave>` sigue bloqueada). El nodo `question` admite
+`type` (uno de `VariableType`) y `default` (coercible al tipo declarado o `string`); el panel del
+editor los conserva y edita al guardar. Límites de validación: textos ≤ 4096, campo de condition
+≤ 128 (namespaces `contact/business/conversation/custom`, segmentos seguros), URL webhook ≤ 2048
+con esquema `http(s)` y host literal (sin variables, sin credenciales). Los logs/auditoría del
+webhook usan URLs saneadas (sin userinfo/query/fragment).
 
 **Editor visual (FASE 12)**: el frontend edita sobre los endpoints de la tabla (página
 `settings/flows/{chatbot}/{flow}`, ADR-040..044). El editor envía ids de nodo UUID, posiciones

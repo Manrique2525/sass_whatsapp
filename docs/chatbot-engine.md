@@ -145,7 +145,16 @@ objetivo completo; las diferencias marcadas abajo). Referencias: ADR-034..039.
 - Variables: `VariableResolver` (contact/custom/conversation/node) + `ConditionEvaluator`
   (ramas de `condition`) + `WebhookUrlGuard` (anti-SSRF). `{{custom.*}}` se lee de
   `execution.variables` (respuestas de `question`); no hay espejo hacia `conversation.context`
-  (decisión FASE 11 — ver FLOW-2 en tests).
+  (decisión FASE 11 — ver FLOW-2 en tests). FASE 13: `{{contact.<campo>}}` es alias de
+  `contact.metadata[<campo>]` (ADR-045); la traversión `contact.metadata.<clave>` sigue bloqueada.
+- `FlowValidator` (FASE 13, ADR-045): límites de longitud (textos ≤ 4096, campo de condition
+  ≤ 128, URL webhook ≤ 2048), `question` valida `type` (`VariableType`) y `default` (coercible al
+  tipo declarado o `string`), escaneo de referencias con error duro solo para segmentos
+  peligrosos (`__proto__`/`constructor`/`prototype`), campo de condition solo con namespaces
+  `contact/business/conversation/custom` y segmentos seguros.
+- Nodo `webhook` (FASE 13): esquema `http(s)` obligatorio, host literal (variables jamás
+  bypasean SSRF), sin credenciales en el URL; los logs y la auditoría usan
+  `WebhookUrlGuard::sanitizeForLog()` (sin userinfo/query/fragment) → nunca aparecen secrets.
 
 ### 10.3 Estados del flujo (ADR-036)
 
@@ -189,6 +198,7 @@ objetivo completo; las diferencias marcadas abajo). Referencias: ADR-034..039.
   `e-{source}-{target}-{label}`, ramas de condición como `sourceHandle`+`label`
   `CONDITION_TRUE`/`CONDITION_FALSE`. El payload del draft no lleva `tenant_id` (lo fuerza
   `BelongsToTenant`) y los secrets del nodo webhook quedan en el backend (solo `method`/`url`).
+  FASE 13: el panel de `question` conserva y edita `type`/`default` (`QuestionNodeConfig`).
 - **Concurrencia**: `PUT /flows/{flow}/draft` acepta `base_updated_at` (opcional); si la versión
   cambió → 409 `FLOW_CONFLICT`. El editor muestra el `ConflictDialog` (recargar / seguir
   editando / sobrescribir explícito) y jamás sobrescribe automáticamente. Migración

@@ -123,6 +123,14 @@ test('VAR-1: no se permite el acceso a rutas arbitrarias (path traversal)', func
     expect($text)->toBe(' ');
 });
 
+test('VAR-1 (UNIDAD 5): metadata.* se expone como contact.<campo>; no como ruta', function (): void {
+    // Interpretación de `{{contact.metadata.*}}` del contrato: los campos de
+    // metadata se resuelven con `{{contact.<campo>}}` (UNIDAD 2). El acceso por
+    // ruta `contact.metadata.<clave>` sigue bloqueado (test anterior).
+    expect(variable_resolve_text('Ciudad: {{contact.ciudad}}, plan {{contact.plan}}'))
+        ->toBe('Ciudad: Buenos Aires, plan pro');
+});
+
 test('VAR-16: el default se usa cuando la variable no existe', function (): void {
     $text = variable_resolve_text('Hola {{custom.nombre|default:\'invitado\'}}');
 

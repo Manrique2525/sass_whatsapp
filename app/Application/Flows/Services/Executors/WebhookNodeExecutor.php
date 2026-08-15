@@ -71,13 +71,17 @@ final class WebhookNodeExecutor implements NodeExecutorInterface
 
         if ($response->failed()) {
             throw new FlowWebhookRequestFailedException(
-                "El webhook '{$url}' respondió con estado {$response->status()}.",
+                "El webhook '".WebhookUrlGuard::sanitizeForLog($url)."' respondió con estado {$response->status()}.",
             );
         }
 
         $this->auditLogger->record(
             action: 'flow.webhook_called',
-            data: ['url' => $url, 'method' => $method, 'status' => $response->status()],
+            data: [
+                'url' => WebhookUrlGuard::sanitizeForLog($url),
+                'method' => $method,
+                'status' => $response->status(),
+            ],
             subjectType: FlowExecution::class,
             subjectId: $context->execution->id,
             tenantId: $context->tenant->id,

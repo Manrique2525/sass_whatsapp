@@ -148,3 +148,134 @@ test('VAR-7: un condition con match no válido o not no booleano se rechaza', fu
         "El nodo \"Nodo n2\" (condición) tiene una regla con 'not' no booleano.",
     );
 });
+
+test('UNIDAD 5: un question con type válido y default compatible pasa; default incompatible falla', function (): void {
+    foreach (['string', 'integer', 'decimal', 'boolean', 'date', 'datetime', 'array', 'object', 'null'] as $type) {
+        expect(validate_question_field(['prompt' => '?', 'field' => 'x', 'type' => $type, 'default' => null]))->toBe([]);
+    }
+
+    expect(validate_question_field(['prompt' => '?', 'field' => 'x', 'type' => 'integer', 'default' => 5]))->toBe([])
+        ->and(validate_question_field(['prompt' => '?', 'field' => 'x', 'type' => 'integer', 'default' => '7']))->toBe([])
+        ->and(validate_question_field(['prompt' => '?', 'field' => 'x', 'type' => 'boolean', 'default' => 'sí']))->toBe([]);
+
+    expect(validate_question_field(['prompt' => '?', 'field' => 'x', 'type' => 'integer', 'default' => 'abc']))->toContain(
+        "El nodo \"Nodo n2\" (pregunta) tiene un 'default' incompatible con el tipo 'integer'.",
+    );
+});
+
+test('UNIDAD 5: un question con type desconocido es inválido', function (): void {
+    $errors = validate_question_field(['prompt' => '?', 'field' => 'x', 'type' => 'fecha']);
+
+    expect($errors)->toContain(
+        "El nodo \"Nodo n2\" (pregunta) tiene un 'type' no válido.",
+    );
+});
+
+test('UNIDAD 5: textos que exceden la longitud máxima se rechazan', function (): void {
+    $long = str_repeat('a', 4097);
+
+    expect(validate_question_field(['prompt' => $long, 'field' => 'x']))->toContain(
+        'El nodo "Nodo n2" (pregunta) excede la longitud máxima de texto.',
+    );
+
+    $nodes = [
+        make_validator_node('n1', 'message', ['text' => $long], true),
+        make_validator_node('n2', 'end'),
+    ];
+
+    $errors = app(FlowValidator::class)->validate($nodes, [make_validator_edge('n1', 'n2')]);
+
+    expect($errors)->toContain('El nodo "Nodo n1" (mensaje) excede la longitud máxima de texto.');
+});
+
+test('UNIDAD 5: referencias con segmentos peligrosos son ERROR en textos', function (): void {
+    foreach (['{{custom.__proto__}}', '{{custom.constructor}}', '{{custom.prototype}}', '{{custom.a..b}}'] as $token) {
+        $errors = validate_question_field(['prompt' => '¿X '.$token.'?', 'field' => 'x']);
+
+        expect($errors)->toContain(
+            "El nodo \"Nodo n2\" (pregunta) contiene una referencia a variable inválida: \"{$token}\".",
+        );
+    }
+});
+
+test('UNIDAD 5: referencias válidas, node.* y namespaces desconocidos NO son errores', function (): void {
+    expect(validate_question_field(['prompt' => 'Hola {{contact.name}} {{custom.x|default:\'inv\'}} {{node.id}} {{foo.bar}}', 'field' => 'x']))
+        ->toBe([]);
+});
+
+test('UNIDAD 5: condition con field inválido (namespace desconocido o peligroso) se rechaza', function (): void {
+    foreach (['foo.bar', 'custom.__proto__', 'custom.constructor', 'custom..x', 'custom'] as $field) {
+        $errors = validate_condition_config(['rules' => [
+            ['field' => $field, 'operator' => 'equals', 'value' => '1'],
+        ]]);
+
+        expect($errors)->toContain(
+            "El nodo \"Nodo n2\" (condición) tiene una regla con 'field' de variable inválido: \"{$field}\".",
+        );
+    }
+});
+
+test('UNIDAD 5: condition acepta fields dotted válidos de todos los namespaces', function (): void {
+    expect(validate_condition_config(['rules' => [
+        ['field' => 'contact.name', 'operator' => 'equals', 'value' => 'Ana'],
+        ['field' => 'business.email', 'operator' => 'exists'],
+        ['field' => 'conversation.id', 'operator' => 'exists'],
+        ['field' => 'contact.metadata', 'operator' => 'is_not_empty'],
+    ]]))->toBe([]);
+});
+
+/**
+ * @param  array<string, mixed>  $webhookConfig
+ * @return list<string>
+ */
+function validate_webhook_config(array $webhookConfig): array
+{
+    $nodes = [
+        make_validator_node('n1', 'message', ['text' => 'Hola'], true),
+        make_validator_node('n2', 'webhook', $webhookConfig),
+        make_validator_node('n3', 'end'),
+    ];
+
+    return app(FlowValidator::class)->validate($nodes, [
+        make_validator_edge('n1', 'n2'),
+        make_validator_edge('n2', 'n3'),
+    ]);
+}
+
+test('UNIDAD 5: el webhook rechaza credenciales embebidas en el URL', function (): void {
+    $errors = validate_webhook_config(['url' => 'https://user:secreto@example.com/hook', 'method' => 'POST']);
+
+    expect($errors)->toContain(
+        "El nodo \"Nodo n2\" (webhook) no puede incluir credenciales en la 'url'.",
+    );
+});
+
+test('UNIDAD 5: el webhook rechaza interpolación de variables en el host (URL literal)', function (): void {
+    $errors = validate_webhook_config(['url' => 'https://{{custom.host}}/hook', 'method' => 'POST']);
+
+    expect($errors)->toContain(
+        "El nodo \"Nodo n2\" (webhook) no puede interpolar variables en el host de la 'url'.",
+    );
+
+    // En el PATH el token es literal y se permite (contrato de FASE 11, VAR-17).
+    expect(validate_webhook_config(['url' => 'https://example.com/hook/{{custom.plan}}', 'method' => 'POST']))->toBe([]);
+});
+
+test('UNIDAD 5: el webhook valida longitud y referencias peligrosas en headers/payload', function (): void {
+    $errors = validate_webhook_config([
+        'url' => 'https://example.com/hook',
+        'method' => 'POST',
+        'payload' => ['from' => '{{custom.__proto__}}', 'nested' => ['ok' => '{{contact.name}}']],
+    ]);
+
+    expect($errors)->toContain(
+        'El nodo "Nodo n2" (webhook) contiene una referencia a variable inválida: "{{custom.__proto__}}".',
+    );
+
+    expect(validate_webhook_config([
+        'url' => 'https://example.com/hook',
+        'method' => 'POST',
+        'headers' => ['X-User' => '{{contact.name}}'],
+        'payload' => ['deep' => ['nested' => ['v' => '{{custom.plan|default:\'x\'}}']]],
+    ]))->toBe([]);
+});

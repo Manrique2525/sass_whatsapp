@@ -254,6 +254,10 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - El nodo `webhook` de los flujos permite POST externos con URLs configuradas por el tenant.
   Validación anti-SSRF: solo esquemas http/https, bloqueo de IPs privadas/loopback/metadata
   cloud, resolución de DNS y verificación de IP del host antes del request, allowlist por tenant.
+- FASE 13 (ADR-045): el esquema se valida también en `WebhookUrlGuard`; el host debe ser literal
+  (una variable jamás bypasea SSRF), sin credenciales en el URL. Los logs y la auditoría usan
+  `WebhookUrlGuard::sanitizeForLog()` (sin userinfo/query/fragment), de modo que `flow_execution_logs`
+  y `flow.webhook_called` nunca contienen `Authorization`, `api_key` ni query con secretos.
 
 ### Aislamiento de infraestructura compartida
 - Redis y S3 son compartidos entre tenants: claves de cache/locks/rate-limit con prefijo

@@ -903,8 +903,36 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
 - **Consecuencias**: `vue-tsc` sin errores con el contrato de tipos propio; la selección,
   undo/redo y el modo lectura quedan cubiertos por Vitest.
 
-## Pendientes de decisión
+## ADR-045 · FASE 13 UNIDAD 5: endurecimiento de validación, variables y webhooks
 
-- Proveedor de email en producción (mailpit en dev; SES/Resend/SMTP en prod) → FASE 22.
-- Pasarela de pagos (Stripe propuesto) → FASE 24.
-- Estructura de OpenAPI (spec manual vs. paquetes) → FASE 35.
+- **Estado**: Aceptado → FASE 13
+- **Contexto**: UNIDAD 5 endurecía el catálogo de variables y el Flow Builder. Dos ambigüedades
+  reales: (1) qué significa `{{contact.metadata.*}}` (¿tokens de ruta o campos planos del
+  metadata?) y (2) cuánta seguridad exige la config del nodo webhook (SSRF, secrets en logs).
+- **Decisión**:
+  - **`contact.metadata.*` = alias plano**: `{{contact.<campo>}}` resuelve a
+    `contact.metadata[<campo>]` (las claves del metadata se exponen como campos top-level de
+    `contact`). La **traversión** `{{contact.metadata.<clave>}}` sigue bloqueada (UNIDAD 2). Es la
+    interpretación conservadora: no cambia la semántica existente y no añade capacidad nueva de
+    acceso a datos. Documentado con test en `VariableResolverTest`.
+  - **`question` tipo + default**: `config.type` debe ser un `VariableType` y `config.default`
+    (no-null) debe poder convertirse al tipo declarado (o `string` si no se declara). El editor
+    ahora conserva y edita `type`/`default` al guardar. Backend es la autoridad (nunca confiar en
+    el frontend).
+  - **Webhook**: `WebhookUrlGuard` valida esquema `http(s)` y, además, `sanitizeForLog()` limpia
+    userinfo/query/fragment para **logs y auditoría** (nunca aparecen `Authorization`, `api_key`
+    ni query con secretos). El validador rechaza `{{` dentro del host (variables jamás bypasean
+    SSRF) y hosts con credenciales. Los `headers`/`payload` nunca salen por API (solo
+    `method`/`url`, ver ADR-042/FLOW-29).
+  - **Referencias y condition**: escaneo de referencias con error duro solo para segmentos
+    peligrosos (`__proto__`, `constructor`, `prototype`, segmentos vacíos); namespaces
+    desconocidos/`node.*`/multi-segmento siguen siendo warnings (contrato previo intacto). Campo
+    de condition limitado a namespaces `contact/business/conversation/custom` con segmentos
+    seguros.
+  - **Catálogo frontend**: `useVariableCatalog` agrupa con `Map`/arrays (nunca objetos planos
+    derivados de claves de usuario) → sin prototype pollution.
+  - Límites: textos ≤ 4096, campo de condition ≤ 128, URL de webhook ≤ 2048.
+- **Consecuencias**: `flow_execution_logs`/audit nunca contienen secrets de webhook; el editor
+  mantiene `type`/`default`; VAR-24/25/26 (concurrencia) y VAR-29/30 (aislamiento tenant) se
+  prueban explícitamente. Suite backend 425 tests / 2001 assertions; frontend 147 tests.
+

@@ -66,15 +66,27 @@ describe('useVariableCatalog', () => {
             ...variables,
             variable({ key: 'custom.__proto__', label: 'Malo', namespace: 'custom' }),
             variable({ key: 'custom.constructor', label: 'Otro', namespace: 'custom' }),
+            variable({ key: 'custom.prototype', label: 'Otro más', namespace: 'custom' }),
         ];
         installAxios(() => Promise.resolve({ data: { variables: poisoned } }));
         const catalog = useVariableCatalog(context);
         await catalog.load();
 
         const customGroup = catalog.groups.value.find((group) => group.namespace === 'custom');
-        expect(customGroup?.items.map((item) => item.key)).toEqual(['custom.nombre', 'custom.__proto__', 'custom.constructor']);
+        expect(customGroup?.items.map((item) => item.key)).toEqual([
+            'custom.nombre',
+            'custom.__proto__',
+            'custom.constructor',
+            'custom.prototype',
+        ]);
         expect(catalog.byKey('custom.__proto__')).not.toBeNull();
+        expect(catalog.byKey('custom.constructor')).not.toBeNull();
+        expect(catalog.byKey('custom.prototype')).not.toBeNull();
         expect(catalog.byKey('custom.inexistente')).toBeNull();
+
+        const plain: Record<string, unknown> = {};
+        expect(Object.prototype.hasOwnProperty.call(plain, 'custom.nombre')).toBe(false);
+        expect(Object.prototype.hasOwnProperty.call({}, '__proto__')).toBe(false);
     });
 
     it('filtra por búsqueda en clave y label', async () => {

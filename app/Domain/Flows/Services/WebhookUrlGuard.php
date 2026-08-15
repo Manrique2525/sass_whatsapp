@@ -18,6 +18,12 @@ final class WebhookUrlGuard
 {
     public function assertAllowed(string $url): void
     {
+        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+
+        if (! in_array($scheme, ['http', 'https'], true)) {
+            throw new WebhookUrlBlockedException('El URL del webhook solo admite http(s).');
+        }
+
         $host = parse_url($url, PHP_URL_HOST);
 
         if (! is_string($host) || $host === '') {
@@ -49,6 +55,29 @@ final class WebhookUrlGuard
                 throw new WebhookUrlBlockedException("El host '{$host}' resuelve a una IP bloqueada '{$ip}' (SSRF).");
             }
         }
+    }
+
+    /**
+     * Versión del URL segura para logs/auditoría/errores (FASE 13, UNIDAD 5):
+     * elimina userinfo (credenciales embebidas), query y fragment. La URL
+     * literal de la config puede contener query con tokens/API keys; jamás
+     * debe terminar en `flow_execution_logs`, auditoría o mensajes de error.
+     */
+    public static function sanitizeForLog(string $url): string
+    {
+        $parts = parse_url($url);
+
+        if ($parts === false || ! isset($parts['scheme'], $parts['host'])) {
+            return '(url inválida)';
+        }
+
+        $host = $parts['host'];
+
+        if (isset($parts['port'])) {
+            $host .= ':'.$parts['port'];
+        }
+
+        return $parts['scheme'].'://'.$host.($parts['path'] ?? '');
     }
 
     private function isLocalName(string $host): bool

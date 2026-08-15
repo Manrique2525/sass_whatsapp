@@ -627,3 +627,35 @@ COMPLETADO / BLOQUEADO
       (timestamp(6)), `multi-tenancy.md` (editor), `security.md` (editor), `testing.md`,
       `architecture.md` (frontend editor), `roadmap.md`, `decisions.md` (ADR-040..044)
 - [ ] FASE 12 termina SIN push a origin (reporte final en PASO 13)
+
+> ## Fase 13 — Variables, validación y Flow Builder (estado, UNIDAD 5)
+
+- [x] **Catálogo de variables** (UNIDAD 3/4, ADR-046): endpoint
+      `GET /api/v1/tenants/{tenant}/flows/{flow}/variables` (solo lectura `flows.view`, definiciones
+      derivadas, nunca valores runtime), `VariableCatalogService`, `VariableDefinitionResource`,
+      picker en el editor (`VariablePicker`), espejo frontend `useVariableCatalog` (Map, sin
+      prototype pollution).
+- [x] **Referencias y resolver** (UNIDAD 1/2): `VariableGuard` (keys snake_case, rechazo de
+      peligrosas), `VariableResolver` contact/business/conversation/custom/node, `default:`
+      inline, warnings para no resueltas. `{{contact.<campo>}}` = alias de
+      `contact.metadata[<campo>]` (ADR-045); `contact.metadata.<clave>` bloqueado.
+- [x] **UNIDAD 5 — Validación endurecida** (ADR-045): `FlowValidator` con límites (textos ≤ 4096,
+      campo condition ≤ 128, URL webhook ≤ 2048), `question.type`/`default` validados
+      (`VariableType` + coerción), referencias con error duro solo para segmentos peligrosos,
+      campo de condition solo namespaces `contact/business/conversation/custom`.
+- [x] **UNIDAD 5 — Webhook seguro**: esquema `http(s)` en `WebhookUrlGuard`, host literal (sin
+      variables → sin SSRF), sin credenciales en URL; logs/auditoría con `sanitizeForLog()`
+      (sin userinfo/query/fragment); headers/payload nunca salen por API (FLOW-29).
+- [x] **UNIDAD 5 — Concurrencia (VAR-24/25/26)**: dos mensajes acumulan variables con una sola
+      ejecución; dedupe por `provider_message_id` + barrera `last_inbound_message_id`; valor
+      persistente waiting→delay→resume; continue duplicado no-op; lock Redis liberado.
+- [x] **UNIDAD 5 — Aislamiento tenant (VAR-29/30)**: motor/catálogo/webhook del tenant A jamás
+      ven datos de B; flow de B desde A → 404; `TenantContext` equivocado no expone nodos.
+- [x] **UNIDAD 5 — Frontend**: `QuestionNodeConfig` conserva y edita `type`/`default` (2 Vitest);
+      `useVariableCatalog` inmune a `__proto__`/`constructor`/`prototype`.
+- [x] **Gates**: `php artisan test` (425/2001 assertions) + Pint + PHPStan nivel 6 + `vitest`
+      (147) + `vue-tsc` + `vite build` verdes.
+- [x] **Documentación**: `decisions.md` (ADR-045), `chatbot-engine.md` (§10.2/§11), `api.md`
+      (§3.8), `security.md` (SSRF + logs), `testing.md`.
+- [ ] FASE 13 **PENDIENTE** (no marcada completada): falta UNIDAD 6 autorización + push.
+- [ ] FASE 13 termina SIN push a origin (reporte final en PASO 13)
