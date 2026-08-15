@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     CONDITION_OPERATORS,
     configIssuesForNode,
+    isValidVariableKey,
     localGraphIssues,
     mapBackendErrors,
     nodeConfigValid,
@@ -30,6 +31,34 @@ describe('configIssuesForNode', () => {
         expect(configIssuesForNode('question', { prompt: '¿Nombre?', field: 'mal campo' })).toContain(
             'El campo debe ser un nombre de variable válido (ej: nombre).',
         );
+    });
+
+    it('question valida el campo en minúsculas estricto (fix C8)', () => {
+        const invalid = ['Nombre', '_nombre', '__proto__', 'prototype', 'constructor', 'mal campo', ''];
+
+        for (const field of invalid) {
+            expect(configIssuesForNode('question', { prompt: '¿X?', field })).toContain(
+                'El campo debe ser un nombre de variable válido (ej: nombre).',
+            );
+        }
+
+        expect(configIssuesForNode('question', { prompt: '¿X?', field: 'nombre' })).toHaveLength(0);
+        expect(configIssuesForNode('question', { prompt: '¿X?', field: 'nombre_1' })).toHaveLength(0);
+        expect(configIssuesForNode('question', { prompt: '¿X?', field: 'nombre123' })).toHaveLength(0);
+    });
+
+    it('isValidVariableKey acepta snake_case y rechaza claves peligrosas', () => {
+        expect(isValidVariableKey('nombre')).toBe(true);
+        expect(isValidVariableKey('nombre_1')).toBe(true);
+        expect(isValidVariableKey('nombre123')).toBe(true);
+
+        expect(isValidVariableKey('Nombre')).toBe(false);
+        expect(isValidVariableKey('_nombre')).toBe(false);
+        expect(isValidVariableKey('nombre ')).toBe(false);
+        expect(isValidVariableKey('__proto__')).toBe(false);
+        expect(isValidVariableKey('prototype')).toBe(false);
+        expect(isValidVariableKey('constructor')).toBe(false);
+        expect(isValidVariableKey('a'.repeat(65))).toBe(false);
     });
 
     it('condition valida reglas y operadores', () => {

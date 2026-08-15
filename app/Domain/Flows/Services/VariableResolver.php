@@ -87,16 +87,16 @@ final class VariableResolver
 
     private function resolveBusiness(string $key, BusinessProfile $business): string
     {
-        return match ($key) {
-            'name' => (string) ($business->name ?? ''),
-            'description' => (string) ($business->description ?? ''),
-            'category' => (string) ($business->category ?? ''),
-            'address' => (string) ($business->address ?? ''),
-            'website' => (string) ($business->website ?? ''),
-            'email' => (string) ($business->email ?? ''),
-            'phone' => (string) ($business->phone ?? ''),
-            default => '',
-        };
+        // FASE 13: whitelist única (`BusinessProfile::PUBLIC_FIELDS`). Un campo
+        // que no esté en la whitelist se resuelve como vacío: nunca se exponen
+        // datos no públicos (tokens, credenciales, etc.).
+        if (! in_array($key, BusinessProfile::PUBLIC_FIELDS, true)) {
+            return '';
+        }
+
+        $value = $business->getAttribute($key);
+
+        return $value === null ? '' : (string) $value;
     }
 
     /**

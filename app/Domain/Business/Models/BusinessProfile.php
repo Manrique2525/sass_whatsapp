@@ -51,6 +51,24 @@ final class BusinessProfile extends Model
     ];
 
     /**
+     * Campos públicos del perfil de negocio expuestos al motor de variables
+     * (FASE 13). Única whitelist que resuelve `VariableResolver` y que indexa
+     * `VariableCatalogService`. NUNCA incluye secretos (tokens, access_token,
+     * claves de API, credenciales ni secrets de webhook/Meta).
+     *
+     * @var list<string>
+     */
+    public const PUBLIC_FIELDS = [
+        'name',
+        'description',
+        'category',
+        'address',
+        'website',
+        'email',
+        'phone',
+    ];
+
+    /**
      * @return BelongsTo<Tenant, $this>
      */
     public function tenant(): BelongsTo

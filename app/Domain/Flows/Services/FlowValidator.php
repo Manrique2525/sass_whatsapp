@@ -168,7 +168,10 @@ final class FlowValidator
                 if (! $this->isNonEmptyString($config['prompt'] ?? null)) {
                     $errors[] = "El nodo \"{$name}\" (pregunta) requiere 'prompt' no vacío.";
                 }
-                if (! isset($config['field']) || ! is_string($config['field']) || preg_match('/^[a-z][a-z0-9_]*$/i', $config['field']) !== 1) {
+                // FASE 13 (fix C8): claves estrictas en minúsculas. El regex de
+                // FASE 11 usaba `i` y aceptaba mayúsculas; ahora el guard es
+                // snake_case estricto y rechaza claves peligrosas.
+                if (! isset($config['field']) || ! is_string($config['field']) || ! VariableGuard::isValidKey($config['field'])) {
                     $errors[] = "El nodo \"{$name}\" (pregunta) requiere 'field' con nombre de variable válido.";
                 }
                 break;

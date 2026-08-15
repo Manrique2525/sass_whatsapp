@@ -16,6 +16,7 @@ use App\Domain\Flows\Models\FlowExecution;
 use App\Domain\Flows\Models\FlowNode;
 use App\Domain\Flows\Models\Trigger;
 use App\Domain\Flows\Services\TriggerMatcher;
+use App\Domain\Flows\Services\VariableGuard;
 use App\Domain\Flows\ValueObjects\NodeExecutionContext;
 use App\Domain\Messages\Enums\MessageDirection;
 use App\Domain\Messages\Models\Message;
@@ -226,11 +227,17 @@ final class FlowEngine
         Message $inbound,
     ): void {
         if ($node->type === FlowNodeType::Question) {
-            $field = trim((string) ($node->config['field'] ?? ''));
+            // FASE 13 (fix C8): normalización de la clave a snake_case estricto
+            // + defensa en profundidad con VariableGuard. La clave ya fue
+            // validada al publicar (FlowValidator), pero se normaliza y se
+            // revalida aquí para que ningún flujo con datos corruptos pueda
+            // escribir variables fuera de política. El valor se recorta y se
+            // limita en longitud (MAX_VALUE_LENGTH).
+            $field = VariableGuard::normalizeKey((string) ($node->config['field'] ?? ''));
 
-            if ($field !== '') {
+            if (VariableGuard::isValidKey($field)) {
                 $variables = $execution->variables;
-                $variables['custom'][$field] = $inbound->body;
+                $variables['custom'][$field] = VariableGuard::truncateValue(trim((string) $inbound->body));
                 $execution->forceFill(['variables' => $variables])->save();
             }
         }

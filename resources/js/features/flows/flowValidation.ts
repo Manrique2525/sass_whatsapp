@@ -34,6 +34,23 @@ function isNonEmptyString(value: unknown): value is string {
     return typeof value === 'string' && value.trim() !== '';
 }
 
+// FASE 13 (fix C8): claves de variables estrictas en minúsculas. El regex de
+// FASE 12 usaba `/i` y aceptaba mayúsculas; además se rechazan claves que
+// colisionan con la runtime o permiten prototype pollution.
+const VARIABLE_KEY_RE = /^[a-z][a-z0-9_]*$/;
+const MAX_VARIABLE_KEY_LENGTH = 64;
+const DANGEROUS_EXACT_KEYS = ['constructor', 'prototype'];
+
+export function isValidVariableKey(value: string): boolean {
+    return (
+        value.length > 0 &&
+        value.length <= MAX_VARIABLE_KEY_LENGTH &&
+        VARIABLE_KEY_RE.test(value) &&
+        !value.includes('__') &&
+        !DANGEROUS_EXACT_KEYS.includes(value)
+    );
+}
+
 /**
  * Anticipa errores de config del nodo (espejo de `FlowValidator::validateNodeConfig`).
  * Devuelve mensajes en español listos para mostrar en el panel.
@@ -77,7 +94,7 @@ export function configIssuesForNode(type: FlowNodeType, config: Record<string, u
             if (!isNonEmptyString(c.prompt)) {
                 issues.push('Falta la pregunta (prompt).');
             }
-            if (typeof c.field !== 'string' || !/^[a-z][a-z0-9_]*$/i.test(c.field)) {
+            if (typeof c.field !== 'string' || !isValidVariableKey(c.field)) {
                 issues.push('El campo debe ser un nombre de variable válido (ej: nombre).');
             }
             break;
