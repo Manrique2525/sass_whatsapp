@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 12 COMPLETADA** (Flow Builder). Solo se trabaja sobre la fase activa.
+Estado general: **FASE 13 COMPLETADA** (Variables de conversación). FASE 14 aún NO iniciada (requiere autorización explícita).
 
 ## Fases
 
@@ -19,7 +19,7 @@ Estado general: **FASE 12 COMPLETADA** (Flow Builder). Solo se trabaja sobre la 
   | 10 | Bandeja de entrada (UI + Reverb) | COMPLETADA |
   | 11 | Chatbot engine | COMPLETADA |
 | 12 | Flow Builder (Vue Flow) | COMPLETADA |
-| 13 | Variables de conversación | PENDIENTE |
+| 13 | Variables de conversación | COMPLETADA |
 | 14 | Triggers | PENDIENTE |
 | 15 | Transferencia a humano | PENDIENTE |
 | 16 | IA (AIProviderInterface, OpenAI) | PENDIENTE |
@@ -628,7 +628,7 @@ COMPLETADO / BLOQUEADO
       `architecture.md` (frontend editor), `roadmap.md`, `decisions.md` (ADR-040..044)
 - [ ] FASE 12 termina SIN push a origin (reporte final en PASO 13)
 
-> ## Fase 13 — Variables, validación y Flow Builder (estado, UNIDAD 6)
+> ## Fase 13 — Variables, validación y Flow Builder (COMPLETADA, UNIDAD 7)
 
 - [x] **Catálogo de variables** (UNIDAD 3/4, ADR-046): endpoint
       `GET /api/v1/tenants/{tenant}/flows/{flow}/variables` (solo lectura `flows.view`, definiciones
@@ -668,5 +668,10 @@ COMPLETADO / BLOQUEADO
       `vitest` (147) + `vue-tsc` + `vite build` verdes. Frontend sin cambios.
 - [x] **UNIDAD 6 — Documentación**: `decisions.md` (ADR-046, repara la referencia colgante a
       "ADR-046" del catálogo), `chatbot-engine.md` (§5/§10.2), `api.md` (§3.8), `testing.md`.
-- [ ] FASE 13 **PENDIENTE** (no marcada completada): falta UNIDAD 7 autorización + push.
-- [ ] FASE 13 termina SIN push a origin (reporte final en PASO 13)
+- [x] **UNIDAD 7 — Auditoría de cierre** (sin cambios de código): revisión completa de los
+      invariantes de FASE 13 (CUSTOM, VARIABLES, SEGURIDAD, CONCURRENCIA, MULTI-TENANCY,
+      EDITOR, TIPOS, DSL, DEFAULTS) contra código + tests VAR-1..VAR-36 y FLOW-1..43; sin
+      hallazgos pendientes, sin features nuevas, sin migraciones, sin permisos nuevos.
+- [x] **FASE 13 COMPLETADA y PUBLICADA**: push autorizado de los 6 commits FASE 13
+      (`53e459c`..`35743d4`) + commit de documentación `docs(flows): mark phase 13 complete`.
+      `HEAD` = `origin/master` = `35743d4` (ahead/behind 0/0, working tree limpio).
