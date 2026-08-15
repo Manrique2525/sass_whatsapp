@@ -119,6 +119,7 @@ Route::prefix('v1')->group(function (): void {
                 Route::patch('{tenant}/flows/{flow}', [FlowController::class, 'update']);
                 Route::put('{tenant}/flows/{flow}/draft', [FlowController::class, 'replaceDraft']);
                 Route::get('{tenant}/flows/{flow}/validate', [FlowController::class, 'validate']);
+                Route::get('{tenant}/flows/{flow}/variables', [FlowController::class, 'variables']);
                 Route::post('{tenant}/flows/{flow}/publish', [FlowController::class, 'publish']);
                 Route::post('{tenant}/flows/{flow}/deactivate', [FlowController::class, 'deactivate']);
                 Route::delete('{tenant}/flows/{flow}', [FlowController::class, 'destroy']);

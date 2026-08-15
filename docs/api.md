@@ -294,6 +294,7 @@ Permisos nuevos: `flows.view` (owner/admin/agent) y `flows.manage` (owner/admin)
 | PATCH | `/api/v1/tenants/{tenant}/flows/{flow}` | `flows.manage` | Actualización de nombre/descripción (no del grafo). Publicado → **409** `FLOW_PUBLISHED`. Audita `flow.updated` |
 | PUT | `/api/v1/tenants/{tenant}/flows/{flow}/draft` | `flows.manage` | Reemplaza el grafo **atómicamente** (transacción nodes+connections). Body: `{nodes[]*, connections[], base_updated_at?}`. `base_updated_at` (ISO) es el lock optimista: si la versión guardada del cliente no coincide con `flows.updated_at` → **409** `FLOW_CONFLICT` sin escribir. Valida forma (422 `VALIDATION_ERROR`) y grafo (422 `FLOW_INVALID`). Publicado → **409**. Audita `flow.draft_replaced` |
 | GET | `/api/v1/tenants/{tenant}/flows/{flow}/validate` | `flows.view` | Valida el grafo SIN mutar → `{valid: bool, errors: string[]}` |
+| GET | `/api/v1/tenants/{tenant}/flows/{flow}/variables` | `flows.view` | Catálogo DERIVADO de variables del flujo (FASE 13, UNIDAD 3) → `{variables: VariableDefinitionResource[]}`. Devuelve definiciones, nunca valores runtime. `custom.*` se deriva de los nodos `question`; `business.*` está whitelistado (`BusinessProfile::PUBLIC_FIELDS`). Solo lectura (POST/PUT/PATCH/DELETE → **405**) |
 | POST | `/api/v1/tenants/{tenant}/flows/{flow}/publish` | `flows.manage` | Publica (valida grafo → 422 `FLOW_INVALID`). Otro flujo publicado con el mismo trigger genérico → **409** `FLOW_ALREADY_PUBLISHED`; transición inválida → **409** `FLOW_INVALID_STATE`. Audita `flow.published` |
 | POST | `/api/v1/tenants/{tenant}/flows/{flow}/deactivate` | `flows.manage` | Desactiva (requiere `published`; si no → **409** `FLOW_INVALID_STATE`). Audita `flow.deactivated` |
 | DELETE | `/api/v1/tenants/{tenant}/flows/{flow}` | `flows.manage` | Elimina. Publicado → **409** `FLOW_PUBLISHED`. Audita `flow.deleted` |
@@ -315,7 +316,20 @@ position_x, position_y, config, is_start}`; `FlowConnectionResource`
 `{id, source_node_id, target_node_id, label}`; `TriggerResource`
 `{id, flow_id, type, type_label, keyword, config, priority, active, created_at, updated_at}`;
 `FlowExecutionResource` `{id, flow_id, conversation_id, status, status_label, current_node_id,
-variables, attempts, last_inbound_message_id, created_at, updated_at}`.
+variables, attempts, last_inbound_message_id, created_at, updated_at}`;
+`VariableDefinitionResource` `{key, label, namespace, source, type, default, writable}`.
+
+**Catálogo de variables (FASE 13, UNIDAD 3)**: el endpoint
+`GET /api/v1/tenants/{tenant}/flows/{flow}/variables` expone **definiciones derivadas**
+(`VariableCatalogService`, ADR-046), no valores de ejecución. Mismas reglas de enforcement que
+el resto de §3.8: `flows.view` (owner/admin/agent) → 200; usuario sin `flows.view` → **403**
+`PERMISSION_DENIED`; flujo de otro tenant/inexistente → **404** (aislamiento A/B); tenant
+suspendido → **409** `TENANT_NOT_ACTIVE`. El catálogo se construye íntegramente server-side:
+`contact.*`/`conversation.id` fijos en solo lectura, `business.*` SOLO vía
+`BusinessProfile::PUBLIC_FIELDS` (nunca tokens/credenciales) y `custom.*` derivado de los nodos
+`question` del flujo (con `field`, `type` y `default`; claves duplicadas colapsan, las peligrosas
+se omiten). El Resource expone únicamente `VariableDefinition`, por lo que nunca filtran
+`tenant_id`, config de nodos, headers/body del webhook ni secretos.
 
 **El nodo `webhook` solo expone `method` + `url`** (el `config` completo no sale por API para no
 filtrar headers/secrets; el frontend muestra un resumen, no el config crudo).

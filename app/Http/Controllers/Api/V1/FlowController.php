@@ -22,6 +22,7 @@ use App\Http\Requests\Flow\ReplaceDraftRequest;
 use App\Http\Requests\Flow\StoreFlowRequest;
 use App\Http\Requests\Flow\UpdateFlowRequest;
 use App\Http\Resources\FlowResource;
+use App\Http\Resources\VariableDefinitionResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -238,6 +239,29 @@ final class FlowController extends Controller
 
         return response()->json([
             'message' => 'Flujo eliminado.',
+        ]);
+    }
+
+    /**
+     * Catálogo de variables del flujo (FASE 13, UNIDAD 3): solo lectura
+     * (`flows.view`). Devuelve DEFINICIONES derivadas, nunca valores runtime.
+     */
+    public function variables(Request $request, Tenant $tenant, string $flow): JsonResponse
+    {
+        try {
+            $variables = $this->service->flowVariables($request->user(), $tenant, $flow);
+        } catch (TenantMembershipException) {
+            throw new NotFoundHttpException('Tenant no encontrado.');
+        } catch (PermissionDeniedException $e) {
+            return $this->forbidden($e);
+        } catch (TenantNotActiveException) {
+            return $this->tenantNotActive();
+        } catch (FlowNotFoundException) {
+            throw new NotFoundHttpException('Flujo no encontrado.');
+        }
+
+        return response()->json([
+            'variables' => VariableDefinitionResource::collection($variables),
         ]);
     }
 

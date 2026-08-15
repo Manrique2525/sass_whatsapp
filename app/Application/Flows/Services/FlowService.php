@@ -24,6 +24,8 @@ use App\Domain\Flows\Models\FlowConnection;
 use App\Domain\Flows\Models\FlowNode;
 use App\Domain\Flows\Models\Trigger;
 use App\Domain\Flows\Services\FlowValidator;
+use App\Domain\Flows\Services\VariableCatalogService;
+use App\Domain\Flows\ValueObjects\VariableDefinition;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Enums\TenantPermission;
 use App\Domain\Users\Models\User;
@@ -56,6 +58,7 @@ final class FlowService
         private readonly AuditLogger $auditLogger,
         private readonly FlowValidator $validator,
         private readonly ConnectionInterface $db,
+        private readonly VariableCatalogService $variableCatalog,
     ) {}
 
     // ---------------------------------------------------------------- Chatbots
@@ -206,6 +209,21 @@ final class FlowService
 
         return $this->findFlowForTenant($tenant, $flowId)
             ->load(['nodes', 'connections', 'triggers', 'chatbot']);
+    }
+
+    /**
+     * Catálogo de variables del flujo (FASE 13, UNIDAD 3). Solo lectura:
+     * devuelve DEFINICIONES derivadas (`VariableCatalogService`), nunca valores
+     * runtime. `custom.*` se deriva de los nodos `question` del flujo ya
+     * acotado al tenant autorizado.
+     *
+     * @return list<VariableDefinition>
+     */
+    public function flowVariables(User $user, Tenant $tenant, string $flowId): array
+    {
+        $this->authorization->authorize($user, TenantPermission::ViewFlows, $tenant);
+
+        return $this->variableCatalog->forFlow($this->findFlowForTenant($tenant, $flowId));
     }
 
     /**
