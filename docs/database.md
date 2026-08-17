@@ -375,3 +375,23 @@ deben ser idempotentes y testeadas con `migrate:fresh` en CI.
 
 Instalar extensión: `CREATE EXTENSION IF NOT EXISTS vector;`. Índice HNSW para búsqueda de
 similaridad (mejor latencia que IVFFlat para tamaños medianos).
+
+## 8. FASE 15 — Transferencia a humano (DDL)
+
+Migraciones verificadas con UP/DOWN/UP en PostgreSQL 16.
+
+| Tabla | Cambio | Detalle |
+|---|---|---|
+| `conversation_assignments` | + `tenant_id` | UUID, NOT NULL, FK→tenants `cascadeOnDelete`, índice `(tenant_id, conversation_id)` y `(tenant_id, agent_id)`, FK compuesta `(tenant_id, conversation_id)` → `conversations` |
+| `conversation_assignments` | unique parcial | `UNIQUE (conversation_id) WHERE unassigned_at IS NULL` → una assignment abierta por conversación |
+| `conversation_participants` | + `tenant_id` | UUID, NOT NULL, FK→tenants `cascadeOnDelete`, índice `(tenant_id, conversation_id)` y `(tenant_id, user_id)`, FK compuesta `(tenant_id, conversation_id)` → `conversations` |
+| `messages` | + `sent_by_user_id` | FK→users `nullOnDelete`, índice propio `(sent_by_user_id)` |
+| `conversations` | + `handoff_requested_at` | timestamp nullable, índice `(tenant_id, handoff_requested_at)` |
+| `conversations` | unique index | `UNIQUE (tenant_id, id)` — integridad referencial tenant-first |
+
+Backfill: `tenant_id` en assignments/participants se deriva exclusivamente de
+`conversation_id → conversations.tenant_id`. Abort si no puede derivar.
+
+Migración verificada: PostgreSQL 16 — `migrate:up` completa, `migrate:rollback` revierte,
+segundo `migrate:up` re-aplica limpiamente. Filas legacy (sin `tenant_id`) se backfillan
+antes de añadir `NOT NULL`.

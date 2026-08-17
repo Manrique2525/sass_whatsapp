@@ -1,7 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 15 EN PROGRESO** (Transferencia a humano). UNIDADES 1-5 completadas
-localmente; UNIDAD 6 pendiente.
+Estado general: **FASE 15 COMPLETADA** (Transferencia a humano). Todas las unidades completadas.
 
 ## Fases
 
@@ -22,7 +21,7 @@ localmente; UNIDAD 6 pendiente.
 | 12 | Flow Builder (Vue Flow) | COMPLETADA |
 | 13 | Variables de conversación | COMPLETADA |
 | 14 | Triggers | COMPLETADA |
-| 15 | Transferencia a humano | EN PROGRESO |
+| 15 | Transferencia a humano | COMPLETADA |
 | 16 | IA (AIProviderInterface, OpenAI) | PENDIENTE |
 | 17 | Base de conocimiento (RAG + pgvector) | PENDIENTE |
 | 18 | FAQ inteligente | PENDIENTE |
@@ -808,4 +807,78 @@ COMPLETADO / BLOQUEADO
       when `sending` goes false). Realtime integration: scope-aware upsert/remove + counter updates.
       Tests: INBOX-01..08 (backend), UI-01..24 + UI-HP-01..05 (frontend). Backend 660/2740,
       Vitest 194, Pint PASS, PHPStan 0 (256M), vue-tsc PASS, Vite build PASS.
-- [ ] **UNIDAD 6** — Hardening/cierre (NO iniciada).
+- [x] **UNIDAD 6** — Hardening y cierre FASE 15:
+  - [x] BUG-1 fix: despacho único de `InboxConversationChanged` (HumanHandoffService
+        es la fuente autoritativa; `FlowEngine` ya no despacha el evento).
+  - [x] HANDOFF-FINAL-01..10: 10 tests de regresión (regression guard, cross-tenant
+        security, sent_by_user_id rejection, inactive membership, duplicate HumanNode,
+        inbound during handoff, resume-then-inbound, ConversationUpdated dispatch).
+  - [x] Security matrix: 12/12 pasan (scope filters, claim visibility, self-exclusion,
+        draft preserve, sent_by_user_id prohibited, inactive membership denied).
+  - [x] PostgreSQL concurrency: HCON-01..06, HCON-ROW-01, HC-07-PG, HCON-MEMBER-02,
+        HCON-U3-01 (10/10 pasan). DB: `whatsapp_saas_handoff_u2_test`.
+  - [x] PostgreSQL migration UP/DOWN/UP verificada en PostgreSQL 16 aislado.
+  - [x] Gates: backend 670 tests / 2765 assertions; Vitest 194; Pint PASS;
+        PHPStan 0 errores; vue-tsc PASS; Vite build PASS; Docker PASS; health PASS.
+
+### FASE 15 — CIERRE
+
+## FASE 15 — Transferencia a humano (COMPLETADA)
+
+## IMPLEMENTADO
+- Data invariants (U1): tenant_id NOT NULL + FK + índices en assignments/participants;
+  backfill determinista; FK compuesta contra referencias cross-tenant; UNIQUE parcial
+  de una assignment abierta; sent_by_user_id nullable en messages; handoff_requested_at
+  nullable en conversations.
+- Atomic assignment claim transfer (U2): permission conversations.claim; Redis distributed
+  locks → DB transaction → FOR UPDATE; memberships revalidadas; audit transaccional;
+  ConversationUpdated after-commit; frontend usa users.id.
+- Human handoff runtime (U3): HumanHandoffService transaccional e idempotente bajo el
+  lock del motor; handoff_message opcional; timestamp/audit/log; conserva open|pending;
+  resume-bot sin revive/replay; inbound durante handoff persiste sin FlowEngine; worker
+  bloquea automation con BOT_PAUSED_HANDOFF.
+- Tenant-wide inbox realtime (U4): InboxConversationChanged event afterCommit; canal
+  privado tenant.{id}.inbox con auth belongsToTenantWithPermission; InboxConversationChangeKind
+  enum cerrado; useInboxChannel composable con dedupe por event_id.
+- Operational human inbox (U5): scope filter mine/all/unassigned; inboxCounts tenant-scoped;
+  claim button + banner; handoff indicators; self-exclusion from dropdown; draft preserve
+  on error; sent_by_user_id prohibited in StoreMessageRequest.
+- Hardening (U6): BUG-1 fix (single InboxConversationChanged dispatch); 10 HANDOFF-FINAL
+  regression tests; 12/12 security matrix; 10/10 PG concurrency; migration UP/DOWN/UP
+  verified on PostgreSQL 16.
+
+## ARCHIVOS
+- app/Domain/Conversations/Models/Conversation (handoff_requested_at, unique index)
+- app/Domain/Conversations/Models/ConversationAssignment (tenant_id FK compuesta)
+- app/Domain/Conversations/Models/ConversationParticipant (tenant_id FK compuesta)
+- app/Domain/Messages/Models/Message (sent_by_user_id nullable FK)
+- app/Application/Conversations/Services/HumanHandoffService
+- app/Application/Conversations/Services/ConversationService (claim/assign/transfer/resume)
+- app/Events/InboxConversationChanged
+- app/Domain/Conversations/Enums/InboxConversationChangeKind
+- app/Http/Requests/ConversationIndexRequest (scope, counts)
+- Migraciones FASE 15 (assignments/participants tenant_id, messages sent_by_user_id,
+  conversations handoff_requested_at, unique indexes, partial indexes)
+
+## DATABASE
+Ver FASE 15 en docs/database.md (9 elementos DDL).
+
+## API
+Ver FASE 15 en docs/api.md (scope, counts, claim, handoff actions).
+
+## TESTS
+670 backend / 2765 assertions; 194 Vitest; 10 PostgreSQL concurrency tests.
+
+## RESULTADOS
+PASS — 670/670 backend, 10/10 PG concurrency, 194/194 frontend, 12/12 security matrix.
+
+## SEGURIDAD
+Ver FASE 15 en docs/security.md (scope filters, claim, self-exclusion, draft preserve,
+sent_by_user_id prohibited, inactive membership denied).
+
+## ADRs
+ADR-051 (semántica terminal de Human Handoff), ADR-052 (consistencia de asignación),
+ADR-053 (frontera realtime tenant-wide inbox).
+
+## ESTADO
+COMPLETADO

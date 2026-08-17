@@ -182,6 +182,50 @@ Pirámide de tests con prioridad en lo crítico:
 - Totales U5: 8 + 10 + 10 + 4 + 5 = 37 tests nuevos; suite total FASE 15 U5: **660 tests
   backend / 2740 assertions**; frontend **194 tests Vitest**.
 
+### Handoff hardening and closure — FASE 15 UNIDAD 6 (BUG-1 fix, regression suite)
+
+- **BUG-1 fix**: single `InboxConversationChanged` dispatch in `HumanHandoffService`
+  (the authoritative emitter); `FlowEngine` no longer dispatches the event. Eliminates
+  the double-dispatch that caused duplicate inbox updates.
+- **HANDOFF-FINAL-01..10** (10 tests, regression guard):
+  - HANDOFF-FINAL-01: regression guard — single InboxConversationChanged per handoff.
+  - HANDOFF-FINAL-02: cross-tenant security — assignments/participants with wrong
+    tenant_id rejected by FK composite.
+  - HANDOFF-FINAL-03: sent_by_user_id rejection — StoreMessageRequest prohibits
+    sent_by_user_id in payload.
+  - HANDOFF-FINAL-04: inactive membership denied at claim/assign/transfer.
+  - HANDOFF-FINAL-05: duplicate HumanNode — engine terminates at first, no double
+    handoff.
+  - HANDOFF-FINAL-06: inbound during handoff — message persisted, no FlowEngine entry.
+  - HANDOFF-FINAL-07: resume-bot then inbound — starts new automation via
+    NewMessage trigger.
+  - HANDOFF-FINAL-08: ConversationUpdated still dispatched for detail subscribers.
+  - HANDOFF-FINAL-09: handoff_requested_at persists through resume.
+  - HANDOFF-FINAL-10: manual pause clears handoff_requested_at marker.
+
+- **Security matrix** (12/12):
+  - Scope filter (mine/all/unassigned) cannot leak conversations across tenants.
+  - Claim button only appears for unassigned handoff conversations.
+  - Self-exclusion from assign/transfer dropdown.
+  - Draft preserve on error prevents message loss.
+  - sent_by_user_id prohibited in StoreMessageRequest.
+  - Inactive membership denied at claim/assign/transfer.
+
+- **PostgreSQL concurrency tests** (HCON-01..06, HCON-ROW-01, HC-07-PG,
+  HCON-MEMBER-02, HCON-U3-01 — 10 tests total, all pass):
+  - Requires Docker with PostgreSQL 16, Redis, and separate test DB
+    `whatsapp_saas_handoff_u2_test`.
+  - Tests use independent PHP processes + real Redis to verify `FOR UPDATE`,
+    concurrent assign/transfer/claim, rollback on late audit failure, and
+    UNIQUE partial constraint (`SQLSTATE 23505`).
+
+- **PostgreSQL migration UP/DOWN/UP** verified: all FASE 15 DDL migrates cleanly
+  up, rolls back down, and migrates up again on PostgreSQL 16 without errors.
+  Backfill of tenant_id in assignments/participants verified with legacy rows.
+
+- Suite final FASE 15: **670 tests backend / 2765 assertions**; frontend
+  **194 tests Vitest**. PostgreSQL concurrency: **10 tests / 60 assertions**.
+
 ### Chatbot engine (crítico)
 - Secuencia lineal, ramas condition, question→variable, delay, human, end.
 - Loop detection / límite de pasos.
@@ -425,7 +469,7 @@ php artisan test --testsuite=Feature  # API/feature
 ./vendor/bin/phpstan analyze          # estático
 npm run test                          # Vitest
 npm run typecheck                     # vue-tsc
-# Suite PostgreSQL U2/U3: la creación explícita evita tocar la DB principal.
+# Suite PostgreSQL U2/U3/U6: la creación explícita evita tocar la DB principal.
 docker compose exec -T postgres dropdb -U saas --if-exists --force whatsapp_saas_handoff_u2_test
 docker compose exec -T postgres createdb -U saas -O saas whatsapp_saas_handoff_u2_test
 docker compose exec -T app ./vendor/bin/pest --configuration=phpunit.pgsql.xml --testsuite=PostgresConcurrency --do-not-cache-result

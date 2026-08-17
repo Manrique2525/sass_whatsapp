@@ -270,6 +270,33 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - **Tests**: RT-01..RT-04 (channel auth), RT-05..RT-15 (event emission), RT-15 (tenant switch
   isolation), FRT-01..FRT-10 (frontend subscription/dedupe).
 
+### Inbox operativo y UX de handoff (FASE 15 U5)
+- **Scope filters no filtran cross-tenant**: scope `mine`/`all`/`unassigned` se ejecutan
+  SIEMPRE bajo el `TenantContext` del middleware; el filtro se aplica DESPUÉS del scope global
+  `TenantScope` → imposible ver conversaciones de otro tenant (aislamiento garantizado por
+  diseño, ver `multi-tenancy.md`).
+- **Counts tenant-scoped**: `inboxCounts()` calcula los 3 contadores (all/mine/unassigned)
+  dentro del mismo TenantContext; no se filtran por el scope activo → siempre reflejan el
+  estado real del tenant.
+- **Claim button visibility**: el botón de claim solo aparece para conversaciones
+  `unassigned` (`agent_id IS NULL AND handoff_requested_at IS NOT NULL`); conversaciones
+  asignadas o sin handoff no muestran el botón.
+- **Self-exclusion from dropdown**: agentes se excluyen de la lista de asignación/transfer
+  (dropdown) para evitar assign/transfer a sí mismos; la exclusión es puramente de UI, no de
+  backend (repetir el mismo agente es idempotente sin error).
+- **Draft preserve on error**: `MessageComposer` conserva el draft del usuario si el envío
+  falla (clear only when `sending` goes false); previene pérdida de mensaje ante errores de
+  red o backend.
+- **sent_by_user_id prohibited**: `StoreMessageRequest` prohíbe `sent_by_user_id` en el
+  payload; el backend lo resuelve exclusivamente del usuario autenticado tras revalidar
+  membership activa y assignment propia para agent (override owner/admin).
+- **Inactive membership denied**: claim/assign/transfer revalidan `tenant_users.status = active`
+  dentro de la operación atómica; membresía desactivada mientras el lock está activo produce
+  409 controlado, no reescritura silenciosa.
+- **Security matrix (12/12)**: scope isolation (3), claim visibility (1), self-exclusion (1),
+  draft preserve (1), sent_by_user_id (1), inactive membership (1), cross-tenant FK (1),
+  duplicate HumanNode (1), inbound during handoff (1), resume-then-inbound (1).
+
 ### Inyección SQL
 - Eloquent/Query Builder con bindings. Sin concatenación de SQL.
 - `phpstan` + revisión en code review.

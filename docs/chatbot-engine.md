@@ -390,3 +390,59 @@ objetivo completo; las diferencias marcadas abajo). Referencias: ADR-034..039.
   Contact→Conversation, la semántica EVENT/ANY/ALL y las barreras anti-recursión e idempotencia.
 - No existen `TagService`, `TagAssigned`, listeners/observers, API/UI de tags ni
   `StartFlowFromTag` como parte de FASE 14.
+
+## 15. Handoff completo (FASE 15, ADR-051..053)
+
+### 15.1 HumanNode → handoff operativo
+
+- `HumanNodeExecutor` invoca `HumanHandoffService::handoff()` bajo el `conversationLock` que
+  ya mantiene `FlowEngine`. La operación es transaccional: `SELECT ... FOR UPDATE` de la
+  conversación, se fija `bot_paused = true`, `handoff_requested_at = now()`, se crea un
+  aviso opcional si `handoff_message` tiene texto y se audita `flow.handoff`.
+- El motor finaliza la ejecución como `handed_off` (terminal) y audita
+  `flow.execution_handed_off` después del commit.
+- Duplicate HumanNode: el motor termina en el primero encontrado, no produce doble handoff.
+
+### 15.2 Inbound durante handoff
+
+- `ProcessIncomingWhatsAppMessage` persiste el mensaje inbound pero NO invoca
+  `FlowEngine::handleMessage` cuando observa `bot_paused = true`. El mensaje queda
+  registrado en la conversación para que el agente lo vea en el inbox.
+
+### 15.3 Outbound durante handoff
+
+- `SendWhatsAppMessage` comparte el `conversationLock` durante la llamada al provider. Si
+  observa `bot_paused + handoff_requested_at` antes de enviar, termina el mensaje como
+  `failed` con metadata `error_code = BOT_PAUSED_HANDOFF` y `error_source = internal`, sin
+  crear `message_send_attempts` ni llamada a Meta. Orígenes `human` y `handoff` siguen
+  permitidos.
+
+### 15.4 Resume-bot
+
+- `ConversationService::resumeBot()` bajo lock/transacción fija `bot_paused = false`. No
+  revive ejecuciones anteriores, no reprocesa mensajes recibidos durante handoff, no libera
+  `agent_id` ni la assignment abierta. Conserva `handoff_requested_at` (claim sigue
+  disponible si la conversación está sin agente).
+- Resume-bot después de handoff: el siguiente inbound del cliente inicia una nueva ejecución
+  vía `TriggerMatcher` (NewMessage trigger), no reanuda la anterior.
+
+### 15.5 Pausa manual vs handoff
+
+- `pause-bot` (pausa manual) fija `bot_paused = true` pero NO escribe `handoff_requested_at`.
+  Si existía un marcador histórico de un handoff previo (ya resuelto), lo limpia para no
+  crear un handoff reclamable falso.
+- `handoff_requested_at` es la distinción entre handoff real y pausa manual: claim requiere
+  `handoff_requested_at IS NOT NULL`.
+
+### 15.6 BUG-1 fix
+
+- Antes del fix, tanto `HumanHandoffService` como `FlowEngine` despachaban
+  `InboxConversationChanged`, produciendo actualizaciones duplicadas en el inbox tenant-wide.
+- Fix: `HumanHandoffService` es la fuente autoritativa del evento; `FlowEngine` ya no lo
+  despacha al finalizar un handoff. Un solo evento after-commit por operación de handoff.
+
+### 15.7 Runtime transaccional
+
+- Idempotente por execution: la consulta de audit por `execution_id` evita doble handoff
+  ante reintento. El `conversationLock` se conserva durante toda la operación (motor +
+  handoff + outbound check) y se libera en `finally`.

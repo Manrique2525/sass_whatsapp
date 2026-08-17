@@ -131,7 +131,7 @@ describe('ChatHeader — assign/transfer dropdown', () => {
         const wrapper = mountHeader({}, { currentUserId: 1 });
 
         const options = wrapper.findAll('select option');
-        const agentIds = options.map((o) => o.element.value).filter((v) => v !== '');
+        const agentIds = options.map((o) => (o.element as HTMLInputElement).value).filter((v) => v !== '');
 
         expect(agentIds).not.toContain('1');
         expect(agentIds).toContain('2');

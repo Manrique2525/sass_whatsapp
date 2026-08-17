@@ -522,10 +522,8 @@ final class FlowEngine
                         $conversation->refresh();
                         $conversation->loadMissing(['contact', 'agent']);
                         $this->events->dispatch(new ConversationUpdated($conversation));
-                        $this->events->dispatch(new InboxConversationChanged(
-                            $conversation,
-                            InboxConversationChangeKind::HandoffRequested,
-                        ));
+                        // InboxConversationChanged(HandoffRequested) is dispatched
+                        // by HumanHandoffService::handoff() — not duplicated here.
                     }
 
                     return;

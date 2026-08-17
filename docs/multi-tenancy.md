@@ -364,3 +364,10 @@ tenant distinto del propietario:
     envía en el payload del draft (FLOW-40). La edición del borrador exige `flows.manage`;
     un agent del tenant ve el editor en read-only (FLOW-41). El lock optimista
     (`base_updated_at`) compara contra el `updated_at` de la propia fila del tenant.
+
+19. (FASE 15 U5) Scope filters del inbox (mine/all/unassigned) se ejecutan SIEMPRE bajo
+    `TenantContext` del middleware → imposible ver conversaciones de otro tenant. Los counts
+    (all/mine/unassigned) se calculan dentro del mismo TenantContext y no se filtran por el
+    scope activo → siempre reflejan el estado real del tenant. El canal Reverb tenant-wide
+    `tenant.{tenantId}.inbox` está aislado por `belongsToTenantWithPermission` (membresía
+    activa + `conversations.view`); usuario de otro tenant recibe 403.
