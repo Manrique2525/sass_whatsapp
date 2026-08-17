@@ -125,6 +125,12 @@ Flujo del mensaje entrante (WhatsApp → Inbox):
     `MessageStatusUpdated` (con `previous_status`) y `ConversationUpdated`, con payload vía
     `*Resource` (ADR-033). El frontend (Laravel Echo + connector `reverb`) se suscribe solo al
     canal de la conversación abierta y complementa con polling de la lista cada 30 s.
+    **FASE 15 U4 (ADR-053)**: un canal privado tenant-wide
+    `tenant.{tenantId}.inbox` recibe el evento `InboxConversationChanged` (afterCommit,
+    `ConversationResource` + `event_id` UUID, enum `InboxConversationChangeKind` cerrado).
+    La auth exige membresía activa + `conversations.view` (`belongsToTenantWithPermission`).
+    El frontend usa `useInboxChannel` composable con dedupe por `event_id` para upsert
+    en la lista de conversaciones.
     El motor de flujos (`FlowEngine`, FASE 11) corre al final de este pipeline: tras persistir
     el inbound, `ProcessIncomingWhatsAppMessage` invoca `FlowEngine::handleMessage` bajo el
     **lock Redis por conversación** (`lock:tenant:{id}:flow:{conversation_id}`). Si hay una

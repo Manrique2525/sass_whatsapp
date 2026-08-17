@@ -11,6 +11,7 @@ use App\Application\Flows\Services\ConversationLockContext;
 use App\Application\Flows\Services\FlowExecutionService;
 use App\Application\Users\Services\AuthorizationService;
 use App\Domain\Conversations\Enums\ConversationStatus;
+use App\Domain\Conversations\Enums\InboxConversationChangeKind;
 use App\Domain\Conversations\Exceptions\ConversationInvalidStateException;
 use App\Domain\Conversations\Exceptions\ConversationNotFoundException;
 use App\Domain\Conversations\Exceptions\ConversationReplyForbiddenException;
@@ -28,6 +29,7 @@ use App\Domain\Users\Enums\TenantPermission;
 use App\Domain\Users\Models\TenantUser;
 use App\Domain\Users\Models\User;
 use App\Events\ConversationUpdated;
+use App\Events\InboxConversationChanged;
 use App\Events\MessageCreated;
 use App\Events\MessageStatusUpdated;
 use App\Infrastructure\Tenancy\TenantContext;
@@ -524,6 +526,13 @@ final class MessageService
         $conversation->loadMissing(['contact', 'agent']);
 
         $this->events->dispatch(new ConversationUpdated($conversation));
+
+        if ($reopened) {
+            $this->events->dispatch(new InboxConversationChanged(
+                $conversation,
+                InboxConversationChangeKind::ConversationUpdated,
+            ));
+        }
 
         return $reopened;
     }

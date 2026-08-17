@@ -8,6 +8,7 @@ use App\Application\Audit\Services\AuditLogger;
 use App\Application\Messages\Services\MessageService;
 use App\Domain\Audit\Models\AuditLog;
 use App\Domain\Conversations\Enums\ConversationStatus;
+use App\Domain\Conversations\Enums\InboxConversationChangeKind;
 use App\Domain\Conversations\Exceptions\ConversationInvalidStateException;
 use App\Domain\Conversations\Exceptions\ConversationNotFoundException;
 use App\Domain\Conversations\Models\Conversation;
@@ -15,6 +16,8 @@ use App\Domain\Flows\Enums\FlowNodeType;
 use App\Domain\Flows\Models\FlowExecution;
 use App\Domain\Messages\Enums\MessageOrigin;
 use App\Domain\Tenants\Models\Tenant;
+use App\Events\InboxConversationChanged;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -28,6 +31,7 @@ final class HumanHandoffService
     public function __construct(
         private readonly AuditLogger $auditLogger,
         private readonly MessageService $messages,
+        private readonly Dispatcher $events,
     ) {}
 
     public function handoff(
@@ -108,5 +112,11 @@ final class HumanHandoffService
         });
 
         $conversation->refresh();
+        $conversation->loadMissing(['contact', 'agent']);
+
+        $this->events->dispatch(new InboxConversationChanged(
+            $conversation,
+            InboxConversationChangeKind::HandoffRequested,
+        ));
     }
 }

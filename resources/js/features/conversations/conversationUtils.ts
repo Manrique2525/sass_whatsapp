@@ -31,6 +31,7 @@ export interface Conversation {
     last_interaction_at: string | null;
     auto_assigned: boolean;
     bot_paused: boolean;
+    handoff_requested_at: string | null;
     context: Record<string, unknown> | null;
     flow_execution_id: string | null;
     last_message: Message | null;

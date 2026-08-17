@@ -139,6 +139,26 @@ Pirámide de tests con prioridad en lo crítico:
   labels) y `MessageComposer.test.ts` (6 tests: submit, Enter, Shift+Enter, vacío, disabled,
   botón deshabilitado al enviar).
 
+### Canal Inbox Tenant-Wide Realtime (FASE 15 U4, 21 tests)
+- **Channel auth (RT-01..RT-04, RT-15)** en `ReverbChannelAuthTest`: owner accede canal inbox
+  de su tenant (RT-01); usuario de A denegado en canal de B (RT-02); membresía inactiva → 403
+  (RT-03); auth con permiso inexistente → 403 (RT-04); tenant_id del canal gana sobre
+  `current_tenant_id` del usuario (RT-15). 8 tests totales (3 originales + 5 U4).
+- **Event emission (RT-05..RT-15)** en `HandoffRealtimeEventTest`: handoff emite
+  `InboxConversationChanged` afterCommit con kind `handoff_requested` (RT-05);
+  transacción fallida no emite (RT-06); claim/assign/transfer emiten sus kinds (RT-07/08/09);
+  resume bot emite `bot_resumed` (RT-10); close/reopen emiten `conversation_updated`
+  (RT-11/11b); payload usa `ConversationResource` sin `tenant_id` directo (RT-12); cada
+  evento tiene `event_id` único (RT-13); todos los kinds válidos en `broadcastWith`
+  (RT-14); `broadcastOn` usa canal `PrivateChannel` (RT-15). 13 tests.
+- **Frontend (FRT-01..FRT-10)** en `realtime.test.ts`: `useConversationChannel` usa
+  `private()` (FRT-01); cleanup al cambiar conversación/tenant (FRT-02/05); cleanup al
+  desmontar (FRT-03); `useInboxChannel` suscribe canal correcto (FRT-04); dedupe por
+  `event_id` (FRT-06); callback invocado con payload (FRT-07); kind desconocido ignorado
+  (FRT-08); payload malformado no rompe (FRT-09); upsert existente preserva
+  `last_message` (FRT-10). 14 tests (incluye inboxChannelTypes).
+- Totales U4: 8 + 13 + 14 = 35 tests nuevos.
+
 ### Chatbot engine (crítico)
 - Secuencia lineal, ramas condition, question→variable, delay, human, end.
 - Loop detection / límite de pasos.

@@ -17,6 +17,7 @@ const conversation = (overrides: Partial<Conversation> = {}): Conversation => ({
     last_interaction_at: null,
     auto_assigned: false,
     bot_paused: false,
+    handoff_requested_at: null,
     context: null,
     flow_execution_id: null,
     last_message: null,

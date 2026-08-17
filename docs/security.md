@@ -258,6 +258,18 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
   queda `pending` (nunca `sent`) hasta que el job CAS lo envía. Los eventos broadcast no exponen
   datos sensibles (payload vía `*Resource`, sin tokens ni metadata interna).
 
+### Canal tenant-wide Inbox (FASE 15 U4, ADR-053)
+- **Autorización reforzada**: el canal `tenant.{tenantId}.inbox` usa `belongsToTenantWithPermission`
+  que verifica membresía activa + `conversations.view` vía la matriz de código
+  (`TenantPermission::permissionsForRole`), no registros spatie. Fail-closed: permiso
+  inexistente → false.
+- **Aislamiento**: usuario de otro tenant → 403 (fallo en `belongsToTenantById`). Membresía
+  inactiva → 403. Todos los agentes del mismo tenant reciben el evento (no es por conversación).
+- **Payload seguro**: `ConversationResource` serializa campos seleccionados (sin `tenant_id`
+  directo, sin `context`/`flow_execution_id`). `event_id` UUID para dedupe idempotente.
+- **Tests**: RT-01..RT-04 (channel auth), RT-05..RT-15 (event emission), RT-15 (tenant switch
+  isolation), FRT-01..FRT-10 (frontend subscription/dedupe).
+
 ### Inyección SQL
 - Eloquent/Query Builder con bindings. Sin concatenación de SQL.
 - `phpstan` + revisión en code review.

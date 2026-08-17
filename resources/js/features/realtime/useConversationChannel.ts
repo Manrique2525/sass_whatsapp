@@ -10,6 +10,15 @@ export interface ConversationChannelHandlers {
     onConversationUpdated: (conversation: Conversation) => void;
 }
 
+/**
+ * Suscribe al canal privado por conversación (`private-tenant.{id}.conversations.{id}`).
+ *
+ * Usa `Echo.private()` que añade el prefijo `private-` automáticamente,
+ * coincidiendo con el patrón `PrivateChannel` del backend (ADR-022).
+ *
+ * Cleanup: abandonar el canal correctamente al desmontar o al cambiar tenant/conversation,
+ * sin mantener listeners zombies ni recibir eventos duplicados.
+ */
 export function useConversationChannel(
     tenantId: WatchSource<string | null>,
     conversationId: WatchSource<string | null>,
@@ -41,7 +50,8 @@ export function useConversationChannel(
             return;
         }
 
-        const next = instance.channel(`tenant.${tenant}.conversations.${conversation}`);
+        // `private()` añade prefijo `private-` → coincide con PrivateChannel del backend
+        const next = instance.private(`tenant.${tenant}.conversations.${conversation}`);
         channel = next;
 
         next.listen('.MessageCreated', (payload: { message: Message }) => {

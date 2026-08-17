@@ -789,6 +789,13 @@ COMPLETADO / BLOQUEADO
 - [x] **Tests/gates U3**: HANDOFF-RUNTIME/HANDOFF-OUT/MSG-API, rollback e idempotencia; carrera
       PostgreSQL/Redis con proceso outbound real. Backend 621/2615, PostgreSQL 10/60, Vitest 151,
       Pint, PHPStan 0 errores (1G), migraciones PostgreSQL limpias, `vue-tsc` y Vite build verdes.
-- [ ] **UNIDAD 4** — Realtime tenant-wide `InboxConversationChanged` (NO iniciada).
+- [x] **UNIDAD 4** — Realtime tenant-wide `InboxConversationChanged`.
+      Canal privado `tenant.{id}.inbox` con auth `belongsToTenantWithPermission`
+      (membresía activa + `conversations.view`). Evento `InboxConversationChanged` afterCommit
+      con `ConversationResource` + `event_id` UUID. Enum `InboxConversationChangeKind` cerrado.
+      `useInboxChannel` composable con dedupe por `event_id`. Fix `useConversationChannel`:
+      `private()` en vez de `channel()`. Emisores en `HumanHandoffService`,
+      `ConversationService`, `MessageService`, `FlowEngine`. Backend 652/2708, Vitest 165,
+      Pint PASS, PHPStan 0, vue-tsc PASS, Vite build PASS, Docker PASS, health PASS.
 - [ ] **UNIDAD 5** — Inbox UX (NO iniciada).
 - [ ] **UNIDAD 6** — Hardening/cierre (NO iniciada).

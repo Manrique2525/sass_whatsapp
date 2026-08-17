@@ -10,6 +10,7 @@ use App\Application\Flows\Services\FlowExecutionService;
 use App\Application\Users\Services\AuthorizationService;
 use App\Domain\Contacts\Models\Contact;
 use App\Domain\Conversations\Enums\ConversationStatus;
+use App\Domain\Conversations\Enums\InboxConversationChangeKind;
 use App\Domain\Conversations\Exceptions\ConversationAgentNotInTenantException;
 use App\Domain\Conversations\Exceptions\ConversationAssignmentConflictException;
 use App\Domain\Conversations\Exceptions\ConversationContactNotFoundException;
@@ -25,6 +26,7 @@ use App\Domain\Users\Enums\TenantPermission;
 use App\Domain\Users\Models\TenantUser;
 use App\Domain\Users\Models\User;
 use App\Events\ConversationUpdated;
+use App\Events\InboxConversationChanged;
 use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\Events\Dispatcher;
@@ -250,6 +252,10 @@ final class ConversationService
         $conversation->loadMissing(['contact', 'agent']);
 
         $this->events->dispatch(new ConversationUpdated($conversation));
+        $this->events->dispatch(new InboxConversationChanged(
+            $conversation,
+            InboxConversationChangeKind::ConversationUpdated,
+        ));
 
         return $conversation;
     }
@@ -276,6 +282,10 @@ final class ConversationService
         $conversation->loadMissing(['contact', 'agent']);
 
         $this->events->dispatch(new ConversationUpdated($conversation));
+        $this->events->dispatch(new InboxConversationChanged(
+            $conversation,
+            InboxConversationChangeKind::ConversationUpdated,
+        ));
 
         return $conversation;
     }
@@ -355,6 +365,13 @@ final class ConversationService
 
         if ($changed) {
             $this->events->dispatch(new ConversationUpdated($conversation));
+
+            if (! $paused) {
+                $this->events->dispatch(new InboxConversationChanged(
+                    $conversation,
+                    InboxConversationChangeKind::BotResumed,
+                ));
+            }
         }
 
         return $conversation;
@@ -565,6 +582,13 @@ final class ConversationService
 
         if ($changed) {
             $this->events->dispatch(new ConversationUpdated($conversation));
+
+            $kind = match ($operation) {
+                'assign' => InboxConversationChangeKind::Assigned,
+                'transfer' => InboxConversationChangeKind::Transferred,
+                'claim' => InboxConversationChangeKind::Claimed,
+            };
+            $this->events->dispatch(new InboxConversationChanged($conversation, $kind));
         }
 
         return $conversation;

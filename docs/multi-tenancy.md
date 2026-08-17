@@ -281,6 +281,11 @@ Nunca se acepta `tenant_id` desde el request (se ignora o se rechaza — test
   autorización del canal (`routes/channels.php`) valida la pertenencia real del usuario al tenant
   (`belongsToTenantById`) — no basta con estar autenticado. Cada recurso registra su propio
   patrón: `tenant.{tenantId}.<recurso>.{recursoId}`.
+- El canal tenant-wide `tenant.{tenantId}.inbox` (FASE 15 U4, ADR-053) emite
+  `InboxConversationChanged` a todos los miembros activos del tenant con permiso
+  `conversations.view`. La auth del canal usa `belongsToTenantWithPermission` que verifica
+  membresía activa + matriz de permisos de código (`TenantPermission::permissionsForRole`),
+  no registros spatie. El canal está aislado: usuario de otro tenant o sin el permiso recibe 403.
 
 ## 6. Aislamiento de cache (Redis) y Storage (S3)
 

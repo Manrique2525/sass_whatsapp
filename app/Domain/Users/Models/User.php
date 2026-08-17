@@ -6,6 +6,7 @@ namespace App\Domain\Users\Models;
 
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Enums\TenantMembershipStatus;
+use App\Domain\Users\Enums\TenantPermission;
 use App\Domain\Users\Enums\UserRole;
 use App\Domain\Users\Notifications\ResetPasswordNotification;
 use Database\Factories\Domain\Users\Models\UserFactory;
@@ -113,6 +114,35 @@ class User extends Authenticatable implements MustVerifyEmail
             ->where('tenant_id', $tenantId)
             ->where('status', TenantMembershipStatus::Active)
             ->exists();
+    }
+
+    /**
+     * ¿El usuario es miembro activo del tenant Y tiene el permiso indicado?
+     * Para canales de broadcast que exigen un permiso específico además de la
+     * membresía (ADR-053: canal inbox requiere `conversations.view`).
+     *
+     * Evalúa la matriz de código `TenantPermission::permissionsForRole()`
+     * (fuente de verdad, no registros spatie).
+     */
+    public function belongsToTenantWithPermission(string $tenantId, string $permission): bool
+    {
+        if (! $this->belongsToTenantById($tenantId)) {
+            return false;
+        }
+
+        $role = $this->roleForTenant($tenantId);
+
+        if ($role === null) {
+            return false;
+        }
+
+        $enum = TenantPermission::tryFrom($permission);
+
+        if ($enum === null) {
+            return false;
+        }
+
+        return in_array($enum, TenantPermission::permissionsForRole($role), true);
     }
 
     /**

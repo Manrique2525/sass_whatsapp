@@ -283,6 +283,13 @@ En FASE 9 los mensajes se **persisten y procesan por backend** (sin endpoints RE
 | `MessageStatusUpdated` | `{message, previous_status}` | status de Meta y `sent`/`failed` del job |
 | `ConversationUpdated` | `{conversation}` | touch timestamps, reabrir por inbound, update/close/reopen/pause-bot/resume-bot/assign/transfer/claim; el broadcast usa `afterCommit=true` |
 
+**Realtime (FASE 15 U4, ADR-053)** — evento broadcast en el canal privado tenant-wide
+`tenant.{tenantId}.inbox` (ADR-053):
+
+| Evento | Payload | Cuándo |
+|---|---|---|
+| `InboxConversationChanged` | `{event_id, kind, conversation}` | handoff_requested, assigned, claimed, transferred, bot_resumed, conversation_updated (close/reopen/assign/transfer); afterCommit, `ConversationResource` + `event_id` UUID |
+
 ### 3.8 Flujos, chatbots, triggers y ejecuciones (implementado en FASE 11)
 
 Motor de flujos (ADR-034..039). Mismas reglas de enforcement que §3.1–§3.7: `{tenant}` debe ser

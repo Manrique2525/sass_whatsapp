@@ -16,6 +16,8 @@ import {
     mergeIncomingMessage,
 } from '@/features/messages/messageUtils';
 import { useConversationChannel } from '@/features/realtime/useConversationChannel';
+import { useInboxChannel } from '@/features/realtime/useInboxChannel';
+import type { InboxConversationChangeKind } from '@/features/realtime/inboxChannelTypes';
 import ChatHeader from '@/Components/Conversations/ChatHeader.vue';
 import ContactPanel from '@/Components/Conversations/ContactPanel.vue';
 import ConversationFilters from '@/Components/Conversations/ConversationFilters.vue';
@@ -427,6 +429,40 @@ useConversationChannel(
         },
         onConversationUpdated: (conversation) => updateConversationRow(conversation),
     },
+);
+
+/**
+ * Upsert base para eventos tenant-wide del Inbox (U4).
+ * Actualiza la conversación existente por id o la inserta si no existe.
+ * La lógica completa de filtros pertenece a U5; aquí solo garantizamos
+ * que la lista no tenga duplicados y que la conversación esté presente.
+ */
+const upsertInboxConversation = (conversation: Conversation, _kind: InboxConversationChangeKind, _eventId: string): void => {
+    const index = conversations.value.findIndex((c) => c.id === conversation.id);
+
+    if (index !== -1) {
+        const existing = conversations.value[index];
+        conversations.value[index] = {
+            ...conversation,
+            last_message: conversation.last_message ?? existing.last_message,
+        };
+    } else {
+        conversations.value.unshift(conversation);
+    }
+
+    if (detail.value?.id === conversation.id) {
+        detail.value = {
+            ...conversation,
+            last_message: conversation.last_message ?? detail.value.last_message,
+        };
+    }
+
+    sortConversations();
+};
+
+useInboxChannel(
+    () => tenantId,
+    { onInboxChanged: upsertInboxConversation },
 );
 
 onMounted(() => {

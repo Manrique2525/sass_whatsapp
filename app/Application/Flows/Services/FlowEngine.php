@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Application\Flows\Services;
 
+use App\Domain\Conversations\Enums\InboxConversationChangeKind;
 use App\Domain\Conversations\Exceptions\ConversationInvalidStateException;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Flows\Enums\FlowExecutionStatus;
@@ -24,6 +25,7 @@ use App\Domain\Messages\Enums\MessageDirection;
 use App\Domain\Messages\Models\Message;
 use App\Domain\Tenants\Models\Tenant;
 use App\Events\ConversationUpdated;
+use App\Events\InboxConversationChanged;
 use App\Jobs\ContinueFlowExecution;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\Collection;
@@ -296,6 +298,10 @@ final class FlowEngine
         $conversation->refresh();
         $conversation->loadMissing(['contact', 'agent']);
         $this->events->dispatch(new ConversationUpdated($conversation));
+        $this->events->dispatch(new InboxConversationChanged(
+            $conversation,
+            InboxConversationChangeKind::HandoffRequested,
+        ));
 
         return true;
     }
@@ -516,6 +522,10 @@ final class FlowEngine
                         $conversation->refresh();
                         $conversation->loadMissing(['contact', 'agent']);
                         $this->events->dispatch(new ConversationUpdated($conversation));
+                        $this->events->dispatch(new InboxConversationChanged(
+                            $conversation,
+                            InboxConversationChangeKind::HandoffRequested,
+                        ));
                     }
 
                     return;

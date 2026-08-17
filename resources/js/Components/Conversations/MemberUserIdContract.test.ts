@@ -27,6 +27,7 @@ const conversation: Conversation = {
     context: null,
     flow_execution_id: null,
     last_message: null,
+    handoff_requested_at: null,
     created_at: '2026-08-17T00:00:00Z',
     updated_at: '2026-08-17T00:00:00Z',
 };

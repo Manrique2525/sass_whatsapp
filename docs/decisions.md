@@ -1234,7 +1234,7 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
 ## ADR-053: Frontera realtime del Inbox para handoff
 
 - **Fecha**: 2026-08-17
-- **Estado**: Aceptado — contrato para FASE 15 UNIDAD 4
+- **Estado**: Implementado (FASE 15 UNIDAD 4)
 - **Contexto**: `ConversationUpdated` sirve al detalle de una conversación, pero los agentes no
   conocen una conversación en cola que todavía no tienen abierta. FASE 22 mantiene la
   responsabilidad del notification center y email automático.
