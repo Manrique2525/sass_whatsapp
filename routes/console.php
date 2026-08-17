@@ -13,3 +13,7 @@ Artisan::command('inspire', function () {
 Schedule::command('whatsapp:reprocess-webhook-events')
     ->everyMinute()
     ->withoutOverlapping();
+
+Schedule::command('flow:fire-schedule-triggers')
+    ->everyMinute()
+    ->withoutOverlapping();

@@ -246,3 +246,58 @@ objetivo completo; las diferencias marcadas abajo). Referencias: ADR-034..039.
 - **Tests**: backend FLOW-29..43 (secrets, lock, página, estados, aislamiento A/B, permisos,
   publish tras editar); frontend 46 Vitest nuevos (`flowAdapter`, `flowValidation`,
   `useEditorHistory`, `useFlowEditor`).
+
+## 12. Disparo de triggers schedule (FASE 14, UNIDAD 2, ADR-048)
+
+### 12.1 Command `flow:fire-schedule-triggers`
+
+- Se ejecuta cada minuto via `routes/console.php` con `withoutOverlapping()`.
+- Corre **fuera** de TenantContext (CLI global): la query busca triggers activos de tipo
+  `schedule` cuyo flujo esté publicado y tenga chatbot, usando `whereIn` con subqueries
+  `withoutTenantScope()` para evitar el filtro global del TenantScope.
+- Evalúa `TriggerValidator::matchesCron($cron, $now)` por cada trigger y despacha un
+  `StartFlowFromSchedule` por cada match.
+
+### 12.2 Job `StartFlowFromSchedule`
+
+- `TenantAwareJob` + `ShouldBeUnique` (por `triggerId`, `uniqueFor: 30s`).
+- Revalida todas las condiciones (defensa en profundidad): tenant existe, trigger activo,
+  tipo schedule, flow publicado, chatbot, cron matchea此刻, conversación existe y pertenece
+  al tenant, bot no pausado, sin ejecución activa.
+- Adquiere lock Redis (`lock:schedule:trigger:{id}`, 30s TTL) para evitar doble disparo
+  entre ticks del sweeper.
+- Delega al `FlowEngine::handleScheduleTrigger()` → `handleScheduleTriggerLocked()` →
+  `start()` + `run()` (mismo pipeline que mensajes entrantes).
+
+### 12.3 `FlowEngine::handleScheduleTrigger()`
+
+- Wrapper público que crea `FlowExecution`, loguea `schedule_triggered` en
+  `FlowExecutionLog`, y ejecuta `handleScheduleTriggerLocked()`.
+- Usa `conversationLock()` para prevenir ejecuciones concurrentes en la misma conversación.
+- El lock de trigger se libera en `finally` incluso ante excepciones.
+
+### 12.4 Capas de protección contra duplicación
+
+1. Command `withoutOverlapping()` (serializa el sweeper).
+2. `ShouldBeUnique` por triggerId (cola).
+3. `Cache::lock` por trigger (runtime, dentro del job).
+4. `FlowEngine::conversationLock` (runtime, dentro del motor).
+5. `FlowExecutionService::findActive` (no crea si hay ejecución activa).
+6. UNIQUE parcial en `flow_executions` (barrera DB).
+
+### 12.5 TenantAwareJob save/restore
+
+- `handle()` guarda `$previousTenantId = TenantContext::bound() ? TenantContext::id() : null`.
+- En `finally`: si había contexto previo → restaura; si no → limpia.
+- Esto previene la destrucción del contexto del padre cuando jobs hijos se ejecutan
+  sincrónicamente (cola sync en tests o workers).
+
+### 12.6 Tests
+
+- `ScheduleTriggerTest` (17 tests, SCHED-01..17): schedule válido dispara, cron fuera de
+  ventana, trigger inactivo, flow no publicado, bot pausado, ejecución activa, dos ticks
+  simultáneos, locks liberados, conversación inexistente/de otro tenant, aislamiento A/B,
+  múltiples triggers independientes, keyword+start siguen funcionando, command despacha
+  correctos/incorrectos, audit log.
+- `CronMatcherTest` (15 tests): dominio puro de `matchesCron()` + `cronFieldMatches()`.
+- Suite total FASE 14 U2: **508 tests / 2250 assertions**.

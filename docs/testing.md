@@ -266,6 +266,26 @@ Pirámide de tests con prioridad en lo crítico:
 - Suite total UNIDAD 1 (backend): **476 tests / 2184 assertions**; frontend **147 tests Vitest**
   (sin cambios de frontend).
 
+### Disparo de triggers schedule (FASE 14, UNIDAD 2, ADR-048)
+
+- **`ScheduleTriggerTest` (17 tests, SCHED-01..17)**: schedule válido dispara el flujo
+  (SCHED-01); cron fuera de ventana no dispara (SCHED-02); trigger inactivo no dispara
+  (SCHED-03); flow no publicado no dispara (SCHED-04); bot pausado no dispara (SCHED-05);
+  ejecución activa no duplica (SCHED-06); dos ticks simultáneos no duplican (SCHED-07); lock
+  del trigger se libera correctamente (SCHED-08); lock de conversación se libera tras
+  ejecución (SCHED-09); conversación inexistente no ejecuta (SCHED-10); conversación de otro
+  tenant no ejecuta (SCHED-11); **CRÍTICO** aislamiento completo tenant A/B (SCHED-12);
+  múltiples triggers schedule independientes (SCHED-13); keyword y start siguen funcionando
+  tras schedule (SCHED-14); command despacha jobs correctos (SCHED-15); command no despacha
+  cuando cron no matchea (SCHED-16); audit log registra `schedule_triggered` (SCHED-17).
+- **TenantContextJobTest — save/restore (1 test actualizado)**: un job usa su tenant_id propio
+  y restaura el contexto previo al encolarse (verifica que TenantAwareJob save/restore funciona
+  correctamente: contexto previo se restaura, sin contexto previo se limpia).
+- **TenantContextJobTest — excepción**: un job que lanza excepción libera el contexto en finally
+  (verifica save/restore incluso ante errores).
+- Suite total FASE 14 U2 (backend): **508 tests / 2250 assertions**; frontend **147 tests Vitest**
+  (sin cambios de frontend).
+
 ### Auth
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 

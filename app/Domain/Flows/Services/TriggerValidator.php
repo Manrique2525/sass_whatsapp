@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Flows\Services;
 
 use App\Domain\Flows\Enums\FlowTriggerType;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /**
@@ -174,6 +175,164 @@ final class TriggerValidator
         }
 
         return true;
+    }
+
+    /**
+     * Evalúa si una expresión cron de 5 campos coincide con un instante dado.
+     *
+     * Determinista, sin eval/exec. Soporta `*`, `?`, enteros, rangos `a-b`,
+     * listas `a,b` y pasos tipo asterisco/slash-n o `a-b/n`. Semántica DOM/DOW:
+     * si ambos campos están restringidos, dispara si cualquiera de los dos
+     * matchea (cron Vixie). 0 y 7 ambos significan domingo en DOW.
+     */
+    public static function matchesCron(string $expression, Carbon $time): bool
+    {
+        $fields = preg_split('/\s+/', trim($expression));
+
+        if ($fields === false || count($fields) !== 5) {
+            return false;
+        }
+
+        $ranges = [
+            [0, 59],   // minuto
+            [0, 23],   // hora
+            [1, 31],   // día de mes
+            [1, 12],   // mes
+            [0, 7],    // día de semana (0 y 7 = domingo)
+        ];
+
+        $values = [
+            (int) $time->minute,
+            (int) $time->hour,
+            (int) $time->day,
+            (int) $time->month,
+            (int) $time->dayOfWeek, // 0=Sunday ... 6=Saturday
+        ];
+
+        $matches = [];
+
+        foreach ($fields as $index => $field) {
+            [$min, $max] = $ranges[$index];
+            $value = $values[$index];
+
+            // Para DOW: ambos 0 y 7 significan domingo. Si el campo dice "7"
+            // y el valor de Carbon es 0 (Sunday), o viceversa, debe matchear.
+            // Solución: probar el valor raw y, si es DOW, también probar con
+            // el equivalente (0↔7).
+            $matched = self::cronFieldMatches($field, $value, $min, $max);
+
+            if (! $matched && $index === 4) {
+                $equiv = $value === 0 ? 7 : ($value === 7 ? 0 : -1);
+
+                if ($equiv !== -1) {
+                    $matched = self::cronFieldMatches($field, $equiv, $min, $max);
+                }
+            }
+
+            $matches[] = $matched;
+        }
+
+        // Semántica DOM/DOW: si ambos campos están restringidos (no * ni ?),
+        // dispara si CUALQUIERA de los dos matchea (cron Vixie clásico).
+        $domRestricted = ! in_array(strtolower(trim($fields[2])), ['*', '?'], true);
+        $dowRestricted = ! in_array(strtolower(trim($fields[4])), ['*', '?'], true);
+
+        if ($domRestricted && $dowRestricted) {
+            $dayMatch = $matches[2] || $matches[4];
+        } else {
+            $dayMatch = $matches[2] && $matches[4];
+        }
+
+        return $matches[0] && $matches[1] && $dayMatch && $matches[3];
+    }
+
+    /**
+     * Evalúa si un valor dado coincide con un campo cron individual.
+     *
+     * Soporta: `*`, `?`, entero, rango `a-b`, lista `a,b,c` y
+     * pasos tipo asterisco/slash-n o `a-b/n`.
+     */
+    private static function cronFieldMatches(string $field, int $value, int $min, int $max): bool
+    {
+        $field = strtolower(trim($field));
+
+        if ($field === '*' || $field === '?') {
+            return true;
+        }
+
+        foreach (explode(',', $field) as $part) {
+            $part = trim($part);
+
+            if ($part === '') {
+                return false;
+            }
+
+            // Paso: */n o a-b/n o a/n
+            if (str_contains($part, '/')) {
+                [$base, $stepRaw] = explode('/', $part, 2);
+                $step = (int) trim($stepRaw);
+
+                if ($step < 1) {
+                    return false;
+                }
+
+                $base = trim($base);
+
+                if ($base === '*' || $base === '?') {
+                    $start = $min;
+                    $end = $max;
+                } elseif (str_contains($base, '-')) {
+                    [$rangeStart, $rangeEnd] = explode('-', $base, 2);
+                    $start = (int) trim($rangeStart);
+                    $end = (int) trim($rangeEnd);
+                } else {
+                    $start = (int) $base;
+                    $end = $max;
+                }
+
+                if ($start < $min || $end > $max || $start > $end) {
+                    return false;
+                }
+
+                if ($value >= $start && $value <= $end && ($value - $start) % $step === 0) {
+                    return true;
+                }
+
+                continue;
+            }
+
+            // Rango: a-b
+            if (str_contains($part, '-')) {
+                [$rangeStart, $rangeEnd] = explode('-', $part, 2);
+                $start = (int) trim($rangeStart);
+                $end = (int) trim($rangeEnd);
+
+                if ($start < $min || $end > $max || $start > $end) {
+                    return false;
+                }
+
+                if ($value >= $start && $value <= $end) {
+                    return true;
+                }
+
+                continue;
+            }
+
+            // Valor exacto
+            if (ctype_digit($part)) {
+                $v = (int) $part;
+
+                if ($v < $min || $v > $max) {
+                    return false;
+                }
+
+                if ($value === $v) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

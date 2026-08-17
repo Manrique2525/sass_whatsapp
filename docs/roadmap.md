@@ -706,7 +706,25 @@ COMPLETADO / BLOQUEADO
 - [x] **UNIDAD 1 — Documentación**: `decisions.md` (ADR-047 + actualización ADR-038),
       `api.md` (§3.8 contrato de config + publish), `chatbot-engine.md` (§6), `security.md`,
       `testing.md`. `roadmap.md` NO marca FASE 14 como completa.
-- [ ] **UNIDAD 1 — Commit local** `feat(flows): harden trigger validation` (SIN push).
-- [ ] **UNIDAD 2** — Scheduler (disparo por cron; pendiente).
+- [x] **UNIDAD 1 — Commit local** `feat(flows): harden trigger validation` (`d48dbb0`,
+      SIN push). HEAD = `d48dbb0`, origin/master = `f262f20`, ahead 1.
+- [x] **UNIDAD 2 — Scheduler** (disparo por cron, ADR-048):
+  - [x] `FireScheduleTriggers` command (`flow:fire-schedule-triggers`, cada minuto,
+        `withoutOverlapping()`): query global con `whereIn` + `withoutTenantScope()`.
+  - [x] `StartFlowFromSchedule` job (TenantAwareJob + ShouldBeUnique): revalidación completa,
+        lock Redis por trigger, delega a `FlowEngine::handleScheduleTrigger()`.
+  - [x] `FlowEngine::handleScheduleTrigger()` + `handleScheduleTriggerLocked()`: crea
+        `FlowExecution`, loguea `schedule_triggered`, ejecuta start()+run().
+  - [x] `TenantAwareJob::handle()` save/restore: guarda contexto previo, restaura en finally
+        (fix de producción, no workaround de tests).
+  - [x] `CronMatcherTest` (15 tests, dominio puro): `matchesCron()` + `cronFieldMatches()`.
+  - [x] `ScheduleTriggerTest` (17 tests, SCHED-01..17): todos los escenarios incluyendo
+        aislamiento A/B, locks, command, audit log.
+  - [x] TenantContextJobTest actualizado para save/restore.
+  - [x] Gates: `php artisan test` (508/2250 assertions) + Pint + PHPStan nivel 6 + `vitest`
+        (147) + `vue-tsc` + `vite build` verdes. Frontend sin cambios.
+  - [x] Documentación: `decisions.md` (ADR-048), `chatbot-engine.md` (§12), `security.md`,
+        `testing.md`.
+- [ ] **UNIDAD 2 — Commit local** `feat(flows): schedule trigger firing` (SIN push).
 - [ ] **UNIDAD 3** — Webhook público (endpoint + verificación de token; pendiente).
 - [ ] **UNIDAD 4** — Ejecución por etiqueta (ver FASE 20; pendiente).

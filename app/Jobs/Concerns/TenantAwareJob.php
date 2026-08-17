@@ -11,8 +11,9 @@ use App\Infrastructure\Tenancy\TenantContext;
  *
  * El job transporta `tenant_id` explícitamente (nunca confía en el contexto del
  * proceso que lo encola). Al ejecutarse establece su propio TenantContext y lo
- * libera en `finally`, de modo que jamás contamina a otros jobs del worker ni
- * deja contexto colgando ante una excepción.
+ * restaura (o libera si no había contexto previo) en `finally`, de modo que
+ * nunca contamina a otros jobs del worker ni deja contexto colgado ante una
+ * excepción.
  *
  * Uso:
  *   final class MiJob implements ShouldQueue
@@ -38,11 +39,17 @@ trait TenantAwareJob
 
     public function handle(): void
     {
+        $previousTenantId = TenantContext::bound() ? TenantContext::id() : null;
+
         try {
             TenantContext::setId($this->tenantId);
             $this->executeInTenantContext();
         } finally {
-            TenantContext::clear();
+            if ($previousTenantId !== null) {
+                TenantContext::setId($previousTenantId);
+            } else {
+                TenantContext::clear();
+            }
         }
     }
 

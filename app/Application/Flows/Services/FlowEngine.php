@@ -89,6 +89,51 @@ final class FlowEngine
         }
     }
 
+    /**
+     * Punto de entrada por trigger schedule (FASE 14, UNIDAD 2, ADR-048).
+     *
+     * Inicia un flujo en una conversación sin mensaje entrante. El flow se
+     * conoce desde el trigger (no hay matchFlow). Bajo lock de conversación:
+     * verifica bot_paused, no tiene ejecución activa y el flujo sigue
+     * publicado, luego delega al pipeline start() + run().
+     */
+    public function handleScheduleTrigger(Tenant $tenant, Flow $flow, Conversation $conversation): void
+    {
+        $lock = $this->executions->conversationLock($tenant, $conversation->id);
+        $lock->block(seconds: 10);
+
+        try {
+            $this->handleScheduleTriggerLocked($tenant, $flow, $conversation);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function handleScheduleTriggerLocked(Tenant $tenant, Flow $flow, Conversation $conversation): void
+    {
+        $conversation->refresh();
+
+        if ($conversation->bot_paused) {
+            return;
+        }
+
+        $execution = $this->executions->findActive($conversation);
+
+        if ($execution !== null) {
+            return;
+        }
+
+        $flow->refresh();
+
+        if ($flow->status !== FlowStatus::Published) {
+            return;
+        }
+
+        $execution = $this->executions->start($flow, $conversation);
+
+        $this->run($tenant, $execution, $conversation, null);
+    }
+
     private function handleMessageLocked(Tenant $tenant, Message $inbound, Conversation $conversation): void
     {
         $conversation->refresh();

@@ -46,7 +46,7 @@ test('TEST 11: tras ejecutar un job el contexto queda limpio', function (): void
         ->and(TenantContext::bound())->toBeFalse();
 });
 
-test('un job usa su tenant_id propio, no el contexto existente al encolarse', function (): void {
+test('un job usa su tenant_id propio y restaura el contexto previo al encolarse', function (): void {
     create_scoped_widgets_table();
     $tenantA = Tenant::factory()->create();
     $tenantB = Tenant::factory()->create();
@@ -57,7 +57,7 @@ test('un job usa su tenant_id propio, no el contexto existente al encolarse', fu
 
     expect(ScopedWidget::withoutTenantScope()->where('name', 'para-b')->first()?->tenant_id)
         ->toBe($tenantB->id)
-        ->and(TenantContext::id())->toBeNull();
+        ->and(TenantContext::id())->toBe($tenantA->id);
 });
 
 test('un job que lanza excepción libera el contexto en finally', function (): void {

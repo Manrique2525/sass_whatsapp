@@ -1011,4 +1011,47 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   ejecución por etiqueta, rotación de token, cleanup) quedan pendientes y se documentan al
   implementarse.
 
+## ADR-048 · FASE 14 UNIDAD 2: disparo de triggers schedule
+
+- **Estado**: Aceptado → FASE 14 (UNIDAD 2)
+- **Contexto**: ADR-047 implementó la validación y el contrato de `schedule` (cron
+  determinista de 5 campos + `conversation_id` UUID verificado en tenant), pero sin punto de
+  entrada de ejecución. UNIDAD 2 cierra ese hueco: cada minuto, un sweeper evalúa qué
+  triggers schedule coinciden con el minuto actual y despacha jobs que ejecutan el flujo en
+  la conversación configurada.
+- **Decisión**:
+  - **Command `flow:fire-schedule-triggers`**: se ejecuta cada minuto via
+    `routes/console.php` (`withoutOverlapping()`). Corre **fuera** de TenantContext (CLI
+    global). La query busca triggers activos de tipo `schedule` cuyo flujo esté publicado y
+    tenga chatbot, usando subqueries `withoutTenantScope()` para evitar el filtro global
+    `WHERE 1=0`. Evalúa `TriggerValidator::matchesCron()` contra `now()` y despacha un
+    `StartFlowFromSchedule` por cada match.
+  - **Job `StartFlowFromSchedule`**: `TenantAwareJob` + `ShouldBeUnique` (por
+    `triggerId`, `uniqueFor: 30s`). Establece su propio TenantContext, revalida todas las
+    condiciones (defensa en profundidad: tenant, trigger activo, tipo schedule, flow
+    publicado, chatbot, cron, conversación, bot no pausado, sin ejecución activa), adquiere
+    lock Redis por trigger (30s TTL) para evitar doble disparo entre ticks, y delega al
+    `FlowEngine::handleScheduleTrigger()`.
+  - **`FlowEngine::handleScheduleTrigger()`**: wrapper público que crea `FlowExecution`,
+    loguea `schedule_triggered` y ejecuta `handleScheduleTriggerLocked()` → start() + run()
+    (mismo pipeline que los mensajes entrantes). El lock de conversación (`conversationLock`)
+    previene ejecuciones concurrentes en la misma conversación.
+  - **TenantAwareJob save/restore** (bug fix): el `handle()` anterior llamaba
+    `TenantContext::clear()` incondicionalmente en `finally`, destruyendo el contexto del job
+    padre cuando jobs hijos se ejecutaban sincrónicamente (cola sync). Ahora guarda el
+    `tenant_id` previo y lo restaura (o limpia si no había contexto previo). Esto es un
+    **cambio de producción**, no un workaround de tests.
+  - **Capas de protección contra duplicación** (6 capas): (1) command `withoutOverlapping`,
+    (2) `ShouldBeUnique` por trigger, (3) `Cache::lock` por trigger, (4)
+    `FlowEngine::conversationLock`, (5) `FlowExecutionService::findActive`, (6) UNIQUE parcial
+    en `flow_executions`.
+  - **TenantContext en CLI global**: `FireScheduleTriggers` usa `whereIn` con subqueries
+    `withoutTenantScope()` en lugar de `whereHas` anidados, porque PHPStan no reconoce
+    `withoutTenantScope()` como método válido en el callback de `whereHas` (el builder no
+    tiene el scope del modelo anidado).
+- **Consecuencias**: suite backend 508 tests / 2250 assertions; U2 sin push. El sweeper es
+  idempotente (re-ejecutar no duplica). El job revalida todo (nunca confía en el command).
+  UNIDADES 3-5 (webhook público, ejecución por etiqueta, rotación de token) quedan
+  pendientes.
+
 

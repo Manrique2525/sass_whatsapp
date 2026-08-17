@@ -345,6 +345,21 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - **Sin datos en localStorage**: el estado del editor y el lock viven en memoria; al recargar se
   obtiene la versión del servidor (nada de versiones fantasma locales).
 
+### Disparo de triggers schedule (FASE 14, UNIDAD 2, ADR-048)
+- **Command fuera de contexto**: `flow:fire-schedule-triggers` corre sin TenantContext (CLI
+  global); usa `whereIn` con subqueries `withoutTenantScope()` para evitar el filtro global.
+  Nunca ejecuta flujos directamente — solo despacha jobs.
+- **Job revalida todo**: `StartFlowFromSchedule` (TenantAwareJob) revalida todas las condiciones
+  en su propio TenantContext (trigger activo, tipo schedule, flow publicado, chatbot, cron,
+  conversación del tenant, bot no pausado, sin ejecución activa). Nunca confía en el command.
+- **6 capas anti-duplicación**: command `withoutOverlapping` + `ShouldBeUnique` por trigger +
+  `Cache::lock` por trigger + `conversationLock` + `findActive` + UNIQUE parcial en BD.
+- **TenantAwareJob save/restore**: `handle()` guarda el contexto previo y lo restaura en
+  `finally` (o limpia si no había). Esto previene la destrucción del contexto del padre cuando
+  jobs hijos se ejecutan sincrónicamente — es un fix de producción, no un workaround de tests.
+- **Aislamiento tenant**: conversación de otro tenant → no ejecuta (SCHED-11); aislamiento
+  completo A/B probado (SCHED-12); conversación inexistente → no-op (SCHED-10).
+
 ## 3. Comprobaciones automatizadas
 
 - PHPStan nivel alto.
@@ -369,3 +384,6 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - [ ] Rate limits aplicados a rutas sensibles.
 - [ ] (FASE 11) Aislamiento A/B de flujos verdes (FLOW-24), matriz de permisos `flows.*`
         verdes, validación de grafo en publicación y anti-SSRF del nodo webhook verdes.
+- [ ] (FASE 14 U2) Aislamiento de schedule triggers verdes (SCHED-11/12), TenantAwareJob
+        save/restore verdes (TenantContextJobTest), command no duplica (SCHED-07), lock
+        liberado (SCHED-08/09).
