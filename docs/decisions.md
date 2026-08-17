@@ -971,7 +971,7 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
 
 ## ADR-047 · FASE 14 UNIDAD 1: validación y endurecimiento de triggers
 
-- **Estado**: Aceptado → FASE 14 (UNIDAD 1, en curso)
+- **Estado**: Aceptado — FASE 14 UNIDAD 1 completada
 - **Contexto**: `docs/roadmap.md` especifica la FASE 14 (Triggers): disparo de `tag`/`schedule`/
   `webhook`. La auditoría técnica detectó que `tag`/`schedule`/`webhook` se aceptaban en el CRUD
   sin validar config, que `TriggerResource` exponía la config cruda, que el matcher no distinguía
@@ -1105,3 +1105,39 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Documentación: `api.md`, `chatbot-engine.md` (§13), `security.md`, `testing.md`.
   - Commit local: `feat(flows): public webhook trigger endpoint`.
   - UNIDAD 3 completada. UNIDAD 4 (tag execution, FASE 20) pendiente.
+
+---
+
+## ADR-050: Ejecución del trigger tag diferida a FASE 20
+
+- **Fecha**: 2026-08-17
+- **Estado**: Aceptado — decisión de cierre de FASE 14
+- **Contexto**: FASE 14 registra `FlowTriggerType::Tag` y valida `config.tags`, pero el modelo
+  actual asigna etiquetas exclusivamente a `Contact` mediante `contact_tag`; `Conversation` no
+  tiene tags. El único writer es `TagNodeExecutor`, que opera dentro de una ejecución activa y
+  no existe `TagService`, API/UI de asignación, evento `TagAssigned` ni listener equivalente.
+  El motor necesita una conversación para crear un `FlowExecution`, pero no está definida la
+  política Contact→Conversation ni la semántica EVENT/ANY/ALL de `config.tags`. Disparar desde
+  `TagNodeExecutor` además introduciría riesgo de recursión y contención del lock de conversación.
+- **Decisión**:
+  - FASE 14 queda completada con `keyword`, `new_message`, `start`, `schedule` y `webhook`
+    funcionales. Para `tag`, únicamente quedan disponibles el tipo, su CRUD y la validación del
+    contrato `config.tags`; `TriggerMatcher` no lo ejecuta.
+  - La ejecución automática de triggers `tag` se difiere explícitamente a FASE 20. FASE 14 no
+    adelanta `TagService`, eventos/listeners/observers, API/UI de tags, `StartFlowFromTag` ni
+    modificaciones a `TagNodeExecutor`.
+  - La postergación evita infraestructura temporal, lógica duplicada y una integración que FASE
+    20 tendría que reemplazar.
+- **Contrato requerido a FASE 20**:
+  - Un servicio centralizado como única puerta de asignación/desasignación de tags.
+  - Un evento estable equivalente a `TagAssigned` con tenant explícito e identidad de contacto
+    y tag; nunca acepta `tenant_id`, `flow_id` o `conversation_id` arbitrarios del cliente.
+  - Una política documentada para resolver Contact→Conversation, incluidos cero, una o varias
+    conversaciones.
+  - Una decisión explícita sobre semántica EVENT/ANY/ALL de `config.tags`.
+  - Idempotencia, lock por conversación, `bot_paused`, ejecución activa y barreras
+    anti-recursión antes de invocar el pipeline existente.
+- **Consecuencias**: U4 se considera diferida por dependencia arquitectónica, no incompleta por
+  defecto del código. No hay implementación parcial ni mecanismo temporal. FASE 20 consumirá el
+  contrato anterior y reutilizará `FlowExecutionService` → `FlowEngine` sin crear un motor
+  paralelo.

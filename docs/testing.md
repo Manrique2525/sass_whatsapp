@@ -308,6 +308,15 @@ Pirámide de tests con prioridad en lo crítico:
 - Suite total FASE 14 U3 (backend): **545 tests / 2325 assertions**; frontend **147 tests Vitest**
   (sin cambios de frontend).
 
+### Cierre de FASE 14 (ADR-050)
+
+- U1/U2/U3 permanecen cubiertas por las suites anteriores. `tag` conserva cobertura de contrato:
+  validación válida/inválida en `TriggerValidatorTest` y `TriggerApiValidationTest`, y exclusión
+  explícita del matcher de mensajes en `TriggerMatcherTest`.
+- U4 no agrega tests de ejecución porque la ejecución automática por tag no existe y está
+  diferida a FASE 20. No se simula con mocks ni con un punto de entrada temporal.
+- Suite final FASE 14: **545 tests backend / 2325 assertions**; frontend **147 tests Vitest**.
+
 ### Auth
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 

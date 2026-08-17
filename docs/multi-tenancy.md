@@ -41,7 +41,9 @@ y tiene un **tenant activo** seleccionable:
   solo entre contactos activos (índice UNIQUE parcial `(tenant_id, phone) WHERE deleted_at IS
   NULL`): un contacto borrado libera el número. `Tenant::contacts()` (hasMany). `findOrCreateForPhone`
   (uso interno de los jobs del webhook, FASE 9) busca fuera del scope pero SIEMPRE filtrando por
-  `tenant_id` del tenant resuelto.
+  `tenant_id` del tenant resuelto. Los tags pertenecen a `Contact`, no a `Conversation`; la
+  ejecución automática del trigger `tag` se difiere a FASE 20 (ADR-050), que deberá resolver el
+  tenant desde su writer centralizado y nunca desde IDs aportados por el cliente.
 - `conversations` / `conversation_participants` / `conversation_assignments` (FASE 8, ADR-031):
   `conversations` con trait `BelongsToTenant`, `tenant_id` FK `cascadeOnDelete`, `contact_id`
   FK→`contacts` del **mismo tenant** (validado en el servicio) y **soft delete**. El historial de

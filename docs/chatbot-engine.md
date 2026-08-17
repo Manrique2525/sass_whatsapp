@@ -87,9 +87,9 @@ handleMessage(conversation, inboundMessage):
 | `keyword` | Primer mensaje del cliente contiene palabra/patrón | FASE 11 (matcher) |
 | `new_message` | Cualquier mensaje entrante | FASE 11 (matcher) |
 | `start` | Primer mensaje de una conversación nueva | FASE 11 (matcher) |
-| `tag` | Conversación etiquetada | FASE 14 UNIDAD 1: contrato validado, ejecución pendiente FASE 20 |
-| `schedule` | Horario (cron) | FASE 14 UNIDAD 1: contrato validado, ejecución pendiente UNIDAD 2 |
-| `webhook` | Evento externo entrante | FASE 14 UNIDAD 1: contrato + token validados, endpoint público pendiente UNIDAD 3 |
+| `tag` | Contacto etiquetado | Contrato/configuración disponibles; ejecución automática diferida a FASE 20 (ADR-050) |
+| `schedule` | Horario (cron) | Funcional desde FASE 14 UNIDAD 2 (ADR-048) |
+| `webhook` | Evento externo entrante | Funcional desde FASE 14 UNIDAD 3 (ADR-049) |
 
 Precedencia: triggers específicos (`keyword`) antes que genéricos (`new_message`/`start`).
 `TriggerMatcher` evalúa SOLO triggers de mensaje entrante (`isMessageTrigger`); `tag`/
@@ -105,7 +105,8 @@ Validación de config (FASE 14, UNIDAD 1, ADR-047): toda config de trigger se va
 con `TriggerValidator` al crear/actualizar/publicar (422 `errors.config`):
 
 - `keyword`/`new_message`/`start`: sin `config`; `keyword` no vacía (≤ 255 chars).
-- `tag`: `config.tags` (1..10 etiquetas únicas, ≤ 100 chars). Sin ejecución en esta unidad.
+- `tag`: `config.tags` (1..10 etiquetas únicas, ≤ 100 chars). El contrato se valida, pero no
+  existe ejecución automática; queda diferida a FASE 20 por ADR-050.
 - `schedule`: `config.cron` (cron determinista de 5 campos, sin eval) + `config.conversation_id`
   (UUID verificado dentro del tenant; inexistente/cross-tenant → 404 genérico).
 - `webhook`: `config.conversation_by` (`conversation_id`|`contact_id`|`phone`); el servidor
@@ -354,3 +355,16 @@ objetivo completo; las diferencias marcadas abajo). Referencias: ADR-034..039.
   idempotencia, concurrencia, bot_paused, ejecución activa, secretos en response/logs, rate
   limit, payload validation, aislamiento A/B, pipeline existente, audit log.
 - Suite total FASE 14 U3: **545 tests / 2325 assertions**.
+
+## 14. Cierre de FASE 14 y trigger tag (ADR-050)
+
+- FASE 14 soporta completamente triggers `keyword`, `new_message`, `start`, `schedule` y
+  `webhook`.
+- `tag` permanece registrado en `FlowTriggerType`, su CRUD acepta `config.tags` validada y
+  `TriggerMatcher` lo excluye de mensajes entrantes. No existe punto de entrada automático.
+- Los tags pertenecen a `Contact` mediante `contact_tag`; `Conversation` no tiene tags. El único
+  writer actual es `TagNodeExecutor`, que solo aplica tags dentro de una ejecución existente.
+- FASE 20 debe definir el servicio/evento centralizado de asignación, la política
+  Contact→Conversation, la semántica EVENT/ANY/ALL y las barreras anti-recursión e idempotencia.
+- No existen `TagService`, `TagAssigned`, listeners/observers, API/UI de tags ni
+  `StartFlowFromTag` como parte de FASE 14.

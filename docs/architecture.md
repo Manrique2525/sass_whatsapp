@@ -155,7 +155,7 @@ Aislamiento de infraestructura compartida:
 | Conversations | Sesiones de chat (FASE 8): estados, asignación/transferencia, participantes, historial de asignaciones, pause/resume de bot | — |
 | Messages | Historial (FASE 9): inbound con idempotencia, status por columna temporal, outbound asíncrono con CAS y retry; `MessageService` | — |
 | Chatbots | Chatbots (FASE 11): agrupan flujos; CRUD REST con `flows.view/manage` | `FlowService` |
-| Flows | Definición de nodos/conexiones (FASE 11): `FlowService` (borrador atómico, publish/validate), `FlowValidator`, `FlowEngine` + 9 `NodeExecutor` (message, buttons, question, condition, delay, tag, webhook, human, end), `NodeExecutorRegistry`, `TriggerMatcher`, `FlowExecutionService`; `ai` bloqueado hasta FASE 16 | `NodeExecutorInterface` |
+| Flows | Definición de nodos/conexiones (FASE 11): `FlowService` (borrador atómico, publish/validate), `FlowValidator`, `FlowEngine` + 9 `NodeExecutor` (message, buttons, question, condition, delay, tag, webhook, human, end), `NodeExecutorRegistry`, `TriggerMatcher`, `FlowExecutionService`; triggers `keyword`/`new_message`/`start`/`schedule`/`webhook` funcionales; `tag` con contrato validado y ejecución diferida a FASE 20 (ADR-050); `ai` bloqueado hasta FASE 16 | `NodeExecutorInterface` |
 | Flow Editor (FASE 12) | Editor visual Vue Flow: `useFlowEditor` (estado + mutaciones + `FlowEditorController`), `flowAdapter` (API↔grafo, `graphSignature`), `flowValidation` (espejo del validador), `useEditorHistory` (undo/redo), `useKeyboardShortcuts`, 10 SFCs de nodos, paneles, `ConflictDialog` (lock optimista) | — |
 | Agents | Usuarios que atienden conversaciones | — |
 | AI | IA generativa + RAG | `AIProviderInterface` |

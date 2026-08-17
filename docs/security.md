@@ -326,6 +326,10 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
   sobre ejecuciones activas (409 sobre terminales); `handed_off` pausa el bot hasta que un
   agente reanuda.
 - **Auditoría**: cada mutación (chatbot/flow/trigger/execution) se registra en `audit_logs`.
+- **Trigger tag diferido (ADR-050)**: FASE 14 valida `config.tags` pero no ejecuta triggers tag.
+  No se introdujeron eventos/listeners ni endpoints temporales que pudieran aceptar
+  `tenant_id`, `flow_id` o `conversation_id` del cliente. FASE 20 deberá resolver tenant desde
+  el writer centralizado y aplicar lock por conversación, idempotencia y anti-recursión.
 
 ### Editor visual de flujos (FASE 12, ADR-040..044)
 - **Autorización del lado servidor**: el editor es solo la capa de UX. Todo se valida en backend
@@ -412,3 +416,5 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - [ ] (FASE 14 U3) Aislamiento webhook A/B verdes (WEBHOOK-19), token auth verdes
         (WEBHOOK-01..05), idempotencia verdes (WEBHOOK-10/11), secretos nunca en
         logs/audit (WEBHOOK-15/18), rate limit verdes (WEBHOOK-16).
+- [ ] (FASE 14 cierre) Trigger tag permanece sin ejecución automática; no existen
+        `StartFlowFromTag`, `TagAssigned`, listeners/observers ni API/UI adelantadas de FASE 20.

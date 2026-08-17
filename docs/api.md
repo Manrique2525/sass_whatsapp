@@ -324,7 +324,8 @@ autoridad; la config se valida con `TriggerValidator` al crear, actualizar y pub
 
 - `keyword`/`new_message`/`start`: sin `config`. `keyword` exige palabra no vacía (≤ 255).
 - `tag`: `config.tags` (lista de 1..10 etiquetas únicas, cada una ≤ 100 chars). Solo define el
-  contrato; la ejecución por etiqueta llega en FASE 20.
+  contrato; no existe endpoint ni ejecución automática por tag en FASE 14. La infraestructura
+  centralizada de asignación y el disparo llegan en FASE 20 (ADR-050).
 - `schedule`: `config.cron` (expresión cron determinista de 5 campos; sin eval) +
   `config.conversation_id` (UUID de una conversación **del tenant**; inexistente o de otro tenant
   → **404** genérico, nunca filtra existencia cross-tenant).

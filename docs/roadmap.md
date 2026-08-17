@@ -1,6 +1,7 @@
 # Roadmap
 
-Estado general: **FASE 13 COMPLETADA** (Variables de conversación). FASE 14 aún NO iniciada (requiere autorización explícita).
+Estado general: **FASE 14 COMPLETADA** (Triggers). U4 (ejecución automática por etiqueta)
+queda diferida explícitamente a FASE 20 por dependencia arquitectónica.
 
 ## Fases
 
@@ -20,7 +21,7 @@ Estado general: **FASE 13 COMPLETADA** (Variables de conversación). FASE 14 aú
   | 11 | Chatbot engine | COMPLETADA |
 | 12 | Flow Builder (Vue Flow) | COMPLETADA |
 | 13 | Variables de conversación | COMPLETADA |
-| 14 | Triggers | PENDIENTE |
+| 14 | Triggers | COMPLETADA |
 | 15 | Transferencia a humano | PENDIENTE |
 | 16 | IA (AIProviderInterface, OpenAI) | PENDIENTE |
 | 17 | Base de conocimiento (RAG + pgvector) | PENDIENTE |
@@ -676,7 +677,7 @@ COMPLETADO / BLOQUEADO
       (`53e459c`..`35743d4`) + commit de documentación `docs(flows): mark phase 13 complete`
       (`f262f20`). `HEAD` = `origin/master` = `f262f20` (ahead/behind 0/0, working tree limpio).
 
-### FASE 14 — Triggers (EN CURSO — requiere autorización explícita por unidad; SIN push)
+### FASE 14 — Triggers (COMPLETADA — SIN push)
 
 - [x] **UNIDAD 1 — Auditoría técnica previa** (read-only, sin código): especificación real =
       disparo de `tag`/`schedule`/`webhook` (ADR-038). Contradicciones C1-C7 detectadas y
@@ -744,5 +745,14 @@ COMPLETADO / BLOQUEADO
         `vue-tsc` + `vite build` verdes. Frontend sin cambios.
   - [x] Documentación: `decisions.md` (ADR-049), `chatbot-engine.md` (§13), `security.md`,
         `testing.md`, `api.md`.
-- [ ] **UNIDAD 3 — Commit local** `feat(flows): public webhook trigger endpoint` (SIN push).
-- [ ] **UNIDAD 4** — Ejecución por etiqueta (ver FASE 20; pendiente).
+- [x] **UNIDAD 3 — Commit local** `feat(flows): public webhook trigger endpoint` (`104d5a1`,
+      SIN push).
+- [x] **UNIDAD 4 — Decisión arquitectónica** (ADR-050): **DIFERIDA A FASE 20**. El trigger
+      `tag` mantiene su contrato/configuración (`config.tags`) y validación backend, pero NO
+      ejecuta flujos. FASE 20 implementará primero la infraestructura centralizada de Tags,
+      incluyendo el evento estable de asignación, política Contact→Conversation, semántica de
+      matching e invariantes de idempotencia/anti-recursión. No se adelantaron `TagService`,
+      eventos/listeners, API/UI, `StartFlowFromTag` ni cambios a `TagNodeExecutor`.
+- [x] **CIERRE FORMAL FASE 14**: U1/U2/U3 completadas; U4 diferida por dependencia
+      arquitectónica, no por defecto del código. Gates finales y documentación de cierre verdes.
+      Commit local `docs(flows): close phase 14 and defer tag trigger to phase 20` (SIN push).
