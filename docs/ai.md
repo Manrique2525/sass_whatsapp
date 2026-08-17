@@ -7,17 +7,38 @@ Todo acceso a IA pasa por una interfaz. El dominio nunca depende de OpenAI direc
 ```php
 interface AIProviderInterface
 {
-    public function classifyIntent(string $text, array $context = []): IntentResult;
-    public function generateResponse(string $prompt, array $context = []): string;
-    public function summarizeConversation(array $messages): string;
-    public function extractLeadData(string $text): array;
-    public function createEmbedding(string $text): array;   // float[] para pgvector
+    public function generateResponse(AIRequest $request): AIResponse;
 }
 ```
 
-Implementación concreta: `OpenAIProvider` (Laravel HTTP Client, base `https://api.openai.com/v1`).
+**Implementado (FASE 16 U1)**: `AIProviderInterface` en `app/Domain/AI/Contracts/`.
+`OpenAIProvider` en `app/Infrastructure/AI/` (Laravel HTTP Client, base configurable).
 Swappable (Anthropic, Azure OpenAI, proveedor local) registrando otra implementación en el
 contenedor.
+
+### Value Objects
+
+- `AIRequest` (`app/Domain/AI/ValueObjects/AIRequest.php`): prompt, systemPrompt (nullable),
+  model (override), temperature, maxTokens.
+- `AIResponse` (`app/Domain/AI/ValueObjects/AIResponse.php`): content, provider, model,
+  inputTokens, outputTokens, totalTokens.
+
+### Excepciones de dominio
+
+- `AIException` (abstracta) con `AIErrorCode` enum.
+- `AIAuthFailedException` (401, no retryable)
+- `AIRateLimitException` (429, retryable)
+- `AIInvalidRequestException` (400, no retryable)
+- `AIProviderException` (5xx, retryable configurable)
+
+### Métodos pendientes (futuras fases)
+
+- `classifyIntent(string $text, array $context = []): IntentResult`
+- `summarizeConversation(array $messages): string`
+- `extractLeadData(string $text): array`
+- `createEmbedding(string $text): array`
+
+Se implementarán cuando se necesiten (YAGNI).
 
 ## 2. Modelos y costos
 
@@ -65,12 +86,35 @@ Pregunta del cliente
 - Nunca enviar secretos/tokens en prompts.
 - Prompts con instrucciones de no inventar datos (grounding en contexto).
 - Logs de IA sin PII innecesaria; `usage_records` solo con conteo de tokens.
+- API key de OpenAI nunca en response, logs, auditoría, exceptions ni frontend.
+- Provider stateless re: tenant (sin TenantContext, Contact, Conversation queries).
 
-## 7. Tests (FASE 16)
+## 7. Config
 
-- Mock del provider (interfaz) para tests de motor sin red.
-- `OpenAIProvider` probado con `Http::fake`.
-- Límite de tokens: se corta la llamada antes del API.
-- Fallback: timeout/rechazo → respuesta estática + log.
-- Aislamiento RAG: Tenant A no ve chunks de Tenant B.
-- Costos: `usage_records` se crean por llamada.
+```php
+// config/ai.php
+return [
+    'default' => env('AI_PROVIDER', 'openai'),
+    'providers' => [
+        'openai' => [
+            'api_key' => env('OPENAI_API_KEY', ''),
+            'model' => env('AI_MODEL', 'gpt-4o-mini'),
+            'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+            'timeout' => (int) env('AI_TIMEOUT', 15),
+            'max_retries' => (int) env('AI_MAX_RETRIES', 1),
+            'max_tokens' => (int) env('AI_MAX_TOKENS', 500),
+        ],
+    ],
+];
+```
+
+## 8. Tests (FASE 16 U1)
+
+- **Implementado**: `OpenAIProviderTest` (AI-P01..P15) — VO inmutabilidad, resolución desde
+  contenedor, Http::fake con respuesta exitosa, system prompt incluido/omitido, manejo de
+  errores (401, 429, 400, 500, timeout, respuesta malformada), telemetría de tokens.
+- Pendiente: Mock del provider (interfaz) para tests de motor sin red (U2).
+- Pendiente: Límite de tokens → se corta la llamada antes del API.
+- Pendiente: Fallback timeout/rechazo → respuesta estática + log.
+- Pendiente: Aislamiento RAG: Tenant A no ve chunks de Tenant B.
+- Pendiente: Costos: `usage_records` se crean por llamada.

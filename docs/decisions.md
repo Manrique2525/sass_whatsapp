@@ -1245,3 +1245,33 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - FASE 15 no crea notification center, tabla de notifications ni email automático.
 - **Consecuencias**: U1 solo registra el contrato. No se añaden eventos, listeners, canales ni UX
   realtime en esta unidad.
+
+## ADR-054: AI Provider Infrastructure (FASE 16 U1)
+
+- **Fecha**: 2026-08-17
+- **Estado**: Implementado (FASE 16 UNIDAD 1)
+- **Contexto**: El motor de flujos tiene un nodo AI (`FlowNodeType::AI`) pero la capa de IA no existe:
+  `AIProviderInterface` solo está documentada, `OpenAIProvider` no existe, no hay config, ni VOs, ni
+  excepciones. U1 establece la infraestructura base para que U2 integre el nodo AI en el motor.
+- **Decisión**:
+  - **Interfaz mínima**: `AIProviderInterface` expone un único método `generateResponse(AIRequest): AIResponse`.
+    Se rechaza la interfaz de 5 métodos (classifyIntent, summarizeConversation, etc.) por YAGNI.
+    Se implementará cuando sea necesario.
+  - **Value Objects inmutables**: `AIRequest` (prompt, systemPrompt, model, temperature, maxTokens)
+    y `AIResponse` (content, provider, model, inputTokens, outputTokens, totalTokens).
+    `AIResponse` lleva telemetría de tokens acoplada para desacoplar del formato del proveedor.
+  - **Excepciones de dominio tipadas**: `AIException` (abstracta), `AIAuthFailedException` (401),
+    `AIRateLimitException` (429, retryable), `AIInvalidRequestException` (400),
+    `AIProviderException` (5xx, retryable configurable). Cada una lleva `AIErrorCode` enum.
+  - **HTTP Client de Laravel** (no SDK): consistente con `MetaWhatsAppProvider`. Endpoint
+    `POST /v1/chat/completions`. Retry solo en `ConnectionException`.
+  - **API key global**: plataforma en `config/ai.php` → `.env`. Nunca en DB por tenant,
+    nunca en frontend, response, logs ni auditoría.
+  - **Provider stateless re: tenant**: sin `TenantContext`, `Contact`, `Conversation` ni
+    `BusinessProfile` queries dentro del provider. El contexto se prepara externamente (U2).
+  - **Config minimalista**: model, timeout, max_retries, max_tokens. Sin temperature default
+    en config (se maneja en el request).
+- **Consecuencias**:
+  - U2 integrará el nodo AI en FlowEngine usando el binding de `AIProviderInterface`.
+  - La interfaz se extenderá cuando se necesite (RAG, embeddings, etc.).
+  - Tests unitarios cubren VO inmutabilidad, Http::fake, manejo de errores y telemetría.

@@ -486,3 +486,6 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
         logs/audit (WEBHOOK-15/18), rate limit verdes (WEBHOOK-16).
 - [ ] (FASE 14 cierre) Trigger tag permanece sin ejecución automática; no existen
         `StartFlowFromTag`, `TagAssigned`, listeners/observers ni API/UI adelantadas de FASE 20.
+- [ ] (FASE 16 U1) API key OpenAI nunca en response, logs, auditoría, exceptions ni frontend.
+        Provider stateless re: tenant. Tests con Http::fake (sin llamadas reales).
+        Binding AIProviderInterface → OpenAIProvider en AppServiceProvider (singleton lazy).

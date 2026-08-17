@@ -882,3 +882,71 @@ ADR-053 (frontera realtime tenant-wide inbox).
 
 ## ESTADO
 COMPLETADO
+
+---
+
+## FASE 16 — AI / AI NODE
+
+### UNIDAD 1 (U1): AI Provider Infrastructure
+
+**Objetivo**: Crear la infraestructura base de IA: contrato, provider, VOs, excepciones, config, binding.
+
+#### Archivos creados
+
+- `app/Domain/AI/Contracts/AIProviderInterface.php` — contrato con `generateResponse(AIRequest): AIResponse`
+- `app/Domain/AI/ValueObjects/AIRequest.php` — VO inmutable (prompt, systemPrompt, model, temperature, maxTokens)
+- `app/Domain/AI/ValueObjects/AIResponse.php` — VO inmutable (content, provider, model, inputTokens, outputTokens, totalTokens)
+- `app/Domain/AI/Enums/AIErrorCode.php` — enum de códigos de error (AuthFailed, RateLimit, InvalidRequest, ProviderError, Timeout, ResponseInvalid)
+- `app/Domain/AI/Exceptions/AIException.php` — excepción abstracta base
+- `app/Domain/AI/Exceptions/AIAuthFailedException.php` — HTTP 401, no retryable
+- `app/Domain/AI/Exceptions/AIRateLimitException.php` — HTTP 429, retryable
+- `app/Domain/AI/Exceptions/AIInvalidRequestException.php` — HTTP 400, no retryable
+- `app/Domain/AI/Exceptions/AIProviderException.php` — HTTP 5xx, retryable configurable
+- `app/Infrastructure/AI/OpenAIProvider.php` — implementación concreta (Laravel HTTP Client, `/v1/chat/completions`)
+- `config/ai.php` — configuración del provider (api_key, model, base_url, timeout, max_retries, max_tokens)
+- `.env.example` — variables `AI_PROVIDER`, `AI_MODEL`, `AI_TIMEOUT`, `AI_MAX_RETRIES`, `AI_MAX_TOKENS`, `OPENAI_BASE_URL`
+
+#### Archivos modificados
+
+- `app/Providers/AppServiceProvider.php` — binding `AIProviderInterface` → `OpenAIProvider`
+
+#### Tests
+
+- `tests/Unit/AI/OpenAIProviderTest.php` — 15 tests (AI-P01..P15):
+  - P01: AIRequest VO inmutabilidad y defaults
+  - P02: AIResponse VO inmutabilidad y datos completos
+  - P03: AIProviderInterface se resuelve desde el contenedor
+  - P04: OpenAIProvider con API key vacía lanza AIAuthFailedException
+  - P05: generateResponse 200 → AIResponse con tokens correctos
+  - P06: generateResponse con systemPrompt incluido en messages
+  - P07: generateResponse sin systemPrompt → solo user message
+  - P08: API key vacía lanza AIAuthFailedException sin HTTP
+  - P09: HTTP 401 → AIAuthFailedException
+  - P10: HTTP 429 → AIRateLimitException
+  - P11: HTTP 400 → AIInvalidRequestException
+  - P12: HTTP 500 → AIProviderException retryable
+  - P13: Timeout conexión → retryable
+  - P14: Respuesta 200 sin choices → RuntimeException
+  - P15: Token usage mapeado correctamente al VO
+
+#### Puertas
+
+- php artisan test: 685/685 PASS (2808 assertions)
+- Pint: PASS
+- PHPStan: 0 errores
+- vue-tsc: PASS
+- Seguridad: sin API key en logs/responses/exceptions, sin dumps/serialization
+
+#### SEGURIDAD
+
+- API key nunca en response, logs, auditoría, exceptions ni frontend
+- API key solo en Authorization header del HTTP client
+- Provider stateless re: tenant (sin TenantContext)
+- Tests con Http::fake (sin llamadas reales)
+
+#### ADRs
+
+ADR-054 (AI Provider Infrastructure)
+
+#### ESTADO
+COMPLETADO

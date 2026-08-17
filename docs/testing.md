@@ -450,6 +450,15 @@ Pirámide de tests con prioridad en lo crítico:
   Suite PostgreSQL adicional: **10 tests / 60 assertions**. Pint, PHPStan (0 errores, 1G),
   migraciones PostgreSQL desde cero, `vue-tsc` y build Vite verdes.
 
+### FASE 16 — AI Provider Infrastructure (U1)
+- `OpenAIProviderTest` (AI-P01..P15): VO inmutabilidad (AIRequest/AIResponse), resolución
+  desde contenedor, generateResponse con respuesta 200 (tokens correctos), system prompt
+  incluido/omitido, API key vacía → AIAuthFailedException sin HTTP, HTTP 401 → AIAuthFailedException,
+  HTTP 429 → AIRateLimitException, HTTP 400 → AIInvalidRequestException, HTTP 500 → AIProviderException
+  retryable, timeout conexión retryable, respuesta sin choices → RuntimeException, token usage
+  mapeado correctamente. Todos con `Http::fake` (sin llamadas reales).
+- Suite FASE 16 U1: **15 tests / 43 assertions**. Suite total: **685 tests / 2808 assertions**.
+
 ### Auth
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 

@@ -15,8 +15,10 @@ use App\Application\Flows\Services\Executors\QuestionNodeExecutor;
 use App\Application\Flows\Services\Executors\TagNodeExecutor;
 use App\Application\Flows\Services\Executors\WebhookNodeExecutor;
 use App\Application\Flows\Services\NodeExecutorRegistry;
+use App\Domain\AI\Contracts\AIProviderInterface;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\WhatsApp\Contracts\WhatsAppProviderInterface;
+use App\Infrastructure\AI\OpenAIProvider;
 use App\Infrastructure\WhatsApp\MetaWhatsAppProvider;
 use App\Policies\TenantPolicy;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -41,6 +43,16 @@ class AppServiceProvider extends ServiceProvider
                 graphVersion: (string) config('whatsapp.graph_version'),
                 appSecret: (string) config('whatsapp.app_secret'),
                 verifyToken: (string) config('whatsapp.verify_token'),
+            );
+        });
+
+        $this->app->bind(AIProviderInterface::class, function (): OpenAIProvider {
+            return new OpenAIProvider(
+                apiKey: (string) config('ai.providers.openai.api_key'),
+                model: (string) config('ai.providers.openai.model'),
+                baseUrl: (string) config('ai.providers.openai.base_url'),
+                timeout: (int) config('ai.providers.openai.timeout'),
+                maxRetries: (int) config('ai.providers.openai.max_retries'),
             );
         });
 
