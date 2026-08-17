@@ -1054,4 +1054,54 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   UNIDADES 3-5 (webhook público, ejecución por etiqueta, rotación de token) quedan
   pendientes.
 
+---
 
+## ADR-049: Webhook público de flujos (FASE 14, UNIDAD 3)
+
+- **Fecha**: 2026-08-17
+- **Estado**: Aceptado
+- **Contexto**: Se necesita un endpoint público que permita disparar flujos vía HTTP sin
+  autenticación Bearer de Sanctum, usando un token de webhook generado en U1. El endpoint
+  debe ser seguro, idempotente, rate-limited y multi-tenant aislado. El tenant se resuelve
+  EXCLUSIVAMENTE desde el trigger (nunca del payload).
+
+- **Decisión**:
+
+  1. **Ruta**: `POST /api/webhooks/flows/{trigger}` (fuera del prefijo `v1`, público,
+     rate-limited por `throttle:flow-webhook` — 60 req/min por IP).
+
+  2. **Autenticación por token**: el cliente envía `Authorization: Bearer {token}`. El token
+     se compara con `config.token_hash` usando `hash_equals(hash('sha256', $token), $storedHash)`.
+     Nunca se almacena/envía el token en claro. Error siempre 401 genérico (sin revelar si el
+     trigger existe o es activo).
+
+  3. **Resolución de conversación**: `config.conversation_by` define cómo resolver la
+     conversación destino (`conversation_id` | `contact_id` | `phone`). Cada método valida que
+     la resolución pertenece al tenant del trigger. Si falla → 400 genérico.
+
+  4. **Idempotencia**: `Idempotency-Key` header → `Cache::lock` (60s TTL). Si ya procesado →
+     409 `WEBHOOK_DUPLICATE`. Sin header → se genera uno automático único.
+
+  5. **Despacho**: `FlowWebhookController` despacha `StartFlowFromWebhook` job (TenantAwareJob
+     + ShouldBeUnique por idempotencyKey). El controller retorna 202 inmediatamente.
+
+  6. **Job defensa en profundidad**: `StartFlowFromWebhook` revalida TODO en su propio
+     TenantContext (tenant activo, trigger activo/tipo webhook, flow publicado, chatbot, bot no
+     pausado, sin ejecución activa). Delega a `FlowEngine::handleScheduleTrigger()`.
+
+  7. **Payload seguro**: máximo 64KB; solo se extraen campos permitidos (`conversation_id`,
+     `contact_id`, `phone`, `payload`). `tenant_id` del body se ignora completamente.
+
+  8. **Seguridad**: sin eval/exec; sin SSRF basado en payload; token/hash nunca en logs/auditoría/
+     responses; `TriggerResource` redacta `token_hash`; `validatePayload` sin `JSON_THROW_ON_ERROR`
+     (captura JSON inválido → 400).
+
+- **Consecuencias**:
+  - Suite: 545 tests / 2325 assertions (37 tests WEBHOOK-01..20 + 17 extensiones).
+  - `FlowWebhookController` (app/Http/Controllers/Api/Webhooks/).
+  - `StartFlowFromWebhook` (app/Jobs/).
+  - Rate limiter `flow-webhook` (AppServiceProvider).
+  - Ruta en `routes/api.php` fuera del grupo `v1`.
+  - Documentación: `api.md`, `chatbot-engine.md` (§13), `security.md`, `testing.md`.
+  - Commit local: `feat(flows): public webhook trigger endpoint`.
+  - UNIDAD 3 completada. UNIDAD 4 (tag execution, FASE 20) pendiente.

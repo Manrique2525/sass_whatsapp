@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\V1\MessagesController;
 use App\Http\Controllers\Api\V1\TenantController;
 use App\Http\Controllers\Api\V1\TriggerController;
 use App\Http\Controllers\Api\V1\WhatsAppController;
+use App\Http\Controllers\Api\Webhooks\FlowWebhookController;
 use App\Http\Controllers\Api\Webhooks\WhatsAppWebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -25,6 +26,9 @@ use Illuminate\Support\Facades\Route;
 // verificación GET (hub.verify_token) y firma X-Hub-Signature-256.
 Route::get('webhooks/whatsapp', [WhatsAppWebhookController::class, 'verify']);
 Route::post('webhooks/whatsapp', [WhatsAppWebhookController::class, 'handle']);
+
+Route::post('webhooks/flows/{trigger}', [FlowWebhookController::class, 'handle'])
+    ->middleware('throttle:flow-webhook');
 
 Route::prefix('v1')->group(function (): void {
     Route::post('auth/register', [AuthController::class, 'register'])

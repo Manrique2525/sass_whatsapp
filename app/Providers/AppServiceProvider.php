@@ -76,5 +76,9 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('auth-password', function (Request $request): Limit {
             return Limit::perMinute(3)->by($request->input('email') ?: $request->ip());
         });
+
+        RateLimiter::for('flow-webhook', function (Request $request): Limit {
+            return Limit::perMinute(60)->by($request->ip());
+        });
     }
 }

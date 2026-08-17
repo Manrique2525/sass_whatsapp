@@ -389,6 +389,7 @@ sobrescribir) ocurre en el cliente con `ConflictDialog`.
 | GET | `/api/webhooks/whatsapp` | Verificación de Meta (`hub.mode`, `hub.verify_token`, `hub.challenge`). Token correcto → 200 con el challenge en **texto plano**; inválido → 403 (FASE 6) |
 | POST | `/api/webhooks/whatsapp` | Evento de mensaje/estado. Valida `X-Hub-Signature-256` (HMAC-SHA256 sobre el body crudo) → 401 si falla; dedupe por `provider_event_id`; resuelve tenant por `metadata.phone_number_id` y encola el job. Respuesta **siempre 200** para eventos válidos/duplicados/desconocidos (nunca 500) (FASE 6) |
 | POST | `/api/webhooks/stripe` | Eventos de Stripe (invoice, subscription). Firma `Stripe-Signature` + dedupe por `event id` |
+| POST | `/api/webhooks/flows/{trigger}` | Webhook público de flujos. Autenticación por `Authorization: Bearer {token}` (SHA-256 hash comparado con `config.token_hash`); tenant resuelto desde el trigger. Idempotencia por `Idempotency-Key` header (409 duplicado). Rate limit 60 req/min por IP. Despacha `StartFlowFromWebhook` job → 202 `{"status": "accepted"}` (FASE 14 U3, ADR-049) |
 
 ## 5. Errores
 

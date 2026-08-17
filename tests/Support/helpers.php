@@ -15,6 +15,7 @@ use App\Domain\Flows\Models\FlowConnection;
 use App\Domain\Flows\Models\FlowExecution;
 use App\Domain\Flows\Models\FlowNode;
 use App\Domain\Flows\Models\Trigger;
+use App\Domain\Flows\Services\TriggerValidator;
 use App\Domain\Messages\Models\Message;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Models\User;
@@ -218,17 +219,18 @@ function make_flow_graph(Flow $flow, array $nodes, array $connections): array
                 'is_start' => (bool) ($node['is_start'] ?? false),
             ]);
 
-            $model->id = $node['id'];
+            $nodeId = (string) $node['id'];
+            $model->id = $nodeId;
             $model->save();
 
-            $map[$node['id']] = $model;
+            $map[$nodeId] = $model;
         }
 
         foreach ($connections as $connection) {
             FlowConnection::query()->create([
                 'flow_id' => $flow->id,
-                'source_node_id' => $map[$connection['from']]->id,
-                'target_node_id' => $map[$connection['to']]->id,
+                'source_node_id' => $map[(string) $connection['from']]->id,
+                'target_node_id' => $map[(string) $connection['to']]->id,
                 'label' => $connection['label'] ?? null,
             ]);
         }
@@ -422,4 +424,54 @@ function make_whatsapp_setup(Tenant $tenant, array $accountAttributes = []): arr
     }
 
     return ['account' => $account, 'phone' => $phone];
+}
+
+/**
+ * Crea un trigger webhook con token_hash y lo devuelve junto con el token
+ * en claro (única vez que se devuelve).
+ *
+ * @return array{trigger: Trigger, token: string}
+ */
+function make_webhook_trigger(Flow $flow, string $conversationBy = 'conversation_id'): array
+{
+    $token = TriggerValidator::generateWebhookToken();
+    $tokenHash = TriggerValidator::hashWebhookToken($token);
+
+    $config = [
+        'conversation_by' => $conversationBy,
+        'token_hash' => $tokenHash,
+    ];
+
+    $trigger = make_trigger($flow, [
+        'type' => FlowTriggerType::Webhook->value,
+        'config' => $config,
+        'active' => true,
+    ]);
+
+    return ['trigger' => $trigger, 'token' => $token];
+}
+
+/**
+ * POST al webhook público de flujos con token Bearer.
+ */
+function post_flow_webhook(string $triggerId, string $token, array $payload = [], ?string $idempotencyKey = null): TestResponse
+{
+    $headers = [
+        'CONTENT_TYPE' => 'application/json',
+        'HTTP_AUTHORIZATION' => 'Bearer '.$token,
+    ];
+
+    if ($idempotencyKey !== null) {
+        $headers['HTTP_IDEMPOTENCY_KEY'] = $idempotencyKey;
+    }
+
+    return test()->call(
+        'POST',
+        '/api/webhooks/flows/'.$triggerId,
+        [],
+        [],
+        [],
+        $headers,
+        json_encode($payload, JSON_THROW_ON_ERROR),
+    );
 }

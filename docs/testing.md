@@ -286,6 +286,28 @@ Pirámide de tests con prioridad en lo crítico:
 - Suite total FASE 14 U2 (backend): **508 tests / 2250 assertions**; frontend **147 tests Vitest**
   (sin cambios de frontend).
 
+### Webhook público de flujos (FASE 14, UNIDAD 3, ADR-049)
+
+- **`FlowWebhookTest` (37 tests, WEBHOOK-01..20 + 17 extensiones)**: token válido dispara el
+  flujo y crea ejecución (WEBHOOK-01); token inválido → 401 (WEBHOOK-02); trigger inexistente
+  → 401 sin revelar existencia (WEBHOOK-03); trigger inactivo → 401 (WEBHOOK-04); flow no
+  publicado → 401 (WEBHOOK-05); conversación válida via conversation_id (WEBHOOK-06);
+  conversación inexistente → 400 (WEBHOOK-07); conversación de otro tenant → 400 (WEBHOOK-08);
+  tenant_id del payload es ignorado (WEBHOOK-09); Idempotency-Key evita doble ejecución
+  (WEBHOOK-10); concurrencia con misma Idempotency-Key (WEBHOOK-11); bot_paused evita ejecución
+  (WEBHOOK-12); ejecución activa no duplica (WEBHOOK-13); token nunca aparece en response
+  (WEBHOOK-14); token/token_hash jamás en logs/auditoría (WEBHOOK-15); rate limit 60/min
+  (WEBHOOK-16); payload excediendo 64KB → 400 (WEBHOOK-17); headers sensibles no registrados
+  (WEBHOOK-18); aislamiento tenant A/B (WEBHOOK-19, CRÍTICO); pipeline existente utilizado
+  (WEBHOOK-20). Extensiones: sin Authorization → 401; sin Bearer → 401; token formato inválido
+  → 401; conversation_by contact_id/phone resuelve; conversation_id faltante/no-UUID → 400;
+  contact_id de otro tenant → 400; sin Idempotency-Key genera automática; payload no JSON →
+  400; array no asociativo → 400; tenant suspendido → 401; chatbot null → 401; audit log
+  registra `webhook_triggered`; extra fields stripped; Idempotency-Key vacío como ausente;
+  segundo request sin key genera nueva ejecución.
+- Suite total FASE 14 U3 (backend): **545 tests / 2325 assertions**; frontend **147 tests Vitest**
+  (sin cambios de frontend).
+
 ### Auth
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 

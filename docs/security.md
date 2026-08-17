@@ -360,6 +360,28 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - **Aislamiento tenant**: conversación de otro tenant → no ejecuta (SCHED-11); aislamiento
   completo A/B probado (SCHED-12); conversación inexistente → no-op (SCHED-10).
 
+### Webhook público de flujos (FASE 14, UNIDAD 3, ADR-049)
+- **Endpoint público sin auth Bearer**: `POST /api/webhooks/flows/{trigger}`. Autenticación por
+  `Authorization: Bearer {token}` comparado con `config.token_hash` vía `hash_equals` (SHA-256).
+  Error siempre 401 genérico (no revela existencia del trigger).
+- **Tenant desde trigger**: el tenant se resuelve EXCLUSIVAMENTE del trigger (nunca del payload).
+  `TenantContext::setId($trigger->tenant_id)` después de encontrar el trigger con
+  `withoutTenantScope()`.
+- **Resolución de conversación**: `config.conversation_by` (`conversation_id` | `contact_id` |
+  `phone`). Cada resolución valida `tenant_id` del resultado contra el tenant del trigger.
+  Conversación de otro tenant → 400 genérico (no filtra existencia).
+- **Idempotencia**: `Idempotency-Key` header → `Cache::lock` (60s TTL). Duplicado → 409
+  `WEBHOOK_DUPLICATE`. Sin header → genera uno automático único.
+- **Rate limiting**: `throttle:flow-webhook` — 60 req/min por IP (definido en AppServiceProvider).
+- **Payload seguro**: máximo 64KB; solo campos permitidos (`conversation_id`, `contact_id`,
+  `phone`, `payload`). `tenant_id` del body se ignora. JSON inválido → 400.
+- **Job defensa en profundidad**: `StartFlowFromWebhook` revalida todas las condiciones en su
+  propio TenantContext (tenant activo, trigger activo/tipo webhook, flow publicado, chatbot,
+  bot no pausado, sin ejecución activa). 5 capas de protección: controller idempotency +
+  ShouldBeUnique + revalidación en job + conversationLock + findActive + UNIQUE parcial.
+- **Seguridad**: sin eval/exec; sin SSRF; token/hash nunca en logs/auditoría/responses;
+  `TriggerResource` redacta `token_hash`.
+
 ## 3. Comprobaciones automatizadas
 
 - PHPStan nivel alto.
@@ -387,3 +409,6 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - [ ] (FASE 14 U2) Aislamiento de schedule triggers verdes (SCHED-11/12), TenantAwareJob
         save/restore verdes (TenantContextJobTest), command no duplica (SCHED-07), lock
         liberado (SCHED-08/09).
+- [ ] (FASE 14 U3) Aislamiento webhook A/B verdes (WEBHOOK-19), token auth verdes
+        (WEBHOOK-01..05), idempotencia verdes (WEBHOOK-10/11), secretos nunca en
+        logs/audit (WEBHOOK-15/18), rate limit verdes (WEBHOOK-16).

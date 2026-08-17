@@ -301,3 +301,56 @@ objetivo completo; las diferencias marcadas abajo). Referencias: ADR-034..039.
   correctos/incorrectos, audit log.
 - `CronMatcherTest` (15 tests): dominio puro de `matchesCron()` + `cronFieldMatches()`.
 - Suite total FASE 14 U2: **508 tests / 2250 assertions**.
+
+## 13. Webhook público de flujos (FASE 14, UNIDAD 3, ADR-049)
+
+### 13.1 Endpoint
+
+- Ruta: `POST /api/webhooks/flows/{trigger}` (fuera del prefijo `v1`, público, sin Sanctum).
+- Rate limit: `throttle:flow-webhook` — 60 req/min por IP.
+- Autenticación: `Authorization: Bearer {token}` → SHA-256 hash comparado con
+  `config.token_hash` vía `hash_equals`. Error siempre 401 genérico.
+
+### 13.2 Resolución de tenant y conversación
+
+- Tenant se resuelve EXCLUSIVAMENTE del trigger: `Trigger::withoutTenantScope()->where('id', $triggerId)`.
+- `TenantContext::setId($trigger->tenant_id)` después de encontrar el trigger.
+- `config.conversation_by` define la estrategia:
+  - `conversation_id`: busca conversación por UUID dentro del tenant.
+  - `contact_id`: busca contacto por UUID, luego conversación activa del contacto.
+  - `phone`: busca contacto por teléfono normalizado, luego conversación activa.
+- Conversación de otro tenant → 400 genérico (no filtra existencia).
+
+### 13.3 Idempotencia y despacho
+
+- `Idempotency-Key` header → `Cache::lock` (60s TTL). Duplicado → 409 `WEBHOOK_DUPLICATE`.
+- Sin header → genera `auto:{uuid}` único.
+- Despacha `StartFlowFromWebhook` job → 202 `{"status": "accepted"}`.
+- Payload: máximo 64KB; solo campos permitidos (`conversation_id`, `contact_id`, `phone`,
+  `payload`). `tenant_id` del body se ignora.
+
+### 13.4 Job `StartFlowFromWebhook`
+
+- `TenantAwareJob` + `ShouldBeUnique` (por `idempotencyKey`, `uniqueFor: 60s`).
+- Revalida todas las condiciones (defensa en profundidad): tenant activo, trigger activo/tipo
+  webhook, flow publicado, chatbot, conversación del tenant, bot no pausado, sin ejecución
+  activa (`findActive`).
+- Delega a `FlowEngine::handleScheduleTrigger()` → mismo pipeline que schedule/mensajes.
+- Audit log: `flow.webhook_triggered` con `trigger_id`, `flow_id`, `conversation_id`.
+
+### 13.5 Capas de protección contra duplicación
+
+1. Controller `Cache::lock` por idempotencyKey (pre-despacho).
+2. `ShouldBeUnique` por idempotencyKey (cola).
+3. Revalidación completa en `executeInTenantContext` (defensa en profundidad).
+4. `FlowEngine::conversationLock` (runtime, dentro del motor).
+5. `FlowExecutionService::findActive` (no crea si hay ejecución activa).
+6. UNIQUE parcial en `flow_executions` (barrera DB).
+
+### 13.6 Tests
+
+- `FlowWebhookTest` (37 tests, WEBHOOK-01..20 + extensiones): todos los escenarios incluyendo
+  token auth, trigger validation, conversación resolution (conversation_id/contact_id/phone),
+  idempotencia, concurrencia, bot_paused, ejecución activa, secretos en response/logs, rate
+  limit, payload validation, aislamiento A/B, pipeline existente, audit log.
+- Suite total FASE 14 U3: **545 tests / 2325 assertions**.

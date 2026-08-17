@@ -725,6 +725,24 @@ COMPLETADO / BLOQUEADO
         (147) + `vue-tsc` + `vite build` verdes. Frontend sin cambios.
   - [x] Documentación: `decisions.md` (ADR-048), `chatbot-engine.md` (§12), `security.md`,
         `testing.md`.
-- [ ] **UNIDAD 2 — Commit local** `feat(flows): schedule trigger firing` (SIN push).
-- [ ] **UNIDAD 3** — Webhook público (endpoint + verificación de token; pendiente).
+- [x] **UNIDAD 2 — Commit local** `feat(flows): schedule trigger firing` (SIN push).
+- [x] **UNIDAD 3 — Webhook público** (endpoint + verificación de token, ADR-049):
+  - [x] `FlowWebhookController` (POST `/api/webhooks/flows/{trigger}`, público,
+        rate-limited `throttle:flow-webhook` 60/min por IP): resuelve trigger por UUID,
+        valida token SHA-256 con `hash_equals`, resuelve conversación por `conversation_by`,
+        idempotencia por `Idempotency-Key` header + `Cache::lock`, despacha job → 202.
+  - [x] `StartFlowFromWebhook` (TenantAwareJob + ShouldBeUnique por idempotencyKey): revalida
+        todo en TenantContext propio (defensa en profundidad), delega a
+        `FlowEngine::handleScheduleTrigger()`.
+  - [x] Rate limiter `flow-webhook` en `AppServiceProvider`.
+  - [x] `FlowWebhookTest` (37 tests, WEBHOOK-01..20 + 17 extensiones): token válido/inválido,
+        trigger inexistente/inactivo/flow no publicado, conversación válida/inexistente/de otro
+        tenant, payload hackeado, idempotencia, concurrencia, bot_paused, ejecución activa,
+        secretos en response/logs, rate limit, payload grande/JSON inválido, aislamiento A/B,
+        pipeline existente, conversation_by contact_id/phone, audit log.
+  - [x] Gates: `php artisan test` (545/2325 assertions) + Pint + PHPStan 0 errores (1G) +
+        `vue-tsc` + `vite build` verdes. Frontend sin cambios.
+  - [x] Documentación: `decisions.md` (ADR-049), `chatbot-engine.md` (§13), `security.md`,
+        `testing.md`, `api.md`.
+- [ ] **UNIDAD 3 — Commit local** `feat(flows): public webhook trigger endpoint` (SIN push).
 - [ ] **UNIDAD 4** — Ejecución por etiqueta (ver FASE 20; pendiente).
