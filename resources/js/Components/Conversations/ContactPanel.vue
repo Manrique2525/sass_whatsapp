@@ -3,6 +3,8 @@ import { computed } from 'vue';
 import {
     CONVERSATION_STATUS_META,
     formatLastInteraction,
+    isHumanActive,
+    isManualPause,
     type Conversation,
 } from '@/features/conversations/conversationUtils';
 
@@ -11,6 +13,29 @@ const props = defineProps<{
 }>();
 
 const statusMeta = computed(() => CONVERSATION_STATUS_META[props.conversation.status]);
+
+const humanActive = computed(() => isHumanActive(props.conversation));
+const manualPause = computed(() => isManualPause(props.conversation));
+
+const handoffRequestedAt = computed(() => {
+    if (props.conversation.handoff_requested_at === null) {
+        return null;
+    }
+
+    const date = new Date(props.conversation.handoff_requested_at);
+
+    if (Number.isNaN(date.getTime())) {
+        return props.conversation.handoff_requested_at;
+    }
+
+    return date.toLocaleString('es-AR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+});
 
 const contextItems = computed<Array<{ key: string; value: string }>>(() => {
     const context = props.conversation.context;
@@ -51,6 +76,21 @@ const contextItems = computed<Array<{ key: string; value: string }>>(() => {
                 <dd class="text-zinc-700">
                     {{ conversation.agent?.name ?? 'Sin asignar' }}
                 </dd>
+            </div>
+
+            <div>
+                <dt class="text-xs uppercase text-zinc-400">Atencion</dt>
+                <dd class="text-zinc-700">
+                    <span v-if="humanActive" class="text-blue-700 font-medium">Humano</span>
+                    <span v-else-if="manualPause" class="text-amber-700 font-medium">Bot pausado (manual)</span>
+                    <span v-else-if="conversation.bot_paused" class="text-amber-700 font-medium">Bot pausado</span>
+                    <span v-else class="text-emerald-700 font-medium">Bot activo</span>
+                </dd>
+            </div>
+
+            <div v-if="handoffRequestedAt !== null">
+                <dt class="text-xs uppercase text-zinc-400">Handoff solicitado</dt>
+                <dd class="text-zinc-700">{{ handoffRequestedAt }}</dd>
             </div>
 
             <div>

@@ -31,6 +31,7 @@ final class ConversationIndexRequest extends FormRequest
             'search' => ['nullable', 'string', 'max:255'],
             'status' => ['nullable', 'string', new Enum(ConversationStatus::class)],
             'agent_id' => ['nullable', 'integer'],
+            'scope' => ['nullable', 'string', 'in:all,mine,unassigned'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ];
     }

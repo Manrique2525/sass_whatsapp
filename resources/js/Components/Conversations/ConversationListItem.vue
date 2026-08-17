@@ -2,6 +2,8 @@
 import { computed } from 'vue';
 import {
     CONVERSATION_STATUS_META,
+    isHumanActive,
+    isUnassignedHandoff,
     type Conversation,
 } from '@/features/conversations/conversationUtils';
 import { formatMessageTimestamp, isOutbound, messagePreview } from '@/features/messages/messageUtils';
@@ -40,14 +42,18 @@ const time = computed<string>(() => {
 
 const statusMeta = computed(() => CONVERSATION_STATUS_META[props.conversation.status]);
 
-const botPaused = computed(() => props.conversation.bot_paused);
+const unassignedHandoff = computed(() => isUnassignedHandoff(props.conversation));
+const humanActive = computed(() => isHumanActive(props.conversation));
 </script>
 
 <template>
     <button
         type="button"
         class="flex w-full items-start gap-3 border-b border-zinc-100 px-4 py-3 text-left transition-colors"
-        :class="active ? 'bg-emerald-50/60' : 'hover:bg-zinc-50'"
+        :class="[
+            active ? 'bg-emerald-50/60' : 'hover:bg-zinc-50',
+            unassignedHandoff ? 'border-l-2 border-l-amber-400' : '',
+        ]"
         @click="$emit('select')"
     >
         <span
@@ -70,10 +76,16 @@ const botPaused = computed(() => props.conversation.bot_paused);
                 </span>
                 <span class="flex shrink-0 items-center gap-1">
                     <span
-                        v-if="botPaused"
+                        v-if="unassignedHandoff"
                         class="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
                     >
-                        Bot pausado
+                        Requiere agente
+                    </span>
+                    <span
+                        v-else-if="humanActive"
+                        class="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700"
+                    >
+                        {{ conversation.agent?.name ?? 'Humano' }}
                     </span>
                     <span
                         class="rounded-full px-1.5 py-0.5 text-[10px] font-medium"

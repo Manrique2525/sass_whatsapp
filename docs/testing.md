@@ -159,6 +159,29 @@ Pirámide de tests con prioridad en lo crítico:
   `last_message` (FRT-10). 14 tests (incluye inboxChannelTypes).
 - Totales U4: 8 + 13 + 14 = 35 tests nuevos.
 
+### Inbox Scope/Buckets + Handoff UX (FASE 15 U5, 42 tests)
+- **Backend scope/buckets (INBOX-01..08)** en `InboxScopeTest`: scope `all` retorna todas las
+  conversaciones del tenant con counts correctos (INBOX-01); scope `mine` retorna solo las
+  asignadas al usuario autenticado (INBOX-02); scope `unassigned` retorna solo conversaciones
+  sin agente con `handoff_requested_at` no nulo (INBOX-03); counts reflejan el estado real
+  independientemente del scope activo (INBOX-04); tenant A y B tienen counts aislados (INBOX-05);
+  `agent_id` filtra correctamente (INBOX-06); membresía inactiva deniega acceso (INBOX-07);
+  paginación funciona con scope y counts se mantienen consistentes (INBOX-08). 8 tests.
+- **Frontend utility (UI-01..10)** en `conversationUtils.test.ts`: `isUnassignedHandoff` (UI-01..03),
+  `isHumanActive` (UI-04..05), `isManualPause` (UI-06..08), `buildConversationQuery` scope
+  (UI-09..10). 10 tests.
+- **Frontend ChatHeader (UI-11..20)** en `ChatHeader.test.ts`: claim button visibility (UI-11..12),
+  claim event emit (UI-13), handoff banner (UI-14), bot/human status labels (UI-15..18),
+  assign/transfer dropdown self-exclusion (UI-19), transfer label (UI-20). 10 tests.
+- **Frontend ConversationListItem (UI-21..24)** en `ConversationListItem.test.ts`: "Requiere agente"
+  label (UI-21), human agent name (UI-22), amber left border (UI-23..24). 4 tests.
+- **Frontend ContactPanel (UI-HP-01..05)** en `ContactPanel.test.ts`: attention status labels
+  (UI-HP-01..03), handoff_requested_at display (UI-HP-04..05). 5 tests.
+- **Frontend MessageComposer (1 test actualizado)**: draft preserve on error (clear only when
+  `sending` goes false). 1 test actualizado.
+- Totales U5: 8 + 10 + 10 + 4 + 5 = 37 tests nuevos; suite total FASE 15 U5: **660 tests
+  backend / 2740 assertions**; frontend **194 tests Vitest**.
+
 ### Chatbot engine (crítico)
 - Secuencia lineal, ramas condition, question→variable, delay, human, end.
 - Loop detection / límite de pasos.

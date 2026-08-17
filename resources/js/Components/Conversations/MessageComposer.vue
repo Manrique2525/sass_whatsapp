@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 
 const props = defineProps<{
     sending: boolean;
@@ -11,6 +11,7 @@ const emit = defineEmits<{
 }>();
 
 const text = ref('');
+const textBeforeSend = ref('');
 
 function submit(): void {
     const body = text.value.trim();
@@ -19,9 +20,23 @@ function submit(): void {
         return;
     }
 
+    textBeforeSend.value = text.value;
     emit('send', body);
-    text.value = '';
 }
+
+function clearDraft(): void {
+    text.value = '';
+    textBeforeSend.value = '';
+}
+
+watch(
+    () => props.sending,
+    (wasSending, prev) => {
+        if (prev === true && wasSending === false) {
+            clearDraft();
+        }
+    },
+);
 
 function onEnter(event: KeyboardEvent): void {
     if (!event.shiftKey) {

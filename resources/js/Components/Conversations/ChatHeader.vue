@@ -4,6 +4,9 @@ import {
     canClose,
     canReopen,
     CONVERSATION_STATUS_META,
+    isHumanActive,
+    isManualPause,
+    isUnassignedHandoff,
     type Conversation,
     type TenantMember,
 } from '@/features/conversations/conversationUtils';
@@ -13,16 +16,30 @@ const props = defineProps<{
     members: TenantMember[];
     canManage: boolean;
     canAssign: boolean;
+    canClaim: boolean;
+    currentUserId: number;
     acting: boolean;
 }>();
 
 const emit = defineEmits<{
     assign: [agentId: number];
+    claim: [];
     action: [action: 'close' | 'reopen' | 'pause_bot' | 'resume_bot'];
     back: [];
 }>();
 
 const statusMeta = computed(() => CONVERSATION_STATUS_META[props.conversation.status]);
+
+const showClaimButton = computed(() => isUnassignedHandoff(props.conversation) && props.canClaim);
+
+const humanActive = computed(() => isHumanActive(props.conversation));
+const manualPause = computed(() => isManualPause(props.conversation));
+
+const availableMembers = computed(() =>
+    props.members.filter((m) => m.user.id !== props.currentUserId),
+);
+
+const isCurrentlyAssignedToSelf = computed(() => props.conversation.agent?.id === props.currentUserId);
 
 const selectedAgent = ref<string>(props.conversation.agent?.id !== undefined ? String(props.conversation.agent.id) : '');
 
@@ -57,74 +74,115 @@ const closeAction = computed<'close' | 'reopen' | null>(() => {
 </script>
 
 <template>
-    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-white px-4 py-3">
-        <div class="flex min-w-0 items-center gap-3">
-            <button
-                type="button"
-                class="rounded-full bg-zinc-100 px-2 py-1 text-xs text-zinc-600 lg:hidden"
-                @click="$emit('back')"
-            >
-                Volver
-            </button>
+    <div class="border-b border-zinc-200 bg-white">
+        <div class="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+            <div class="flex min-w-0 items-center gap-3">
+                <button
+                    type="button"
+                    class="rounded-full bg-zinc-100 px-2 py-1 text-xs text-zinc-600 lg:hidden"
+                    @click="$emit('back')"
+                >
+                    Volver
+                </button>
 
-            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-800">
-                {{ (conversation.contact?.name ?? '?').charAt(0).toUpperCase() }}
-            </span>
+                <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-800">
+                    {{ (conversation.contact?.name ?? '?').charAt(0).toUpperCase() }}
+                </span>
 
-            <div class="min-w-0">
-                <p class="truncate text-sm font-semibold text-zinc-900">
-                    {{ conversation.contact?.name ?? conversation.contact?.phone ?? 'Sin nombre' }}
-                </p>
-                <p v-if="conversation.contact?.phone" class="truncate text-xs text-zinc-500">
-                    {{ conversation.contact.phone }}
-                </p>
+                <div class="min-w-0">
+                    <p class="truncate text-sm font-semibold text-zinc-900">
+                        {{ conversation.contact?.name ?? conversation.contact?.phone ?? 'Sin nombre' }}
+                    </p>
+                    <p v-if="conversation.contact?.phone" class="truncate text-xs text-zinc-500">
+                        {{ conversation.contact.phone }}
+                    </p>
+                </div>
+
+                <span class="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium" :class="statusMeta.badge">
+                    {{ conversation.status_label }}
+                </span>
+
+                <span
+                    v-if="humanActive && conversation.agent !== null"
+                    class="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700"
+                >
+                    {{ isCurrentlyAssignedToSelf ? 'Atencion humana (vos)' : `Atencion humana (${conversation.agent?.name})` }}
+                </span>
+                <span
+                    v-else-if="manualPause"
+                    class="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700"
+                >
+                    Bot pausado manualmente
+                </span>
+                <span
+                    v-else-if="conversation.bot_paused"
+                    class="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700"
+                >
+                    Bot pausado
+                </span>
+                <span
+                    v-else
+                    class="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700"
+                >
+                    Bot activo
+                </span>
             </div>
 
-            <span class="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium" :class="statusMeta.badge">
-                {{ conversation.status_label }}
-            </span>
-            <span
-                v-if="conversation.bot_paused"
-                class="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700"
-            >
-                Bot pausado
-            </span>
+            <div class="flex items-center gap-2">
+                <button
+                    v-if="showClaimButton"
+                    type="button"
+                    class="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                    :disabled="acting"
+                    @click="$emit('claim')"
+                >
+                    Reclamar
+                </button>
+
+                <select
+                    v-if="props.canAssign && availableMembers.length > 0"
+                    class="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-700"
+                    :disabled="props.acting"
+                    v-model="selectedAgent"
+                    @change="onAssignChange"
+                >
+                    <option value="" disabled>
+                        {{ conversation.agent !== null ? 'Transferir a...' : 'Asignar a...' }}
+                    </option>
+                    <option v-for="member in availableMembers" :key="member.id" :value="member.user.id">
+                        {{ member.user.name }}
+                    </option>
+                </select>
+
+                <button
+                    v-if="props.canManage && closeAction !== null"
+                    type="button"
+                    class="rounded-md border border-zinc-300 px-3 py-1 text-xs text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
+                    :disabled="props.acting"
+                    @click="$emit('action', closeAction)"
+                >
+                    {{ closeAction === 'close' ? 'Cerrar' : 'Reabrir' }}
+                </button>
+
+                <button
+                    v-if="props.canManage"
+                    type="button"
+                    class="rounded-md border px-3 py-1 text-xs hover:bg-zinc-50 disabled:opacity-50"
+                    :class="conversation.bot_paused ? 'border-emerald-300 text-emerald-700' : 'border-amber-300 text-amber-700'"
+                    :disabled="props.acting"
+                    @click="$emit('action', conversation.bot_paused ? 'resume_bot' : 'pause_bot')"
+                >
+                    {{ conversation.bot_paused ? 'Reanudar bot' : 'Pausar bot' }}
+                </button>
+            </div>
         </div>
 
-        <div class="flex items-center gap-2">
-            <select
-                v-if="props.canAssign"
-                class="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-700"
-                :disabled="props.acting"
-                v-model="selectedAgent"
-                @change="onAssignChange"
-            >
-                <option value="" disabled>Asignar a...</option>
-                <option v-for="member in props.members" :key="member.id" :value="member.user.id">
-                    {{ member.user.name }}
-                </option>
-            </select>
-
-            <button
-                v-if="props.canManage && closeAction !== null"
-                type="button"
-                class="rounded-md border border-zinc-300 px-3 py-1 text-xs text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
-                :disabled="props.acting"
-                @click="$emit('action', closeAction)"
-            >
-                {{ closeAction === 'close' ? 'Cerrar' : 'Reabrir' }}
-            </button>
-
-            <button
-                v-if="props.canManage"
-                type="button"
-                class="rounded-md border px-3 py-1 text-xs hover:bg-zinc-50 disabled:opacity-50"
-                :class="conversation.bot_paused ? 'border-emerald-300 text-emerald-700' : 'border-amber-300 text-amber-700'"
-                :disabled="props.acting"
-                @click="$emit('action', conversation.bot_paused ? 'resume_bot' : 'pause_bot')"
-            >
-                {{ conversation.bot_paused ? 'Reanudar bot' : 'Pausar bot' }}
-            </button>
+        <div
+            v-if="showClaimButton"
+            class="border-t border-blue-200 bg-blue-50 px-4 py-2 text-xs text-blue-700"
+        >
+            Esta conversacion requiere atencion humana. Hace click en
+            <strong>Reclamar</strong> para tomar el control.
         </div>
     </div>
 </template>

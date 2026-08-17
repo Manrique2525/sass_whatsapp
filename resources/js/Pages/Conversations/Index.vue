@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { usePage } from '@inertiajs/vue3';
+import type { AuthUser } from '@/types/inertia';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import {
     buildConversationQuery,
     extractErrorMessage,
+    isUnassignedHandoff,
     type Conversation,
     type ConversationFilters as ConversationFilterOptions,
+    type ConversationInboxCounts,
+    type InboxScope,
     type TenantMember,
 } from '@/features/conversations/conversationUtils';
 import type { Message, MessagePagination } from '@/features/messages/messageTypes';
@@ -32,14 +36,16 @@ interface ContactOption {
 }
 
 const page = usePage();
-const user = page.props.auth.user;
+const user = page.props.auth.user as AuthUser | null;
 const tenantId = page.props.auth.current_tenant_id;
+const currentUserId = computed(() => user?.id ?? 0);
 const permissions = computed(() => page.props.auth.permissions);
 
 const can = (permission: string): boolean => permissions.value.includes(permission);
 const canView = computed(() => can('conversations.view'));
 const canManage = computed(() => can('conversations.manage'));
 const canAssign = computed(() => can('conversations.assign'));
+const canClaim = computed(() => can('conversations.claim'));
 const canSeeUsers = computed(() => can('users.view'));
 const canSend = computed(() => can('messages.send'));
 
@@ -55,8 +61,10 @@ const meta = ref<{ current_page: number; last_page: number; per_page: number; to
     per_page: 30,
     total: 0,
 });
+const counts = ref<ConversationInboxCounts>({ all: 0, mine: 0, unassigned: 0 });
 const members = ref<TenantMember[]>([]);
 const filters = ref<ConversationFilterOptions>({ search: '', status: '', agent_id: '' });
+const scope = ref<InboxScope>('all');
 const pageNumber = ref(1);
 const listLoadingMore = ref(false);
 
@@ -86,6 +94,12 @@ const canWrite = computed(
 );
 
 let pollTimer: number | null = null;
+
+const scopeTabs: Array<{ key: InboxScope; label: string }> = [
+    { key: 'all', label: 'Todas' },
+    { key: 'mine', label: 'Mias' },
+    { key: 'unassigned', label: 'Sin asignar' },
+];
 
 const sortConversations = (): void => {
     conversations.value.sort((a, b) => {
@@ -119,6 +133,32 @@ const updateConversationRow = (fresh: Conversation): void => {
     sortConversations();
 };
 
+const removeConversationFromList = (conversationId: string): void => {
+    conversations.value = conversations.value.filter((c) => c.id !== conversationId);
+
+    if (detail.value?.id === conversationId) {
+        view.value = 'list';
+        detail.value = null;
+        openId.value = null;
+    }
+};
+
+const shouldShowInScope = (conversation: Conversation): boolean => {
+    if (scope.value === 'all') {
+        return true;
+    }
+
+    if (scope.value === 'mine') {
+        return conversation.agent?.id === currentUserId.value;
+    }
+
+    if (scope.value === 'unassigned') {
+        return isUnassignedHandoff(conversation);
+    }
+
+    return true;
+};
+
 const loadConversations = async (silent = false): Promise<void> => {
     if (!tenantId) {
         return;
@@ -134,6 +174,7 @@ const loadConversations = async (silent = false): Promise<void> => {
         const res = await window.axios.get(`/api/v1/tenants/${tenantId}/conversations`, {
             params: buildConversationQuery({
                 ...filters.value,
+                scope: scope.value,
                 page: pageNumber.value,
                 perPage: 30,
             }),
@@ -146,6 +187,10 @@ const loadConversations = async (silent = false): Promise<void> => {
         }
 
         meta.value = res.data.meta;
+
+        if (res.data.counts) {
+            counts.value = res.data.counts as ConversationInboxCounts;
+        }
     } catch (err) {
         error.value = extractErrorMessage(err, 'No se pudieron cargar las conversaciones.');
     } finally {
@@ -169,6 +214,12 @@ const loadMembers = async (): Promise<void> => {
     } catch {
         members.value = [];
     }
+};
+
+const changeScope = (newScope: InboxScope): void => {
+    scope.value = newScope;
+    pageNumber.value = 1;
+    loadConversations();
 };
 
 const applyFilters = (): void => {
@@ -315,6 +366,31 @@ const sendMessage = async (body: string): Promise<void> => {
     }
 };
 
+const onClaim = async (): Promise<void> => {
+    const conversation = detail.value;
+
+    if (!tenantId || conversation === null || acting.value) {
+        return;
+    }
+
+    acting.value = true;
+    error.value = null;
+    success.value = null;
+
+    try {
+        const res = await window.axios.post(
+            `/api/v1/tenants/${tenantId}/conversations/${conversation.id}/claim`,
+        );
+
+        success.value = 'Conversación reclamada.';
+        updateConversationRow(res.data.conversation as Conversation);
+    } catch (err) {
+        error.value = extractErrorMessage(err, 'No se pudo reclamar la conversación.');
+    } finally {
+        acting.value = false;
+    }
+};
+
 const onAssign = async (agentId: number): Promise<void> => {
     const conversation = detail.value;
 
@@ -419,35 +495,42 @@ const createConversation = async (): Promise<void> => {
     }
 };
 
-useConversationChannel(
-    () => tenantId,
-    () => openId.value,
-    {
-        onMessageCreated: (message) => handleIncomingMessage(message),
-        onMessageStatusUpdated: (message) => {
-            messages.value = applyMessageUpdate(messages.value, message);
-        },
-        onConversationUpdated: (conversation) => updateConversationRow(conversation),
-    },
-);
-
 /**
- * Upsert base para eventos tenant-wide del Inbox (U4).
- * Actualiza la conversación existente por id o la inserta si no existe.
- * La lógica completa de filtros pertenece a U5; aquí solo garantizamos
- * que la lista no tenga duplicados y que la conversación esté presente.
+ * Upsert de eventos tenant-wide del Inbox (U4 + U5).
+ *
+ * - handoff_requested: upsert si corresponde al scope activo.
+ * - assigned/claimed/transferred: upsert siempre (puede cambiar de bucket).
+ * - bot_resumed/conversation_updated: upsert si la conversación ya está en la lista.
+ * - Si la conversación ya no pertenece al scope activo, se elimina de la lista.
  */
-const upsertInboxConversation = (conversation: Conversation, _kind: InboxConversationChangeKind, _eventId: string): void => {
-    const index = conversations.value.findIndex((c) => c.id === conversation.id);
+const upsertInboxConversation = (conversation: Conversation, kind: InboxConversationChangeKind, _eventId: string): void => {
+    const existingIndex = conversations.value.findIndex((c) => c.id === conversation.id);
+    const existsInList = existingIndex !== -1;
 
-    if (index !== -1) {
-        const existing = conversations.value[index];
-        conversations.value[index] = {
-            ...conversation,
-            last_message: conversation.last_message ?? existing.last_message,
-        };
-    } else {
-        conversations.value.unshift(conversation);
+    if (kind === 'handoff_requested' || kind === 'claimed' || kind === 'assigned' || kind === 'transferred') {
+        if (shouldShowInScope(conversation)) {
+            if (existsInList) {
+                const existing = conversations.value[existingIndex];
+                conversations.value[existingIndex] = {
+                    ...conversation,
+                    last_message: conversation.last_message ?? existing.last_message,
+                };
+            } else {
+                conversations.value.unshift(conversation);
+            }
+        } else if (existsInList) {
+            removeConversationFromList(conversation.id);
+        }
+    } else if (existsInList) {
+        if (shouldShowInScope(conversation)) {
+            const existing = conversations.value[existingIndex];
+            conversations.value[existingIndex] = {
+                ...conversation,
+                last_message: conversation.last_message ?? existing.last_message,
+            };
+        } else {
+            removeConversationFromList(conversation.id);
+        }
     }
 
     if (detail.value?.id === conversation.id) {
@@ -459,6 +542,18 @@ const upsertInboxConversation = (conversation: Conversation, _kind: InboxConvers
 
     sortConversations();
 };
+
+useConversationChannel(
+    () => tenantId,
+    () => openId.value,
+    {
+        onMessageCreated: (message) => handleIncomingMessage(message),
+        onMessageStatusUpdated: (message) => {
+            messages.value = applyMessageUpdate(messages.value, message);
+        },
+        onConversationUpdated: (conversation) => updateConversationRow(conversation),
+    },
+);
 
 useInboxChannel(
     () => tenantId,
@@ -523,6 +618,29 @@ onBeforeUnmount(() => {
                         </button>
                     </div>
 
+                    <div class="flex border-b border-zinc-200 bg-white" role="tablist">
+                        <button
+                            v-for="tab in scopeTabs"
+                            :key="tab.key"
+                            type="button"
+                            role="tab"
+                            :aria-selected="scope === tab.key"
+                            class="flex-1 px-3 py-2 text-center text-xs font-medium transition-colors"
+                            :class="scope === tab.key
+                                ? 'border-b-2 border-emerald-600 text-emerald-700'
+                                : 'text-zinc-500 hover:text-zinc-700'"
+                            @click="changeScope(tab.key)"
+                        >
+                            {{ tab.label }}
+                            <span
+                                v-if="counts[tab.key] > 0"
+                                class="ml-1 inline-flex items-center justify-center rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-600"
+                            >
+                                {{ counts[tab.key] }}
+                            </span>
+                        </button>
+                    </div>
+
                     <ConversationFilters
                         v-model="filters"
                         :members="members"
@@ -537,7 +655,7 @@ onBeforeUnmount(() => {
                             v-else-if="conversations.length === 0"
                             class="px-4 py-6 text-center text-sm text-zinc-500"
                         >
-                            No hay conversaciones que coincidan con la búsqueda.
+                            No hay conversaciones que coincidan con la busqueda.
                         </div>
 
                         <ConversationListItem
@@ -556,7 +674,7 @@ onBeforeUnmount(() => {
                             :disabled="listLoadingMore"
                             @click="loadMoreList"
                         >
-                            {{ listLoadingMore ? 'Cargando...' : 'Cargar más' }}
+                            {{ listLoadingMore ? 'Cargando...' : 'Cargar mas' }}
                         </button>
                     </div>
                 </section>
@@ -571,8 +689,11 @@ onBeforeUnmount(() => {
                             :members="members"
                             :can-manage="canManage"
                             :can-assign="canAssign"
+                            :can-claim="canClaim"
+                            :current-user-id="currentUserId"
                             :acting="acting"
                             @assign="onAssign"
+                            @claim="onClaim"
                             @action="onAction"
                             @back="closeChat"
                         />
@@ -603,13 +724,13 @@ onBeforeUnmount(() => {
                             v-else
                             class="border-t border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-400"
                         >
-                            {{ canSend ? 'La conversación está archivada.' : 'No tienes permiso para enviar mensajes.' }}
+                            {{ canSend ? 'La conversacion esta archivada.' : 'No tienes permiso para enviar mensajes.' }}
                         </div>
                     </template>
 
                     <div v-else class="flex flex-1 flex-col items-center justify-center gap-2 text-center text-zinc-400">
                         <p class="text-sm font-medium">Inbox de conversaciones</p>
-                        <p class="text-xs">Elegí una conversación para ver el historial de mensajes.</p>
+                        <p class="text-xs">Elegi una conversacion para ver el historial de mensajes.</p>
                     </div>
                 </section>
 
@@ -626,7 +747,7 @@ onBeforeUnmount(() => {
             @click.self="showCreateModal = false"
         >
             <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-lg">
-                <h3 class="text-lg font-semibold text-zinc-900">Nueva conversación</h3>
+                <h3 class="text-lg font-semibold text-zinc-900">Nueva conversacion</h3>
                 <form class="mt-4 space-y-4" @submit.prevent="createConversation">
                     <div>
                         <label for="f-contact" class="mb-1 block text-sm font-medium text-zinc-700">Contacto *</label>
@@ -637,7 +758,7 @@ onBeforeUnmount(() => {
                         >
                             <option value="">Elegir contacto...</option>
                             <option v-for="contact in contacts" :key="contact.id" :value="contact.id">
-                                {{ contact.name }} · {{ contact.phone }}
+                                {{ contact.name }} - {{ contact.phone }}
                             </option>
                         </select>
                     </div>

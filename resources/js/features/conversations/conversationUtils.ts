@@ -1,5 +1,7 @@
 export type ConversationStatus = 'open' | 'pending' | 'resolved' | 'archived';
 
+export type InboxScope = 'all' | 'mine' | 'unassigned';
+
 import type { Message } from '@/features/messages/messageTypes';
 
 export interface ConversationContact {
@@ -53,8 +55,15 @@ export interface ConversationFilters {
     search?: string;
     status?: ConversationStatus | '';
     agent_id?: number | '';
+    scope?: InboxScope;
     page?: number;
     perPage?: number;
+}
+
+export interface ConversationInboxCounts {
+    all: number;
+    mine: number;
+    unassigned: number;
 }
 
 export const CONVERSATION_STATUS_META: Record<ConversationStatus, { label: string; badge: string; dot: string }> = {
@@ -81,6 +90,10 @@ export function buildConversationQuery(filters: ConversationFilters): Record<str
 
     if (filters.agent_id !== undefined && filters.agent_id !== '') {
         params.agent_id = String(filters.agent_id);
+    }
+
+    if (filters.scope !== undefined && filters.scope !== 'all') {
+        params.scope = filters.scope;
     }
 
     if (filters.page !== undefined && filters.page > 1) {
@@ -152,4 +165,25 @@ export function extractErrorMessage(err: unknown, fallback: string): string {
     }
 
     return fallback;
+}
+
+/**
+ * ¿La conversación está en cola de handoff (sin agente)?
+ */
+export function isUnassignedHandoff(c: Conversation): boolean {
+    return c.handoff_requested_at !== null && c.agent === null;
+}
+
+/**
+ * ¿La conversación tiene atención humana activa?
+ */
+export function isHumanActive(c: Conversation): boolean {
+    return c.bot_paused && c.handoff_requested_at !== null;
+}
+
+/**
+ * ¿La conversación tiene bot pausado manualmente (sin handoff)?
+ */
+export function isManualPause(c: Conversation): boolean {
+    return c.bot_paused && c.handoff_requested_at === null;
 }

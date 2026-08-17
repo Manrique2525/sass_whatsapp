@@ -10,10 +10,12 @@ use App\Domain\Conversations\Exceptions\ConversationAssignmentConflictException;
 use App\Domain\Conversations\Exceptions\ConversationContactNotFoundException;
 use App\Domain\Conversations\Exceptions\ConversationInvalidStateException;
 use App\Domain\Conversations\Exceptions\ConversationNotFoundException;
+use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Tenants\Exceptions\PermissionDeniedException;
 use App\Domain\Tenants\Exceptions\TenantMembershipException;
 use App\Domain\Tenants\Exceptions\TenantNotActiveException;
 use App\Domain\Tenants\Models\Tenant;
+use App\Domain\Users\Models\User;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Conversation\AssignConversationRequest;
 use App\Http\Requests\Conversation\ClaimConversationRequest;
@@ -50,6 +52,8 @@ final class ConversationController extends Controller
             return $this->tenantNotActive();
         }
 
+        $counts = $this->inboxCounts($request->user(), $tenant);
+
         return response()->json([
             'conversations' => ConversationResource::collection($paginator->items()),
             'meta' => [
@@ -58,7 +62,27 @@ final class ConversationController extends Controller
                 'per_page' => $paginator->perPage(),
                 'total' => $paginator->total(),
             ],
+            'counts' => $counts,
         ]);
+    }
+
+    /**
+     * Contadores de buckets para el inbox (3 COUNTs tenant-scoped).
+     *
+     * @return array{all: int, mine: int, unassigned: int}
+     */
+    private function inboxCounts(User $user, Tenant $tenant): array
+    {
+        $base = Conversation::query()->withoutTenantScope()
+            ->where('tenant_id', $tenant->id);
+
+        return [
+            'all' => (clone $base)->count(),
+            'mine' => (clone $base)->where('agent_id', $user->id)->count(),
+            'unassigned' => (clone $base)->whereNull('agent_id')
+                ->whereNotNull('handoff_requested_at')
+                ->count(),
+        ];
     }
 
     public function store(StoreConversationRequest $request, Tenant $tenant): JsonResponse

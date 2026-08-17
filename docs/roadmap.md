@@ -1,7 +1,7 @@
 # Roadmap
 
-Estado general: **FASE 15 EN PROGRESO** (Transferencia a humano). UNIDADES 1-3 completadas
-localmente; UNIDADES 4-6 pendientes de autorización explícita.
+Estado general: **FASE 15 EN PROGRESO** (Transferencia a humano). UNIDADES 1-5 completadas
+localmente; UNIDAD 6 pendiente.
 
 ## Fases
 
@@ -797,5 +797,15 @@ COMPLETADO / BLOQUEADO
       `private()` en vez de `channel()`. Emisores en `HumanHandoffService`,
       `ConversationService`, `MessageService`, `FlowEngine`. Backend 652/2708, Vitest 165,
       Pint PASS, PHPStan 0, vue-tsc PASS, Vite build PASS, Docker PASS, health PASS.
-- [ ] **UNIDAD 5** — Inbox UX (NO iniciada).
+- [x] **UNIDAD 5** — Inbox UX (scope/buckets/counts + handoff UI + claim + composer fix).
+      Backend: scope `all|mine|unassigned` en `ConversationIndexRequest` + `ConversationService::index()`;
+      `inboxCounts()` con 3 COUNTs tenant-scoped en controller. Tests INBOX-01..08.
+      Frontend: bucket tabs (Todas/Mias/Sin asignar) con counters, `isUnassignedHandoff()`,
+      `isHumanActive()`, `isManualPause()` helpers. ChatHeader: claim button + banner, bot/human
+      status labels, self-exclusion from assign/transfer dropdown. ConversationListItem: handoff
+      indicator (amber left border + "Requiere agente" / human agent name). ContactPanel: attention
+      status + handoff_requested_at display. MessageComposer: draft preserve on error (clear only
+      when `sending` goes false). Realtime integration: scope-aware upsert/remove + counter updates.
+      Tests: INBOX-01..08 (backend), UI-01..24 + UI-HP-01..05 (frontend). Backend 660/2740,
+      Vitest 194, Pint PASS, PHPStan 0 (256M), vue-tsc PASS, Vite build PASS.
 - [ ] **UNIDAD 6** — Hardening/cierre (NO iniciada).

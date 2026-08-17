@@ -40,6 +40,8 @@ describe('conversation member user id contract', () => {
                 members: [member],
                 canManage: true,
                 canAssign: true,
+                canClaim: true,
+                currentUserId: 99,
                 acting: false,
             },
         });

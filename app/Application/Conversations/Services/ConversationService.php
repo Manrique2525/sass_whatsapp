@@ -64,7 +64,7 @@ final class ConversationService
     ) {}
 
     /**
-     * @param  array{search?: string, status?: string, agent_id?: int|string, per_page?: int}  $filters
+     * @param  array{search?: string, status?: string, agent_id?: int|string, scope?: string, per_page?: int}  $filters
      * @return LengthAwarePaginator<int, Conversation>
      */
     public function index(User $user, Tenant $tenant, array $filters): LengthAwarePaginator
@@ -79,6 +79,16 @@ final class ConversationService
 
         if (isset($filters['agent_id']) && $filters['agent_id'] !== '') {
             $query->where('agent_id', $filters['agent_id']);
+        }
+
+        // Scope: all (default), mine, unassigned.
+        $scope = $filters['scope'] ?? 'all';
+
+        if ($scope === 'mine') {
+            $query->where('agent_id', $user->id);
+        } elseif ($scope === 'unassigned') {
+            $query->whereNull('agent_id')
+                ->whereNotNull('handoff_requested_at');
         }
 
         if (isset($filters['search']) && $filters['search'] !== '') {
