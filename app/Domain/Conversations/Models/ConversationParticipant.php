@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domain\Conversations\Models;
 
+use App\Domain\Tenants\Models\Tenant;
+use App\Domain\Tenants\Traits\BelongsToTenant;
 use App\Domain\Users\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,6 +19,7 @@ use Illuminate\Support\Carbon;
  * `left_at` y se da de alta el nuevo participante.
  *
  * @property int $id
+ * @property string $tenant_id
  * @property string $conversation_id
  * @property int $user_id
  * @property string $role
@@ -25,6 +28,8 @@ use Illuminate\Support\Carbon;
  */
 class ConversationParticipant extends Model
 {
+    use BelongsToTenant;
+
     protected $fillable = [
         'conversation_id',
         'user_id',
@@ -36,10 +41,19 @@ class ConversationParticipant extends Model
     protected function casts(): array
     {
         return [
+            'tenant_id' => 'string',
             'conversation_id' => 'string',
             'joined_at' => 'datetime',
             'left_at' => 'datetime',
         ];
+    }
+
+    /**
+     * @return BelongsTo<Tenant, $this>
+     */
+    public function tenant(): BelongsTo
+    {
+        return $this->belongsTo(Tenant::class);
     }
 
     /**

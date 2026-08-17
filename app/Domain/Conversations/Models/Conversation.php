@@ -36,6 +36,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $agent_id
  * @property bool $auto_assigned
  * @property bool $bot_paused
+ * @property Carbon|null $handoff_requested_at
  * @property array<string, mixed>|null $context
  * @property string|null $flow_execution_id
  * @property Carbon $created_at
@@ -68,6 +69,7 @@ final class Conversation extends Model
             'last_interaction_at' => 'datetime',
             'auto_assigned' => 'boolean',
             'bot_paused' => 'boolean',
+            'handoff_requested_at' => 'datetime',
             'context' => 'array',
         ];
     }

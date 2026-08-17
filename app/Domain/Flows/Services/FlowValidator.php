@@ -24,10 +24,9 @@ use App\Domain\Flows\Models\FlowNode;
  *    (exactamente una `true` y una `false`); el resto de nodos NO terminales
  *    tienen exactamente una arista saliente sin label.
  * 4. `end`/`human` terminales: sin aristas salientes.
- * 5. Todos los nodos alcanzables desde `start`; al menos un `end` alcanzable.
+ * 5. Todos los nodos alcanzables desde `start`; al menos un terminal alcanzable.
  * 6. Sin ciclos infinitos entre nodos síncronos (message/condition/tag/webhook/
- *    end); los nodos waiting (`question`/`buttons`/`human`) y `delay` rompen el
- *    ciclo.
+ *    end/human); los nodos waiting (`question`/`buttons`) y `delay` rompen el ciclo.
  * 7. `config` del flujo (`max_steps`) válido si se declara.
  * 8. (UNIDAD 5) Variables: `question.type` válido y `default` compatible con el
  *    tipo; referencias `{{...}}` con segmentos peligrosos (`__`,
@@ -132,16 +131,17 @@ final class FlowValidator
             }
         }
 
-        $endReachable = false;
+        $terminalReachable = false;
         foreach ($nodeMap as $node) {
-            if ($node->type === FlowNodeType::End && isset($reachable[$node->id])) {
-                $endReachable = true;
+            if (in_array($node->type, [FlowNodeType::End, FlowNodeType::Human], true)
+                && isset($reachable[$node->id])) {
+                $terminalReachable = true;
                 break;
             }
         }
 
-        if (! $endReachable) {
-            $errors[] = 'El flujo debe tener al menos un nodo "end" alcanzable desde el inicio.';
+        if (! $terminalReachable) {
+            $errors[] = 'El flujo debe tener al menos un nodo terminal ("end" o "human") alcanzable desde el inicio.';
         }
 
         $cycle = $this->detectSynchronousCycle($nodeMap, $outgoing);
@@ -218,9 +218,10 @@ final class FlowValidator
                 break;
 
             case FlowNodeType::Human:
-                if (array_key_exists('handoff_message', $config) && ! $this->isNonEmptyString($config['handoff_message'])) {
+                $handoffMessage = $config['handoff_message'] ?? null;
+                if ($handoffMessage !== null && ! is_string($handoffMessage)) {
                     $errors[] = "El nodo \"{$name}\" (transferir a humano) tiene un 'handoff_message' inválido.";
-                } elseif (is_string($config['handoff_message'] ?? null) && strlen($config['handoff_message']) > self::MAX_TEXT_LENGTH) {
+                } elseif (is_string($handoffMessage) && mb_strlen($handoffMessage) > self::MAX_TEXT_LENGTH) {
                     $errors[] = "El nodo \"{$name}\" (transferir a humano) excede la longitud máxima de texto.";
                 }
                 break;
@@ -610,8 +611,8 @@ final class FlowValidator
 
     /**
      * Detecta ciclos en el subgrafo síncrono: nodos que se ejecutan en el mismo
-     * `handleMessage` (message/condition/tag/webhook/end). Los nodos waiting
-     * (`question`/`buttons`/`human`) y `delay` rompen el ciclo (el motor espera
+     * `handleMessage` (message/condition/tag/webhook/human/end). Los nodos waiting
+     * (`question`/`buttons`) y `delay` rompen el ciclo (el motor espera
      * input o agenda la continuación).
      *
      * @param  array<string, FlowNode>  $nodeMap

@@ -29,7 +29,7 @@ function update(): void {
             @input="update"
         />
         <span class="mt-1 block text-[11px] text-zinc-400">
-            La conversación se transfiere a un agente humano (FASE 14).
+            Máximo 4096 caracteres. El workflow operativo se implementará en FASE 15 U3.
         </span>
     </label>
 </template>

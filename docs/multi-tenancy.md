@@ -45,11 +45,11 @@ y tiene un **tenant activo** seleccionable:
   ejecución automática del trigger `tag` se difiere a FASE 20 (ADR-050), que deberá resolver el
   tenant desde su writer centralizado y nunca desde IDs aportados por el cliente.
 - `conversations` / `conversation_participants` / `conversation_assignments` (FASE 8, ADR-031):
-  `conversations` con trait `BelongsToTenant`, `tenant_id` FK `cascadeOnDelete`, `contact_id`
-  FK→`contacts` del **mismo tenant** (validado en el servicio) y **soft delete**. El historial de
-  asignaciones/participantes es por conversación y por tanto por tenant. `Tenant::conversations()`
-  (hasMany). `findOrCreateActiveForContact` (uso interno de los jobs del webhook, FASE 9) busca
-  fuera del scope pero SIEMPRE filtrando por `tenant_id` del tenant resuelto.
+  los tres modelos usan `BelongsToTenant`; U1 de FASE 15 añadió `tenant_id` UUID NOT NULL + FK e
+  índices tenant-first a assignments/participants mediante backfill determinista desde la
+  conversación. `conversations` mantiene `contact_id` del mismo tenant (validado en el servicio)
+  y soft delete. `Tenant::conversations()` (hasMany). `findOrCreateActiveForContact` busca fuera
+  del scope pero SIEMPRE filtrando por `tenant_id` del tenant resuelto.
 - Roles por tenant: se implementa con **spatie/laravel-permission en modo `teams`**
   (`team_id = tenant_id`). Así `owner/admin/agent` se asignan por tenant. `super_admin` es un
   rol global de plataforma (sin team). Ver ADR-012, ADR-018 y ADR-025 (migración de
@@ -233,6 +233,10 @@ Nunca se acepta `tenant_id` desde el request (se ignora o se rechaza — test
   `AGENT_NOT_IN_TENANT` en caso contrario). `findOrCreateActiveForContact` (webhook, FASE 9)
   consulta sin scope con filtro por `tenant_id` y usa `TenantContext::withId()` alrededor del
   create (no pisa ni limpia un contexto ya activo, p. ej. el del motor de flujos, FASE 11).
+- **Handoff data (FASE 15 U1, ADR-051/052)**: assignments/participants reciben el tenant solo
+  desde `TenantContext`, nunca del request; sin contexto las lecturas devuelven vacío y las
+  escrituras fallan seguro. `messages.sent_by_user_id` no es fillable ni se confía desde payload
+  público; U3 resolverá el actor desde el usuario autenticado y validará pertenencia al tenant.
 - `messages` (FASE 9, ADR-032): tabla con trait `BelongsToTenant`, `tenant_id` FK
   `cascadeOnDelete` y `conversation_id` FK→`conversations` del **mismo tenant** (cascade; el
   contacto se resuelve por la conversación, no se duplica). `Tenant::messages()` (hasMany). La

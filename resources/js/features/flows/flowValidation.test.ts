@@ -103,6 +103,18 @@ describe('configIssuesForNode', () => {
         expect(configIssuesForNode('webhook', { url: 'https://x.com', method: 'OPTIONS' })).toContain('Método HTTP inválido.');
     });
 
+    it('human acepta handoff_message opcional o vacío y rechaza valores no-string', () => {
+        expect(configIssuesForNode('human', {})).toHaveLength(0);
+        expect(configIssuesForNode('human', { handoff_message: null })).toHaveLength(0);
+        expect(configIssuesForNode('human', { handoff_message: '' })).toHaveLength(0);
+        expect(configIssuesForNode('human', { handoff_message: '   ' })).toHaveLength(0);
+        expect(configIssuesForNode('human', { handoff_message: 'Te atenderemos pronto' })).toHaveLength(0);
+        expect(configIssuesForNode('human', { handoff_message: 'á'.repeat(4097) })).toContain(
+            'El mensaje de traspaso excede la longitud máxima de texto.',
+        );
+        expect(configIssuesForNode('human', { handoff_message: 123 })).toContain('El mensaje de traspaso debe ser texto.');
+    });
+
     it('end y ai no exigen configuración', () => {
         expect(configIssuesForNode('end', {})).toHaveLength(0);
         expect(configIssuesForNode('ai', {})).toHaveLength(0);
@@ -224,11 +236,21 @@ describe('localGraphIssues', () => {
         expect(localGraphIssues([node], []).some((i) => i.code === 'OUTGOING_REQUIRED')).toBe(true);
     });
 
-    it('avisa cuando falta un nodo Fin', () => {
+    it('avisa cuando falta un terminal end o human', () => {
         const node = msg('n');
         node.data.isStart = true;
 
         expect(localGraphIssues([node], []).some((i) => i.code === 'END_MISSING')).toBe(true);
+    });
+
+    it('acepta human como terminal sin requerir end', () => {
+        const start = msg('start');
+        const human = createEditorNode('human', 'human', { x: 0, y: 0 }, { handoff_message: '' }, 'Humano');
+        const edges: FlowEditorEdge[] = [{ id: 'e', source: start.id, target: human.id }];
+        const issues = localGraphIssues([start, human], edges);
+
+        expect(issues.some((i) => i.code === 'END_MISSING')).toBe(false);
+        expect(issues.some((i) => i.nodeId === human.id && i.code === 'OUTGOING_REQUIRED')).toBe(false);
     });
 });
 

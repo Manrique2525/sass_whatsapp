@@ -103,6 +103,7 @@ conversations
   agent_id FK → users.id (BIGINT) nullable      → asignación VIGENTE (nullOnDelete)
   auto_assigned boolean default false           → true si la asignó el sistema (FASE 9+)
   bot_paused boolean default false              → handoff a humano
+  handoff_requested_at timestamp nullable       → solicitud explícita de atención humana (FASE 15 U1)
   context JSONB nullable                        → variables de conversación ({{custom.x}})
   flow_execution_id uuid nullable               → ejecución activa (SIN FK hasta FASE 11)
   created_at / updated_at / deleted_at (soft delete)
@@ -110,26 +111,32 @@ conversations
 - `agent_id` referencia `users.id` (BIGINT, igual que `tenant_users.user_id`); `tenant_id`/`contact_id`
   son UUID. El historial de asignaciones NO vive aquí: está en `conversation_assignments`.
 - Índices: `(tenant_id, status, last_message_at)`, `(tenant_id, contact_id)`,
-  `(tenant_id, agent_id)` y `(tenant_id, last_interaction_at)`.
+  `(tenant_id, agent_id)`, `(tenant_id, last_interaction_at)` y
+  `(tenant_id, handoff_requested_at)`.
 
 ```
 conversation_participants                      → quién estuvo/está involucrado (agentes y, en el futuro, bots)
   id bigint PK
+  tenant_id FK → tenants (cascadeOnDelete)
   conversation_id FK → conversations (cascadeOnDelete)
   user_id FK → users (BIGINT, cascadeOnDelete)
   role varchar(50)                             → espejo del rol del tenant al participar (owner/admin/agent)
   joined_at / left_at timestamp nullable       → participante activo = left_at IS NULL
-  UNIQUE (conversation_id, user_id) + índice (user_id, conversation_id)
+  UNIQUE (conversation_id, user_id) + índices (user_id, conversation_id),
+  (tenant_id, conversation_id), (tenant_id, user_id)
 
 conversation_assignments                       → historial acumulativo de asignaciones/transferencias
   id bigint PK
+  tenant_id FK → tenants (cascadeOnDelete)
   conversation_id FK → conversations (cascadeOnDelete)
   agent_id FK → users (BIGINT, cascadeOnDelete)
   assigned_by FK → users (BIGINT) nullable     → quién realizó la asignación (nullOnDelete)
   assigned_at timestamp                        → inicio de la asignación
   unassigned_at timestamp nullable             → se rellena al transferir/reasignar
   reason varchar(30) default 'manual'          → manual | transfer
-  índices (conversation_id, assigned_at) y (agent_id, assigned_at)
+  UNIQUE parcial (conversation_id) WHERE unassigned_at IS NULL
+  índices (conversation_id, assigned_at), (agent_id, assigned_at),
+  (tenant_id, conversation_id), (tenant_id, agent_id)
 ```
 
 ### `messages` (FASE 9, ADR-032)
@@ -137,6 +144,7 @@ conversation_assignments                       → historial acumulativo de asig
 id uuid PK
 tenant_id FK → tenants (cascadeOnDelete)
 conversation_id FK → conversations (cascadeOnDelete)   → el contacto se resuelve por la conversación
+sent_by_user_id FK → users nullable (nullOnDelete)      → actor humano; inbound/bot = NULL
 provider_message_id varchar(255) nullable  → idempotencia (UNIQUE (tenant_id, provider_message_id))
 direction varchar(10) → inbound/outbound
 type varchar(20) → text, image, audio, video, document, location, interactive, template
@@ -328,7 +336,14 @@ contact_tag          → PK (contact_id, tag_id), FKs cascadeOnDelete
 - `conversations (tenant_id, status, last_message_at DESC)` + `(tenant_id, contact_id)` +
   `(tenant_id, agent_id)` + `(tenant_id, last_interaction_at)` (FASE 8, ADR-031)
 - `conversation_participants (conversation_id, user_id)` UNIQUE + índice `(user_id, conversation_id)`
-- `conversation_assignments (conversation_id, assigned_at)` + `(agent_id, assigned_at)`
+- `conversation_participants (tenant_id, conversation_id)` + `(tenant_id, user_id)` (FASE 15 U1);
+  FK compuesta `(tenant_id, conversation_id)` garantiza pertenencia a la conversación del tenant
+- `conversation_assignments (conversation_id, assigned_at)` + `(agent_id, assigned_at)` +
+  `(tenant_id, conversation_id)` + `(tenant_id, agent_id)`
+- `conversation_assignments (conversation_id)` UNIQUE parcial `WHERE unassigned_at IS NULL`
+- `conversation_assignments`: FK compuesta `(tenant_id, conversation_id)` a `conversations`
+- `conversations (tenant_id, handoff_requested_at)` (FASE 15 U1)
+- `messages (sent_by_user_id)` (FASE 15 U1; soporte de FK `nullOnDelete` y consultas por actor)
 - `messages (tenant_id, conversation_id, created_at DESC)` + `(conversation_id)` (FASE 9, ADR-032)
 - `messages` UNIQUE `(tenant_id, provider_message_id)` (composite; los NULL no colisionan →
   los outbound sin id de Meta son válidos) (FASE 9, ADR-032)

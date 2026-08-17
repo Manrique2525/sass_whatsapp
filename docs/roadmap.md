@@ -1,7 +1,7 @@
 # Roadmap
 
-Estado general: **FASE 14 COMPLETADA** (Triggers). U4 (ejecución automática por etiqueta)
-queda diferida explícitamente a FASE 20 por dependencia arquitectónica.
+Estado general: **FASE 15 EN PROGRESO** (Transferencia a humano). UNIDAD 1 completada localmente;
+UNIDADES 2-6 pendientes de autorización explícita.
 
 ## Fases
 
@@ -22,7 +22,7 @@ queda diferida explícitamente a FASE 20 por dependencia arquitectónica.
 | 12 | Flow Builder (Vue Flow) | COMPLETADA |
 | 13 | Variables de conversación | COMPLETADA |
 | 14 | Triggers | COMPLETADA |
-| 15 | Transferencia a humano | PENDIENTE |
+| 15 | Transferencia a humano | EN PROGRESO |
 | 16 | IA (AIProviderInterface, OpenAI) | PENDIENTE |
 | 17 | Base de conocimiento (RAG + pgvector) | PENDIENTE |
 | 18 | FAQ inteligente | PENDIENTE |
@@ -756,3 +756,24 @@ COMPLETADO / BLOQUEADO
 - [x] **CIERRE FORMAL FASE 14**: U1/U2/U3 completadas; U4 diferida por dependencia
       arquitectónica, no por defecto del código. Gates finales y documentación de cierre verdes.
       Commit local `docs(flows): close phase 14 and defer tag trigger to phase 20` (SIN push).
+
+### FASE 15 — Transferencia a humano (EN PROGRESO — SIN push)
+
+- [x] **UNIDAD 1 — Semántica e invariantes** (ADR-051..053): `handed_off` terminal; resume solo
+      habilita futuros inbound; cola manual sin auto-routing; `handoff_message` opcional;
+      notification center/email diferidos a FASE 22; realtime tenant-wide reservado para U4.
+- [x] **DB tenant-safe**: `tenant_id` NOT NULL + FK + índices en assignments/participants;
+      backfill desde conversaciones; FK compuesta contra referencias cross-tenant; UNIQUE parcial
+      de una assignment abierta; actor humano nullable en messages; `handoff_requested_at`
+      nullable en conversations.
+- [x] **Modelos/contratos**: `BelongsToTenant`, relaciones tenant/actor, casts; Human deja de ser
+      waiting, es terminal alternativo a end y acepta mensaje vacío sin cambiar runtime.
+- [x] **Tests U1**: HANDOFF-DATA, aislamiento A/B, migración rollback/backfill, contratos Human y
+      frontend local. Migration UP/DOWN/UP verificada en PostgreSQL real aislado.
+- [x] **Gates U1**: `php artisan test` (565/2378 assertions), Pint, PHPStan 0 errores (1G),
+      Vitest (149), `vue-tsc`, Vite build, Docker y healthcheck verdes.
+- [ ] **UNIDAD 2** — Claim manual y assign/transfer atómicos (NO iniciada).
+- [ ] **UNIDAD 3** — Human handoff operativo, resume y outbound pendiente (NO iniciada).
+- [ ] **UNIDAD 4** — Realtime tenant-wide `InboxConversationChanged` (NO iniciada).
+- [ ] **UNIDAD 5** — Inbox UX (NO iniciada).
+- [ ] **UNIDAD 6** — Hardening/cierre (NO iniciada).

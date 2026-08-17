@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domain\Flows\Enums\FlowNodeType;
 use App\Domain\Flows\Models\FlowConnection;
 use App\Domain\Flows\Models\FlowNode;
 use App\Domain\Flows\Services\FlowValidator;
@@ -278,4 +279,77 @@ test('UNIDAD 5: el webhook valida longitud y referencias peligrosas en headers/p
         'headers' => ['X-User' => '{{contact.name}}'],
         'payload' => ['deep' => ['nested' => ['v' => '{{custom.plan|default:\'x\'}}']]],
     ]))->toBe([]);
+});
+
+test('HANDOFF-CONTRACT-01: human es terminal válido sin nodo end y acepta mensaje vacío o ausente', function (): void {
+    foreach ([[], ['handoff_message' => ''], ['handoff_message' => '   '], ['handoff_message' => null]] as $config) {
+        $nodes = [
+            make_validator_node('n1', 'message', ['text' => 'Hola'], true),
+            make_validator_node('n2', 'human', $config),
+        ];
+
+        expect(app(FlowValidator::class)->validate($nodes, [make_validator_edge('n1', 'n2')]))->toBe([]);
+    }
+});
+
+test('HANDOFF-CONTRACT-02: human rechaza mensaje no-string o mayor a 4096 caracteres', function (): void {
+    $validNodes = [
+        make_validator_node('n1', 'message', ['text' => 'Hola'], true),
+        make_validator_node('n2', 'human', ['handoff_message' => str_repeat('á', 4096)]),
+    ];
+
+    expect(app(FlowValidator::class)->validate($validNodes, [make_validator_edge('n1', 'n2')]))->toBe([]);
+
+    foreach ([['handoff_message' => 123], ['handoff_message' => str_repeat('a', 4097)]] as $config) {
+        $nodes = [
+            make_validator_node('n1', 'message', ['text' => 'Hola'], true),
+            make_validator_node('n2', 'human', $config),
+        ];
+
+        expect(app(FlowValidator::class)->validate($nodes, [make_validator_edge('n1', 'n2')]))->not->toBe([]);
+    }
+});
+
+test('HANDOFF-CONTRACT-03: human sigue prohibiendo conexiones salientes', function (): void {
+    $nodes = [
+        make_validator_node('n1', 'message', ['text' => 'Hola'], true),
+        make_validator_node('n2', 'human'),
+        make_validator_node('n3', 'end'),
+    ];
+
+    expect(app(FlowValidator::class)->validate($nodes, [
+        make_validator_edge('n1', 'n2'),
+        make_validator_edge('n2', 'n3'),
+    ]))->toContain('El nodo "Nodo n2" es terminal y no debe tener conexiones salientes.');
+});
+
+test('HANDOFF-CONTRACT-04: condition puede terminar en human en ambas ramas', function (): void {
+    $nodes = [
+        make_validator_node('n1', 'condition', [
+            'rules' => [['field' => 'conversation.id', 'operator' => 'exists']],
+        ], true),
+        make_validator_node('n2', 'human'),
+        make_validator_node('n3', 'human', ['handoff_message' => 'Te atenderemos pronto']),
+    ];
+
+    expect(app(FlowValidator::class)->validate($nodes, [
+        make_validator_edge('n1', 'n2', 'true'),
+        make_validator_edge('n1', 'n3', 'false'),
+    ]))->toBe([]);
+});
+
+test('HANDOFF-CONTRACT-05: un grafo sin end ni human alcanzable sigue siendo inválido', function (): void {
+    $node = make_validator_node('n1', 'message', ['text' => 'Hola'], true);
+
+    expect(app(FlowValidator::class)->validate([$node], []))->toContain(
+        'El flujo debe tener al menos un nodo terminal ("end" o "human") alcanzable desde el inicio.',
+    );
+});
+
+test('HANDOFF-CONTRACT-06: human no es waiting y los tipos existentes conservan su contrato', function (): void {
+    expect(FlowNodeType::Human->isWaitingType())->toBeFalse()
+        ->and(FlowNodeType::Question->isWaitingType())->toBeTrue()
+        ->and(FlowNodeType::Buttons->isWaitingType())->toBeTrue()
+        ->and(FlowNodeType::AI->isWaitingType())->toBeTrue()
+        ->and(FlowNodeType::End->isWaitingType())->toBeFalse();
 });

@@ -10,6 +10,7 @@ use App\Domain\Messages\Enums\MessageStatus;
 use App\Domain\Messages\Enums\MessageType;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Tenants\Traits\BelongsToTenant;
+use App\Domain\Users\Models\User;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -26,6 +27,7 @@ use Illuminate\Support\Carbon;
  * @property string $id
  * @property string $tenant_id
  * @property string $conversation_id
+ * @property int|null $sent_by_user_id
  * @property string|null $provider_message_id
  * @property MessageDirection $direction
  * @property MessageType $type
@@ -93,5 +95,16 @@ final class Message extends Model
     public function conversation(): BelongsTo
     {
         return $this->belongsTo(Conversation::class);
+    }
+
+    /**
+     * Usuario autenticado que originó manualmente el mensaje. Inbound y bot
+     * permanecen en null; la asignación de este actor se implementa en U3.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function sentByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'sent_by_user_id');
     }
 }

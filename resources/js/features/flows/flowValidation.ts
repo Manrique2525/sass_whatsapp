@@ -29,6 +29,7 @@ export function conditionOperatorNeedsValue(operator: string): boolean {
 }
 
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+const MAX_TEXT_LENGTH = 4096;
 
 function isNonEmptyString(value: unknown): value is string {
     return typeof value === 'string' && value.trim() !== '';
@@ -226,11 +227,14 @@ export function configIssuesForNode(type: FlowNodeType, config: Record<string, u
             break;
         }
 
-        case 'human':
-            if (c.handoff_message !== undefined && c.handoff_message !== null && !isNonEmptyString(c.handoff_message)) {
-                issues.push('El mensaje de traspaso no puede estar vacío.');
+        case 'human': {
+            if (c.handoff_message !== undefined && c.handoff_message !== null && typeof c.handoff_message !== 'string') {
+                issues.push('El mensaje de traspaso debe ser texto.');
+            } else if (typeof c.handoff_message === 'string' && [...c.handoff_message].length > MAX_TEXT_LENGTH) {
+                issues.push('El mensaje de traspaso excede la longitud máxima de texto.');
             }
             break;
+        }
 
         case 'end':
         case 'ai':
@@ -312,8 +316,8 @@ export function localGraphIssues(nodes: FlowEditorNode[], edges: FlowEditorEdge[
         }
     }
 
-    if (!nodes.some((node) => node.data.type === 'end')) {
-        issues.push({ nodeId: null, severity: 'warning', code: 'END_MISSING', message: 'El flujo debería terminar en un nodo "Fin".' });
+    if (!nodes.some((node) => node.data.type === 'end' || node.data.type === 'human')) {
+        issues.push({ nodeId: null, severity: 'warning', code: 'END_MISSING', message: 'El flujo debería terminar en un nodo "Fin" o "Transferir a humano".' });
     }
 
     return issues;

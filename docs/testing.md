@@ -317,6 +317,22 @@ Pirámide de tests con prioridad en lo crítico:
   diferida a FASE 20. No se simula con mocks ni con un punto de entrada temporal.
 - Suite final FASE 14: **545 tests backend / 2325 assertions**; frontend **147 tests Vitest**.
 
+### Human Handoff — FASE 15 UNIDAD 1 (ADR-051..053)
+
+- `HandoffDataInvariantTest`: assignment abierta única protegida por DB, cierre/reapertura,
+  conversaciones independientes, rollback/up con backfill, scopes A/B de assignments y
+  participants, rechazo DB de referencias conversación/tenant cruzadas, fallo seguro sin
+  TenantContext, cast de `handoff_requested_at`, actor de mensaje nullable/FK válida/FK inválida,
+  `nullOnDelete` y protección contra mass assignment.
+- `FlowValidatorTest` HANDOFF-CONTRACT: `human` terminal sin `end`, `handoff_message` ausente/null/
+  vacío válido, tipos/longitud inválidos, sin salida, ramas condition→human y clasificación no
+  waiting.
+- Vitest `flowValidation.test.ts`: contrato opcional de Human y terminal local alternativo a end.
+- PostgreSQL real: migrate UP, rollback DOWN y segundo UP sobre DB aislada con filas legacy;
+  backfill, NOT NULL, FKs, índices y UNIQUE parcial verificados.
+- Suite total FASE 15 U1: **565 tests backend / 2378 assertions**; frontend **149 tests Vitest**.
+  Pint, PHPStan (0 errores, 1G), `vue-tsc` y build Vite también verdes.
+
 ### Auth
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 

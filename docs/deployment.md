@@ -164,6 +164,16 @@ jobs:
 - **Observabilidad**: Sentry (errores), logs estructurados JSON a stdout, correlación por
   `request_id`/`tenant_id`/`conversation_id`.
 
+### Migraciones coordinadas
+
+- La migración de FASE 15 U1 que establece invariantes de handoff añade scopes y columnas NOT
+  NULL en el mismo release y ejecuta backfill/constraints sobre tablas existentes. No admite un
+  rolling deploy con procesos de versiones mezcladas.
+- Secuencia obligatoria: activar mantenimiento, detener workers/scheduler, desplegar la nueva
+  imagen, ejecutar `php artisan migrate --force`, verificar healthcheck y reactivar procesos y
+  tráfico. Dimensionar la ventana con una copia representativa porque PostgreSQL retiene locks
+  durante el backfill y la creación de constraints/índices.
+
 ## 7. Health check
 
 `GET /health` → `{"status":"ok"}`. Verifica DB y Redis (si falla redis, degrada a `degraded`).

@@ -28,7 +28,7 @@ Entidades:
 | `tag` | tag(s) | Aplica etiquetas al contacto/conversación |
 | `webhook` | URL + método + headers + payload | POST externo con contexto (idempotencia: `execution_id`) |
 | `ai` | prompt + system + kb bool | Genera respuesta con IA (con/sin contexto RAG), aplica límites |
-| `human` | mensaje de aviso | Pausa bot, crea asignación, notifica agentes |
+| `human` | mensaje de aviso opcional | Terminal `handed_off`; el workflow operativo llega en FASE 15 U3 |
 | `end` | — | Finaliza ejecución (estado `completed`) |
 
 ## 4. Algoritmo
@@ -43,8 +43,12 @@ handleMessage(conversation, inboundMessage):
   repeat (guard: max N pasos, timeout total):
     node = execution.currentNode()
     step(node, execution)             # cada paso se loguea
-    if node.type in [question, buttons, ai, human]:
+    if node.type in [question, buttons, ai]:
       execution.status = waiting      # espera siguiente mensaje del cliente
+      break
+    if node.type == human:
+      execution.status = handed_off   # terminal; no se reanuda
+      conversation.bot_paused = true
       break
     next = node.type == condition
       ? evaluateCondition(...)        # elige rama por label
@@ -113,25 +117,30 @@ con `TriggerValidator` al crear/actualizar/publicar (422 `errors.config`):
   persiste `config.token_hash` (sha256). El token en claro se devuelve una vez al crear; el
   `TriggerResource` lo redacta y el cliente jamás puede enviarlo.
 
-## 7. Handoff a humano
+## 7. Handoff a humano (FASE 15, ADR-051..053)
 
-- Nodo `human` o comando del cliente ("hablar con alguien"):
-  1. Marca `execution.handed_off`, `conversation.bot_paused = true`.
-  2. Crea `conversation_assignments` (agente disponible / cola).
-  3. Notifica a agentes (Reverb + Email) y cambia estado `open`.
-  4. El bot NO responde mientras `bot_paused`.
-- Acción `resume-bot` (agente): limpia pause, archiva/cierra, borra ejecución activa.
+- `human` termina definitivamente la execution como `handed_off`; nunca vuelve a running/waiting
+  ni continúa desde ese nodo.
+- `resume-bot` solo habilita automatización para futuros inbound. No revive executions ni procesa
+  retroactivamente mensajes recibidos durante handoff. No libera automáticamente al agente.
+- El modelo aprobado es cola manual sin auto-routing. U2 implementará claim; U3 implementará el
+  handoff operativo y el envío opcional de `handoff_message` cuando tenga texto.
+- `handoff_requested_at` distingue solicitud humana de pausa manual. U1 solo prepara el campo.
+- Inbound durante handoff se persiste pero el bot no lo procesa. Un outbound automático pendiente
+  debe bloquearse en U3 antes de enviarse.
+- `ConversationUpdated` permanece para detalle; U4 añadirá `InboxConversationChanged` tenant-wide
+  after-commit. Notification center y email automático se difieren a FASE 22.
 
 ## 8. Validación de flujo (publicar)
 
 `FlowValidator` ejecuta en FASE 12 + backend:
 - Existe un único nodo `start`.
 - Todos los nodos alcanzables desde `start` (no huérfanos).
-- Ningún nodo sin conexión saliente excepto `end`.
+- Ningún nodo sin conexión saliente excepto terminales `end`/`human`.
 - Sin ciclos infinitos entre nodos no-waiting (detección de ciclos con BFS sobre el grafo,
   excluyendo caminos que pasan por nodos `waiting`/`delay` con fin garantizado).
 - Nodos con `config` válida (contenido no vacío, prompt no vacío, condición bien formada).
-- `end` es alcanzable.
+- Al menos un terminal `end` o `human` es alcanzable.
 - Flujo inválido → `FLOW_INVALID`, no se publica.
 
 ## 9. Tests (FASE 11)

@@ -428,7 +428,7 @@ test('FLOW-8: CRITICO — el webhook bloquea destinos internos (SSRF) y falla la
     expect($log?->payload['reason'])->toBe('webhook_blocked');
 });
 
-test('FLOW-9: el nodo human transfiere a un agente (handoff básico)', function (): void {
+test('FLOW-9: el nodo human entra en handoff básico sin asignación automática', function (): void {
     Queue::fake();
 
     $tenant = Tenant::factory()->create();

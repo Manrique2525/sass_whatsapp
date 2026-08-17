@@ -173,6 +173,11 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
   tenant con `status = active` en `tenant_users` (sin confiar en el frontend). Usuario fuera del
   tenant → 422 `AGENT_NOT_IN_TENANT`; sin permiso → 403. La transferencia cierra la asignación y
   participación previas (`unassigned_at`/`left_at`) y registra historial acumulativo.
+- **Invariantes de handoff (FASE 15 U1, ADR-051/052)**: assignments/participants tienen
+  `tenant_id` NOT NULL, FK a tenants, scope global y forzado desde `TenantContext`; nunca es
+  mass-assignable. Una FK compuesta `(tenant_id, conversation_id)` impide referencias cruzadas
+  entre tenants y un UNIQUE parcial impide más de una assignment abierta por conversación. El
+  backfill deriva tenant exclusivamente de la conversación y aborta si no puede hacerlo.
 - **Máquina de estados**: transiciones inválidas → 409 `CONVERSATION_INVALID_STATE` (nunca se
   muta `status` libremente vía PATCH); mismo estado = no-op. `status` validado contra el enum.
 - **Validación (backend)**: `ConversationIndexRequest` acota `per_page` a 100 y valida
@@ -193,6 +198,10 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
   número del tenant B jamás persiste en datos del A (tests CRITICOS MSG-6 y STAT-8 A/B).
   `TenantContext` se setea solo alrededor de los creates y se libera en `finally` (sin
   contaminación entre jobs; el audit pasa `tenantId:` explícito porque el contexto ya se limpió).
+- **Actor humano preparado (FASE 15 U1)**: `messages.sent_by_user_id` es nullable y usa FK
+  `nullOnDelete` con índice propio; no está en `$fillable` ni se acepta del cliente. Inbound y bot
+  quedan null. La atribución desde el usuario autenticado y la policy de assignment se
+  implementarán en U3.
 - **Idempotencia / anti-duplicados**: UNIQUE `(tenant_id, provider_message_id)` (mensaje inbound
   creado una sola vez; backstop `QueryException` → re-consulta, ADR-032) + dedupe de plataforma
   `webhook_events.provider_event_id` (para statuses, clave compuesta `id|status|timestamp`: Meta

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domain\Conversations\Models;
 
+use App\Domain\Tenants\Models\Tenant;
+use App\Domain\Tenants\Traits\BelongsToTenant;
 use App\Domain\Users\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,6 +19,7 @@ use Illuminate\Support\Carbon;
  * de transferencia. `assigned_by` es el usuario que la realizó.
  *
  * @property int $id
+ * @property string $tenant_id
  * @property string $conversation_id
  * @property int $agent_id
  * @property int|null $assigned_by
@@ -26,6 +29,8 @@ use Illuminate\Support\Carbon;
  */
 class ConversationAssignment extends Model
 {
+    use BelongsToTenant;
+
     protected $fillable = [
         'conversation_id',
         'agent_id',
@@ -38,10 +43,19 @@ class ConversationAssignment extends Model
     protected function casts(): array
     {
         return [
+            'tenant_id' => 'string',
             'conversation_id' => 'string',
             'assigned_at' => 'datetime',
             'unassigned_at' => 'datetime',
         ];
+    }
+
+    /**
+     * @return BelongsTo<Tenant, $this>
+     */
+    public function tenant(): BelongsTo
+    {
+        return $this->belongsTo(Tenant::class);
     }
 
     /**

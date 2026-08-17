@@ -33,7 +33,7 @@ enum FlowNodeType: string
      */
     public function isWaitingType(): bool
     {
-        return in_array($this, [self::Question, self::Buttons, self::AI, self::Human], true);
+        return in_array($this, [self::Question, self::Buttons, self::AI], true);
     }
 
     /**

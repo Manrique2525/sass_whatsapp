@@ -651,11 +651,13 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
     rama elegida, espera/continuación). Los mensajes outbound se despachan vía el patrón existente
     (`MessageService::createOutbound` + job), bajo el mismo lock.
   - **`FlowValidator`** valida el grafo completo ANTES de publicar: un solo `is_start`, grafo
-    conexo alcanzable, `end` siempre alcanzable, config de cada nodo según su tipo, sin
-    auto-lazos, límites de tamaño. Publicar un flujo inválido → `FlowInvalidException` (422
-    `FLOW_INVALID` con la lista de errores).
-  - Nodos que quedan en espera (`waiting`) tras ejecutarse: `question`, `buttons`, `human`
-    (y `ai` cuando exista). `delay` no queda en waiting: programa `ContinueFlowExecution`.
+    conexo alcanzable, al menos un terminal `end` o `human` alcanzable, config de cada nodo según
+    su tipo, sin auto-lazos, límites de tamaño. Publicar un flujo inválido →
+    `FlowInvalidException` (422 `FLOW_INVALID` con la lista de errores). La alternativa terminal
+    `human` fue formalizada por ADR-051, que reemplaza el requisito original de `end`.
+  - Nodos que quedan en espera (`waiting`) tras ejecutarse: `question`, `buttons` (y `ai` cuando
+    exista). `delay` no queda en waiting: programa `ContinueFlowExecution`. ADR-051 reemplaza la
+    clasificación original de `human`: finaliza en estado terminal `handed_off`.
   - Variables resueltas por `VariableResolver` (`{{contact.*}}`, `{{custom.*}}`,
     `{{conversation.*}}`, `{{node.*}}`); `ConditionEvaluator` evalúa las reglas de `condition`;
     `WebhookUrlGuard` bloquea SSRF (IPs privadas/reservadas, precedente FASE 9).
@@ -1141,3 +1143,74 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   defecto del código. No hay implementación parcial ni mecanismo temporal. FASE 20 consumirá el
   contrato anterior y reutilizará `FlowExecutionService` → `FlowEngine` sin crear un motor
   paralelo.
+
+---
+
+## ADR-051: Semántica terminal de Human Handoff
+
+- **Fecha**: 2026-08-17
+- **Estado**: Aceptado — FASE 15 UNIDAD 1
+- **Contexto**: el handoff básico de FASE 11 pausa el bot y finaliza la ejecución, pero la
+  documentación también describía `human` como waiting y sugería reanudar la ejecución previa.
+  El motor ya trata `FlowExecutionStatus::HandedOff` como terminal y limpia
+  `conversation.flow_execution_id` al finalizar.
+- **Decisión**:
+  - `handed_off` es terminal: nunca vuelve a `running`/`waiting`, no revive ni continúa desde
+    `current_node_id`.
+  - `resume-bot` solo habilita automatización para futuros inbound; no procesa retroactivamente
+    mensajes recibidos durante handoff ni revive la ejecución anterior.
+  - El modelo de atención es cola manual: handoff sin asignar → claim del usuario autenticado en
+    U2. No hay round robin, least-loaded, presencia, teams, capacity ni auto-routing.
+  - `resume-bot` no libera automáticamente `agent_id` ni la assignment abierta.
+  - `handoff_message` es opcional; ausente, null o vacío es válido. Su envío se implementará en
+    U3, antes de finalizar el handoff cuando tenga texto.
+  - `conversations.handoff_requested_at` distingue una solicitud humana de una pausa manual. El
+    HumanNode lo escribirá en U3; claim/resume no lo limpian por sí solos.
+  - Un outbound automático aún no enviado debe bloquearse después del handoff; la comprobación
+    operativa pertenece a U3.
+  - El notification center y emails automáticos se difieren a FASE 22.
+- **Consecuencias**: `human` deja de clasificarse como waiting y es un terminal válido alternativo
+  a `end`. U1 corrige validación/configuración, pero no cambia `HumanNodeExecutor`, resume,
+  mensajería ni realtime.
+
+## ADR-052: Consistencia de asignación de conversaciones
+
+- **Fecha**: 2026-08-17
+- **Estado**: Aceptado — FASE 15 UNIDAD 1
+- **Contexto**: `conversations.agent_id` representa el agente vigente, mientras
+  `conversation_assignments` conserva historial y `conversation_participants` participación.
+  Las tablas hijas no tenían `tenant_id` ni una barrera DB contra assignments abiertas duplicadas.
+- **Decisión**:
+  - `conversations.agent_id` es la fuente operativa; assignments son historial y participants
+    participación. Las tres proyecciones deberán mutarse en una transacción bajo el lock de
+    conversación a partir de U2.
+  - Assignments y participants incorporan `tenant_id` UUID NOT NULL, FK a tenants, FK compuesta
+    `(tenant_id, conversation_id)` a conversations, índices tenant-first y `BelongsToTenant`. La
+    barrera compuesta impide asociar una fila al tenant correcto pero a una conversación ajena.
+    El backfill se deriva exclusivamente de `conversation_id → conversations.tenant_id` y aborta
+    ante datos no derivables.
+  - Solo puede existir una assignment con `unassigned_at IS NULL` por conversación; PostgreSQL y
+    SQLite lo protegen con un índice UNIQUE parcial sobre `conversation_id`.
+  - Claim será manual y atómico en U2. El cliente no aportará el agente destino: siempre será el
+    usuario autenticado. `conversations.assign` continúa reservado para administración.
+  - `messages.sent_by_user_id` nullable atribuye mensajes humanos. Inbound y bot permanecen null;
+    U3 aplicará la policy tenant-aware y no confiará en payload público.
+- **Consecuencias**: U1 establece esquema y scopes, no implementa claim, release, transacciones
+  operativas ni atribución desde MessageService. `auto_assigned` permanece false. Como esquema y
+  código empiezan a exigir `tenant_id` juntos, este cambio se despliega de forma coordinada, no
+  mediante rolling deploy con workers de versiones mezcladas.
+
+## ADR-053: Frontera realtime del Inbox para handoff
+
+- **Fecha**: 2026-08-17
+- **Estado**: Aceptado — contrato para FASE 15 UNIDAD 4
+- **Contexto**: `ConversationUpdated` sirve al detalle de una conversación, pero los agentes no
+  conocen una conversación en cola que todavía no tienen abierta. FASE 22 mantiene la
+  responsabilidad del notification center y email automático.
+- **Decisión**:
+  - `ConversationUpdated` continúa como evento de detalle.
+  - U4 implementará un único evento tenant-wide `InboxConversationChanged`, emitido after-commit,
+    con canal privado, aislamiento tenant y payload versionado/idempotente.
+  - FASE 15 no crea notification center, tabla de notifications ni email automático.
+- **Consecuencias**: U1 solo registra el contrato. No se añaden eventos, listeners, canales ni UX
+  realtime en esta unidad.
