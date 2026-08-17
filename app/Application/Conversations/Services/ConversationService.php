@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Application\Conversations\Services;
 
 use App\Application\Audit\Services\AuditLogger;
+use App\Application\Flows\Services\ConversationLockContext;
 use App\Application\Flows\Services\FlowExecutionService;
 use App\Application\Users\Services\AuthorizationService;
 use App\Domain\Contacts\Models\Contact;
@@ -57,6 +58,7 @@ final class ConversationService
         private readonly AuditLogger $auditLogger,
         private readonly Dispatcher $events,
         private readonly FlowExecutionService $flowExecutions,
+        private readonly ConversationLockContext $lockContext,
     ) {}
 
     /**
@@ -280,52 +282,80 @@ final class ConversationService
 
     public function pauseBot(User $user, Tenant $tenant, string $conversationId): Conversation
     {
-        $this->authorization->authorize($user, TenantPermission::ManageConversations, $tenant);
-
-        $conversation = $this->findForTenant($tenant, $conversationId);
-
-        if ($conversation->bot_paused) {
-            return $conversation;
-        }
-
-        $conversation->forceFill(['bot_paused' => true])->save();
-
-        $this->auditLogger->record(
-            action: 'conversation.bot_paused',
-            data: ['tenant_id' => $tenant->id],
-            subjectType: Conversation::class,
-            subjectId: $conversation->id,
-        );
-
-        $conversation->loadMissing(['contact', 'agent']);
-
-        $this->events->dispatch(new ConversationUpdated($conversation));
-
-        return $conversation;
+        return $this->changeBotState($user, $tenant, $conversationId, paused: true);
     }
 
     public function resumeBot(User $user, Tenant $tenant, string $conversationId): Conversation
     {
+        return $this->changeBotState($user, $tenant, $conversationId, paused: false);
+    }
+
+    private function changeBotState(
+        User $user,
+        Tenant $tenant,
+        string $conversationId,
+        bool $paused,
+    ): Conversation {
         $this->authorization->authorize($user, TenantPermission::ManageConversations, $tenant);
 
-        $conversation = $this->findForTenant($tenant, $conversationId);
+        $lock = $this->flowExecutions->conversationLock($tenant, $conversationId);
 
-        if (! $conversation->bot_paused) {
-            return $conversation;
+        try {
+            $lock->block(seconds: 10);
+        } catch (LockTimeoutException) {
+            throw new ConversationInvalidStateException(
+                'La conversación está siendo modificada; intente nuevamente.',
+            );
         }
 
-        $conversation->forceFill(['bot_paused' => false])->save();
+        $this->lockContext->enter($tenant->id, $conversationId, $lock);
 
-        $this->auditLogger->record(
-            action: 'conversation.bot_resumed',
-            data: ['tenant_id' => $tenant->id],
-            subjectType: Conversation::class,
-            subjectId: $conversation->id,
-        );
+        try {
+            $changed = DB::transaction(function () use ($user, $tenant, $conversationId, $paused): bool {
+                $conversation = $this->findForTenantForUpdate($tenant, $conversationId);
+                $this->lockedMemberships($tenant, $user->id, $user->id);
+                $this->authorization->authorize($user, TenantPermission::ManageConversations, $tenant);
 
+                if (! $paused) {
+                    $this->flowExecutions->finalizeCommittedHandoff($conversation);
+                }
+
+                if ($conversation->bot_paused === $paused) {
+                    return false;
+                }
+
+                $changes = ['bot_paused' => $paused];
+
+                // Una pausa manual inicia un estado distinto de un handoff
+                // anterior; resume conserva el timestamp histórico (ADR-051).
+                if ($paused) {
+                    $changes['handoff_requested_at'] = null;
+                }
+
+                $conversation->forceFill($changes)->save();
+
+                $this->auditLogger->record(
+                    action: $paused ? 'conversation.bot_paused' : 'conversation.bot_resumed',
+                    data: ['tenant_id' => $tenant->id],
+                    subjectType: Conversation::class,
+                    subjectId: $conversation->id,
+                    actorUserId: $user->id,
+                    tenantId: $tenant->id,
+                );
+
+                return true;
+            });
+        } finally {
+            $this->lockContext->leave($tenant->id, $conversationId);
+            $lock->release();
+        }
+
+        $conversation = $this->findForTenant($tenant, $conversationId);
         $conversation->loadMissing(['contact', 'agent']);
 
-        $this->events->dispatch(new ConversationUpdated($conversation));
+        if ($changed) {
+            $this->events->dispatch(new ConversationUpdated($conversation));
+        }
 
         return $conversation;
     }
@@ -381,6 +411,8 @@ final class ConversationService
             throw ConversationAssignmentConflictException::busy();
         }
 
+        $this->lockContext->enter($tenant->id, $conversationId, $lock);
+
         try {
             return $this->changeAgentLocked(
                 $user,
@@ -391,6 +423,7 @@ final class ConversationService
                 $permission,
             );
         } finally {
+            $this->lockContext->leave($tenant->id, $conversationId);
             $lock->release();
         }
     }

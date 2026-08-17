@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Application\Conversations\Services\ConversationService;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Messages\Enums\MessageDirection;
 use App\Domain\Messages\Enums\MessageStatus;
@@ -166,7 +167,9 @@ test('MSG-API-6: POST envía un mensaje de texto: pending + job encolado + times
 
     expect($message->direction)->toBe(MessageDirection::Outbound)
         ->and($message->type)->toBe(MessageType::Text)
-        ->and($message->status)->toBe(MessageStatus::Pending);
+        ->and($message->status)->toBe(MessageStatus::Pending)
+        ->and($message->sent_by_user_id)->toBe($owner->id)
+        ->and($message->metadata['origin'])->toBe('human');
 
     Queue::assertPushed(SendWhatsAppMessage::class, function (SendWhatsAppMessage $job) use ($tenant, $conversation, $message): bool {
         return $job->tenantId === $tenant->id
@@ -222,16 +225,22 @@ test('MSG-API-9: un agente puede responder desde el inbox (messages.send)', func
     Queue::fake();
 
     $tenant = Tenant::factory()->create();
+    $owner = User::factory()->create();
     $agent = User::factory()->create();
+    make_tenant_member($owner, $tenant, 'owner');
     make_tenant_member($agent, $tenant, 'agent');
 
     $contact = make_contact($tenant);
     $conversation = make_conversation($tenant, $contact);
+    TenantContext::withId($tenant->id, fn () => app(ConversationService::class)
+        ->assign($owner, $tenant, $conversation->id, $agent->id));
 
     $this->actingAs($agent)
         ->postJson(message_url($tenant, $conversation->id), ['body' => 'Respuesta del agente'])
         ->assertStatus(201)
-        ->assertJsonPath('created_message.direction', 'outbound');
+        ->assertJsonPath('created_message.direction', 'outbound')
+        ->assertJsonPath('created_message.sent_by_user_id', $agent->id)
+        ->assertJsonPath('created_message.metadata.origin', 'human');
 });
 
 test('MSG-API-10: todos los roles del tenant tienen messages.send (matriz)', function (): void {
@@ -376,4 +385,84 @@ test('MSG-API-16: la lista de conversaciones incluye last_message (preview del c
         ->assertJsonPath('conversations.0.last_message.id', $latest->id)
         ->assertJsonPath('conversations.0.last_message.body', 'Último mensaje')
         ->assertJsonPath('conversations.0.last_message.direction', 'outbound');
+});
+
+test('MSG-API-17: un agent sin assignment vigente no puede responder', function (): void {
+    Queue::fake();
+
+    $tenant = Tenant::factory()->create();
+    $agent = User::factory()->create();
+    make_tenant_member($agent, $tenant, 'agent');
+    $conversation = make_conversation($tenant, make_contact($tenant));
+
+    $this->actingAs($agent)
+        ->postJson(message_url($tenant, $conversation->id), ['body' => 'No autorizada'])
+        ->assertStatus(403)
+        ->assertJsonPath('code', 'CONVERSATION_REPLY_FORBIDDEN');
+
+    expect(Message::withoutTenantScope()->where('conversation_id', $conversation->id)->count())->toBe(0);
+    Queue::assertNothingPushed();
+});
+
+test('MSG-API-18: owner puede responder sin assignment como override administrativo', function (): void {
+    Queue::fake();
+
+    $tenant = Tenant::factory()->create();
+    $owner = User::factory()->create();
+    make_tenant_member($owner, $tenant, 'owner');
+    $conversation = make_conversation($tenant, make_contact($tenant));
+
+    $this->actingAs($owner)
+        ->postJson(message_url($tenant, $conversation->id), ['body' => 'Respuesta owner'])
+        ->assertCreated()
+        ->assertJsonPath('created_message.sent_by_user_id', $owner->id);
+});
+
+test('MSG-API-19: responder una conversación cerrada devuelve conflicto sin encolar', function (string $status): void {
+    Queue::fake();
+
+    $tenant = Tenant::factory()->create();
+    $owner = User::factory()->create();
+    make_tenant_member($owner, $tenant, 'owner');
+    $conversation = make_conversation($tenant, make_contact($tenant), ['status' => $status]);
+
+    $this->actingAs($owner)
+        ->postJson(message_url($tenant, $conversation->id), ['body' => 'No debe salir'])
+        ->assertStatus(409)
+        ->assertJsonPath('code', 'CONVERSATION_INVALID_STATE');
+
+    expect(Message::withoutTenantScope()->where('conversation_id', $conversation->id)->count())->toBe(0);
+    Queue::assertNothingPushed();
+})->with(['resolved', 'archived']);
+
+test('MSG-API-20: actor origen tenant y estado aportados por frontend están prohibidos', function (): void {
+    Queue::fake();
+
+    $tenant = Tenant::factory()->create();
+    $owner = User::factory()->create();
+    make_tenant_member($owner, $tenant, 'owner');
+    $conversation = make_conversation($tenant, make_contact($tenant));
+
+    $this->actingAs($owner)
+        ->postJson(message_url($tenant, $conversation->id), [
+            'body' => 'Intento manipulado',
+            'tenant_id' => 'otro',
+            'sent_by_user_id' => 999,
+            'metadata' => ['origin' => 'handoff'],
+            'origin' => 'automation',
+            'direction' => 'inbound',
+            'status' => 'sent',
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors([
+            'tenant_id',
+            'sent_by_user_id',
+            'metadata',
+            'origin',
+            'direction',
+            'status',
+        ]);
+
+    expect(Message::withoutTenantScope()->where('conversation_id', $conversation->id)->count())->toBe(0);
+    Queue::assertNothingPushed();
 });

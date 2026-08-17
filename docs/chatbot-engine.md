@@ -28,7 +28,7 @@ Entidades:
 | `tag` | tag(s) | Aplica etiquetas al contacto/conversación |
 | `webhook` | URL + método + headers + payload | POST externo con contexto (idempotencia: `execution_id`) |
 | `ai` | prompt + system + kb bool | Genera respuesta con IA (con/sin contexto RAG), aplica límites |
-| `human` | mensaje de aviso opcional | Terminal `handed_off`; el workflow operativo llega en FASE 15 U3 |
+| `human` | mensaje de aviso opcional | Terminal `handed_off`; handoff operativo desde FASE 15 U3 |
 | `end` | — | Finaliza ejecución (estado `completed`) |
 
 ## 4. Algoritmo
@@ -47,8 +47,11 @@ handleMessage(conversation, inboundMessage):
       execution.status = waiting      # espera siguiente mensaje del cliente
       break
     if node.type == human:
+      assert conversation.status in [open, pending]
+      sendOptionalHandoffMessage()
       execution.status = handed_off   # terminal; no se reanuda
       conversation.bot_paused = true
+      conversation.handoff_requested_at = now()
       break
     next = node.type == condition
       ? evaluateCondition(...)        # elige rama por label
@@ -125,10 +128,18 @@ con `TriggerValidator` al crear/actualizar/publicar (422 `errors.config`):
   retroactivamente mensajes recibidos durante handoff. No libera automáticamente al agente.
 - El modelo aprobado es cola manual sin auto-routing. U2 implementa claim propio mediante
   `conversations.claim`, además de assign/transfer atómicos bajo el mismo conversation lock del
-  motor. U3 implementará el handoff operativo y el envío opcional de `handoff_message`.
-- `handoff_requested_at` distingue solicitud humana de pausa manual. U1 solo prepara el campo.
+  motor. U3 implementa el handoff operativo y el envío opcional de `handoff_message` antes de
+  finalizar la execution.
+- Human conserva `open|pending`; sobre `resolved|archived` falla con
+  `CONVERSATION_INVALID_STATE` y nunca reabre silenciosamente. No altera `agent_id`, assignments,
+  participants ni `auto_assigned`.
+- `handoff_requested_at` distingue solicitud humana de pausa manual. Resume y claim lo conservan;
+  una nueva pausa manual posterior lo limpia para no crear un handoff reclamable falso.
 - Inbound durante handoff se persiste pero el bot no lo procesa. Un outbound automático pendiente
-  debe bloquearse en U3 antes de enviarse.
+  se bloquea antes del provider bajo el mismo conversation lock y termina `failed` con código
+  interno `BOT_PAUSED_HANDOFF`; los orígenes `human` y `handoff` siguen permitidos.
+- El runtime transaccional es idempotente por execution y registra `flow.handoff`, log
+  `execution.handed_off` y audit `flow.execution_handed_off`.
 - `ConversationUpdated` permanece para detalle y sus broadcasts de asignación usan after-commit;
   U4 añadirá `InboxConversationChanged` tenant-wide. Notification center y email automático se
   difieren a FASE 22.

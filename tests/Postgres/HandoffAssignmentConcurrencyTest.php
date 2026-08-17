@@ -3,19 +3,29 @@
 declare(strict_types=1);
 
 use App\Application\Conversations\Services\ConversationService;
+use App\Application\Conversations\Services\HumanHandoffService;
 use App\Application\Flows\Services\FlowExecutionService;
 use App\Domain\Audit\Models\AuditLog;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Conversations\Models\ConversationAssignment;
 use App\Domain\Conversations\Models\ConversationParticipant;
+use App\Domain\Flows\Enums\FlowExecutionStatus;
+use App\Domain\Flows\Enums\FlowStatus;
+use App\Domain\Messages\Enums\MessageDirection;
+use App\Domain\Messages\Enums\MessageOrigin;
+use App\Domain\Messages\Enums\MessageStatus;
+use App\Domain\Messages\Enums\MessageType;
+use App\Domain\Messages\Models\Message;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Models\User;
 use App\Events\ConversationUpdated;
 use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Str;
 use Symfony\Component\Process\Process;
 
 beforeEach(function (): void {
@@ -75,8 +85,9 @@ function pg_worker(
     Tenant $tenant,
     User $actor,
     Conversation $conversation,
-    ?User $target = null,
+    User|string|null $target = null,
 ): Process {
+    $targetId = $target instanceof User ? (string) $target->id : (string) ($target ?? 0);
     $environment = [
         'APP_ENV' => 'testing',
         'HANDOFF_U2_PG_TEST' => '1',
@@ -104,7 +115,7 @@ function pg_worker(
         $tenant->id,
         (string) $actor->id,
         $conversation->id,
-        (string) ($target?->id ?? 0),
+        $targetId,
     ], base_path(), $environment);
     $process->setTimeout(45);
 
@@ -447,6 +458,95 @@ test('HCON-MEMBER-02: target desactivado mientras assign espera lock es rechazad
         expect(pg_worker_result($worker)['status'])->toBe('target_membership_error')
             ->and($conversation->fresh()?->agent_id)->toBeNull();
     } finally {
+        $gate->release();
+
+        if ($worker->isRunning()) {
+            $worker->stop();
+        }
+    }
+});
+
+test('HCON-U3-01: outbound automático en espera observa el handoff y no inicia envío', function (): void {
+    ['tenant' => $tenant, 'owner' => $owner, 'conversation' => $conversation] = pg_handoff_setup(agentCount: 0, handoff: false);
+    $flow = make_flow($tenant, make_chatbot($tenant));
+    $humanNodeId = (string) Str::uuid();
+    make_flow_graph($flow, [
+        ['id' => $humanNodeId, 'type' => 'human', 'name' => 'Humano', 'is_start' => true],
+    ], []);
+    $flow->forceFill(['status' => FlowStatus::Published])->save();
+
+    $execution = TenantContext::withId($tenant->id, fn () => app(FlowExecutionService::class)
+        ->start($flow, $conversation));
+    $message = TenantContext::withId($tenant->id, fn (): Message => Message::query()->create([
+        'conversation_id' => $conversation->id,
+        'direction' => MessageDirection::Outbound,
+        'type' => MessageType::Text,
+        'status' => MessageStatus::Pending,
+        'body' => 'Automatización pendiente',
+        'metadata' => [
+            'text' => 'Automatización pendiente',
+            'origin' => MessageOrigin::Automation->value,
+        ],
+    ]));
+
+    $label = 'u3-outbound-handoff-'.bin2hex(random_bytes(4));
+    $readyKey = 'handoff-pg-ready:'.$label;
+    Cache::forget($readyKey);
+    $gate = app(FlowExecutionService::class)->conversationLock($tenant, $conversation->id);
+    expect($gate->get())->toBeTrue();
+    $worker = pg_worker($label, 'send-message', $tenant, $owner, $conversation, $message->id);
+    $worker->start();
+
+    try {
+        $deadline = microtime(true) + 30;
+        $ready = false;
+
+        while (microtime(true) < $deadline) {
+            if (Cache::get($readyKey)) {
+                $ready = true;
+
+                break;
+            }
+
+            usleep(50_000);
+        }
+
+        expect($ready)->toBeTrue()
+            ->and($worker->isRunning())->toBeTrue()
+            ->and($message->fresh()?->status)->toBe(MessageStatus::Pending);
+
+        TenantContext::withId($tenant->id, function () use ($tenant, $conversation, $execution): void {
+            app(HumanHandoffService::class)->handoff(
+                $tenant,
+                $conversation,
+                $execution,
+                null,
+            );
+            app(FlowExecutionService::class)->finish(
+                $execution,
+                FlowExecutionStatus::HandedOff,
+                'execution.handed_off',
+            );
+        });
+
+        expect($conversation->fresh()?->bot_paused)->toBeTrue()
+            ->and($conversation->fresh()?->handoff_requested_at)->not->toBeNull();
+
+        $gate->release();
+        $result = pg_worker_result($worker);
+
+        expect($result['status'])->toBe('ok')
+            ->and($result['message_status'])->toBe(MessageStatus::Failed->value)
+            ->and($result['error_code'])->toBe('BOT_PAUSED_HANDOFF')
+            ->and(DB::table('message_send_attempts')->where('tenant_id', $tenant->id)->count())->toBe(0)
+            ->and(DB::table('audit_logs')
+                ->where('tenant_id', $tenant->id)
+                ->where('subject_id', $message->id)
+                ->where('action', 'message.failed')
+                ->where('data->error_code', 'BOT_PAUSED_HANDOFF')
+                ->count())->toBe(1);
+    } finally {
+        Cache::forget($readyKey);
         $gate->release();
 
         if ($worker->isRunning()) {

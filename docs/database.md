@@ -153,8 +153,9 @@ body text nullable                         → texto, caption/filename de media 
 media_url varchar(2048) nullable
 media_mime varchar(100) nullable
 media_size bigint nullable
-metadata JSONB nullable                    → from, provider_timestamp + payload del tipo (media,
-                                           →   location, interactive, template)
+  metadata JSONB nullable                    → inbound: from/provider_timestamp + payload del tipo
+                                           → outbound: text + origin automation|human|handoff;
+                                           → bloqueo interno: error_code/error_source
 sent_at, delivered_at, read_at, failed_at nullable   → columna por estado (ADR-032)
 created_at / updated_at
 ```
@@ -162,8 +163,9 @@ created_at / updated_at
   de Meta). Índices: `(tenant_id, conversation_id, created_at)` y `(conversation_id)`.
 - Los status de Meta **actualizan** la fila por `provider_message_id` (nunca crean mensajes);
   `sending` es el estado CAS del job `SendWhatsAppMessage` (`pending → sending` atómico).
-- El detalle de error de un envío (error_code/error_message del proveedor, intentos) vive en
-  `message_send_attempts`, no en `messages`.
+- El detalle de error del proveedor y sus intentos vive en `message_send_attempts`. El bloqueo
+  interno anterior al provider por handoff no crea attempt y guarda únicamente
+  `BOT_PAUSED_HANDOFF`/`internal` en metadata del mensaje.
 
 ### `chatbots` / `flows` / `triggers` / `flow_nodes` / `flow_connections` / `flow_executions` / `flow_execution_logs` (FASE 11, ADR-034)
 

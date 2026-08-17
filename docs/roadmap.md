@@ -1,7 +1,7 @@
 # Roadmap
 
-Estado general: **FASE 15 EN PROGRESO** (Transferencia a humano). UNIDAD 1 completada localmente;
-UNIDADES 2-6 pendientes de autorización explícita.
+Estado general: **FASE 15 EN PROGRESO** (Transferencia a humano). UNIDADES 1-3 completadas
+localmente; UNIDADES 4-6 pendientes de autorización explícita.
 
 ## Fases
 
@@ -779,7 +779,16 @@ COMPLETADO / BLOQUEADO
       para row lock, concurrent assign/transfer/claim, rollback tardío y UNIQUE SQLSTATE 23505.
 - [x] **Gates U2**: backend 601/2490, PostgreSQL 9/50, Vitest 151, Pint, PHPStan 0 errores (1G),
       `vue-tsc`, Vite build, Docker y `health:check` verdes.
-- [ ] **UNIDAD 3** — Human handoff operativo, resume y outbound pendiente (NO iniciada).
+- [x] **UNIDAD 3 — Human handoff operativo**: `HumanHandoffService` transaccional e idempotente
+      bajo el lock del motor; `handoff_message` opcional previo al terminal; timestamp/audit/log;
+      conserva `open|pending` y rechaza `resolved|archived` sin reabrir ni alterar assignment.
+- [x] **UNIDAD 3 — Mensajería y resume seguros**: origen interno
+      `automation|human|handoff`, actor autenticado, policy agent-assignment con override
+      owner/admin, campos sensibles prohibidos, worker serializado que bloquea automation con
+      `BOT_PAUSED_HANDOFF`, y resume atómico sin revive/replay ni release del agente.
+- [x] **Tests/gates U3**: HANDOFF-RUNTIME/HANDOFF-OUT/MSG-API, rollback e idempotencia; carrera
+      PostgreSQL/Redis con proceso outbound real. Backend 621/2615, PostgreSQL 10/60, Vitest 151,
+      Pint, PHPStan 0 errores (1G), migraciones PostgreSQL limpias, `vue-tsc` y Vite build verdes.
 - [ ] **UNIDAD 4** — Realtime tenant-wide `InboxConversationChanged` (NO iniciada).
 - [ ] **UNIDAD 5** — Inbox UX (NO iniciada).
 - [ ] **UNIDAD 6** — Hardening/cierre (NO iniciada).

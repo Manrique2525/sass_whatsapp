@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Application\Flows\Services;
 
+use App\Domain\Conversations\Exceptions\ConversationInvalidStateException;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Flows\Enums\FlowExecutionStatus;
 use App\Domain\Flows\Enums\FlowNodeType;
@@ -22,7 +23,9 @@ use App\Domain\Flows\ValueObjects\NodeExecutionContext;
 use App\Domain\Messages\Enums\MessageDirection;
 use App\Domain\Messages\Models\Message;
 use App\Domain\Tenants\Models\Tenant;
+use App\Events\ConversationUpdated;
 use App\Jobs\ContinueFlowExecution;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\Collection;
 
 /**
@@ -54,6 +57,8 @@ final class FlowEngine
         private readonly FlowExecutionService $executions,
         private readonly NodeExecutorRegistry $registry,
         private readonly TriggerMatcher $matcher,
+        private readonly Dispatcher $events,
+        private readonly ConversationLockContext $lockContext,
     ) {}
 
     /**
@@ -64,10 +69,12 @@ final class FlowEngine
     {
         $lock = $this->executions->conversationLock($tenant, $conversation->id);
         $lock->block(seconds: 10);
+        $this->lockContext->enter($tenant->id, $conversation->id, $lock);
 
         try {
             $this->handleMessageLocked($tenant, $inbound, $conversation);
         } finally {
+            $this->lockContext->leave($tenant->id, $conversation->id);
             $lock->release();
         }
     }
@@ -81,10 +88,13 @@ final class FlowEngine
     {
         $lock = $this->executions->conversationLock($tenant, (string) $execution->conversation_id);
         $lock->block(seconds: 10);
+        $conversationId = (string) $execution->conversation_id;
+        $this->lockContext->enter($tenant->id, $conversationId, $lock);
 
         try {
             $this->continueExecutionLocked($tenant, $execution, $mode);
         } finally {
+            $this->lockContext->leave($tenant->id, $conversationId);
             $lock->release();
         }
     }
@@ -97,46 +107,58 @@ final class FlowEngine
      * verifica bot_paused, no tiene ejecución activa y el flujo sigue
      * publicado, luego delega al pipeline start() + run().
      */
-    public function handleScheduleTrigger(Tenant $tenant, Flow $flow, Conversation $conversation): void
+    public function handleScheduleTrigger(Tenant $tenant, Flow $flow, Conversation $conversation): bool
     {
         $lock = $this->executions->conversationLock($tenant, $conversation->id);
         $lock->block(seconds: 10);
+        $this->lockContext->enter($tenant->id, $conversation->id, $lock);
 
         try {
-            $this->handleScheduleTriggerLocked($tenant, $flow, $conversation);
+            return $this->handleScheduleTriggerLocked($tenant, $flow, $conversation);
         } finally {
+            $this->lockContext->leave($tenant->id, $conversation->id);
             $lock->release();
         }
     }
 
-    private function handleScheduleTriggerLocked(Tenant $tenant, Flow $flow, Conversation $conversation): void
+    private function handleScheduleTriggerLocked(Tenant $tenant, Flow $flow, Conversation $conversation): bool
     {
         $conversation->refresh();
 
+        if ($this->recoverCommittedHandoff($conversation)) {
+            return false;
+        }
+
         if ($conversation->bot_paused) {
-            return;
+            return false;
         }
 
         $execution = $this->executions->findActive($conversation);
 
         if ($execution !== null) {
-            return;
+            return false;
         }
 
         $flow->refresh();
 
         if ($flow->status !== FlowStatus::Published) {
-            return;
+            return false;
         }
 
         $execution = $this->executions->start($flow, $conversation);
 
         $this->run($tenant, $execution, $conversation, null);
+
+        return true;
     }
 
     private function handleMessageLocked(Tenant $tenant, Message $inbound, Conversation $conversation): void
     {
         $conversation->refresh();
+
+        if ($this->recoverCommittedHandoff($conversation)) {
+            return;
+        }
 
         if ($conversation->bot_paused) {
             return;
@@ -211,11 +233,15 @@ final class FlowEngine
     {
         $execution->refresh();
 
-        if (! $execution->status->isActive()) {
+        $conversation = $execution->conversation;
+
+        if ($this->recoverCommittedHandoff($conversation)) {
             return;
         }
 
-        $conversation = $execution->conversation;
+        if (! $execution->status->isActive()) {
+            return;
+        }
 
         if ($conversation->bot_paused) {
             return;
@@ -259,6 +285,19 @@ final class FlowEngine
         ], event: 'step_completed', nodeId: $currentNode->id, payload: ['next' => $next]);
 
         $this->run($tenant, $execution, $conversation, null);
+    }
+
+    private function recoverCommittedHandoff(Conversation $conversation): bool
+    {
+        if (! $this->executions->finalizeCommittedHandoff($conversation)) {
+            return false;
+        }
+
+        $conversation->refresh();
+        $conversation->loadMissing(['contact', 'agent']);
+        $this->events->dispatch(new ConversationUpdated($conversation));
+
+        return true;
     }
 
     /**
@@ -414,6 +453,14 @@ final class FlowEngine
 
             try {
                 $result = $this->registry->for($node->type)->execute($context);
+            } catch (ConversationInvalidStateException $e) {
+                $this->executions->finish($execution, FlowExecutionStatus::Failed, 'execution.failed', [
+                    'reason' => 'invalid_conversation_state',
+                    'code' => ConversationInvalidStateException::ERROR_CODE,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return;
             } catch (WebhookUrlBlockedException $e) {
                 $this->executions->finish($execution, FlowExecutionStatus::Failed, 'execution.failed', [
                     'reason' => 'webhook_blocked',
@@ -454,11 +501,22 @@ final class FlowEngine
                     return;
 
                 case 'terminal':
+                    $status = FlowExecutionStatus::from((string) $result->terminalStatus);
                     $this->executions->finish(
                         $execution,
-                        FlowExecutionStatus::from((string) $result->terminalStatus),
-                        $result->terminalStatus === FlowExecutionStatus::Failed->value ? 'execution.failed' : 'execution.completed',
+                        $status,
+                        match ($status) {
+                            FlowExecutionStatus::Failed => 'execution.failed',
+                            FlowExecutionStatus::HandedOff => 'execution.handed_off',
+                            default => 'execution.completed',
+                        },
                     );
+
+                    if ($status === FlowExecutionStatus::HandedOff) {
+                        $conversation->refresh();
+                        $conversation->loadMissing(['contact', 'agent']);
+                        $this->events->dispatch(new ConversationUpdated($conversation));
+                    }
 
                     return;
 

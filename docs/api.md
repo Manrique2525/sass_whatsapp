@@ -222,8 +222,8 @@ estado es **no-op (200)**; una transición inválida → **409** `CONVERSATION_I
 | POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/claim` | `conversations.claim` (owner/admin/agent) | Claim propio y atómico: body vacío; `agent_id`/`tenant_id` están **prohibidos**. El target siempre es el usuario autenticado y exige `bot_paused=true`, `handoff_requested_at != null`, `agent_id=null`, status open/pending y membership activa. Ganador → **200**; segundo claimant → **409** `CONVERSATION_ALREADY_ASSIGNED`; no handoff → **409** `CONVERSATION_NOT_AWAITING_HANDOFF`. Assignment `claim`; audita `conversation.claimed` |
 | POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/close` | `conversations.manage` | Cierra (→ `resolved`). Sobre archivada → **409** `CONVERSATION_INVALID_STATE`; sobre resuelta → no-op. Audita `conversation.closed` |
 | POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/reopen` | `conversations.manage` | Reabre (→ `open`). Sobre abierta → no-op. Audita `conversation.reopened` |
-| POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/pause-bot` | `conversations.manage` | Pausa el bot (`bot_paused=true`), handoff a humano. Audita `conversation.bot_paused` |
-| POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/resume-bot` | `conversations.manage` | Reanuda el bot (`bot_paused=false`). Audita `conversation.bot_resumed` |
+| POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/pause-bot` | `conversations.manage` | Pausa manualmente el bot (`bot_paused=true`); no crea handoff. Si existía un marcador histórico tras resume, limpia `handoff_requested_at`. Audita `conversation.bot_paused` |
+| POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/resume-bot` | `conversations.manage` | Reanuda el bot (`bot_paused=false`) bajo lock/transacción. Conserva `handoff_requested_at`, agente, assignment y participant; no revive executions ni reprocesa inbound. Audita `conversation.bot_resumed` |
 
 Assign/transfer/claim comparten el orden de concurrencia
 `conversationLock` Redis → transacción DB → `SELECT ... FOR UPDATE` de conversation → memberships
@@ -233,7 +233,7 @@ inconsistentes → **409** `CONVERSATION_ASSIGNMENT_INCONSISTENT`; timeout del l
 exponer SQL.
 
 `ConversationResource`: `{id, status, status_label, contact (ContactResource), agent {id, name,
-email} | null, last_message_at, last_interaction_at, auto_assigned, bot_paused, context,
+email} | null, last_message_at, last_interaction_at, auto_assigned, bot_paused, handoff_requested_at, context,
 flow_execution_id, participants[], assignments[], created_at, updated_at}` (jamás incluye
 `tenant_id`). `context`/`flow_execution_id` los gestionará el motor de flujos (FASE 10+).
 
@@ -257,6 +257,10 @@ En FASE 9 los mensajes se **persisten y procesan por backend** (sin endpoints RE
   backoff; éxito → `sent` + `provider_message_id`, fallo permanente → `failed`). Emite
   `MessageCreated` y toca timestamps de la conversación (`last_message_at`/`last_interaction_at`
   sin reabrir) con `ConversationUpdated`.
+- **Origen/actor U3**: `metadata.origin` es `automation|human|handoff`. Solo `human` lleva
+  `sent_by_user_id`; se deriva del usuario autenticado y nunca del payload. Un automation pendiente
+  observado después de handoff termina `failed` con metadata `error_code=BOT_PAUSED_HANDOFF` y
+  `error_source=internal`, sin llamada/intento Meta.
 
 **REST (FASE 10)** — ambos bajo `middleware('tenant')` (aislamiento A/B: tenant ajeno/no-miembro →
 404; sin permiso → 403 `PERMISSION_DENIED`; tenant suspendido → 409):
@@ -264,9 +268,9 @@ En FASE 9 los mensajes se **persisten y procesan por backend** (sin endpoints RE
 | Método | Ruta | Permiso | Descripción |
 |---|---|---|---|
 | GET | `/api/v1/tenants/{tenant}/conversations/{conversation}/messages` | `conversations.view` | Historial **DESC** paginado (`per_page` 1..100, default 30) → `{messages: MessageResource[], meta}` |
-| POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/messages` | `messages.send` (owner/admin/agent) | Envía `{body*}` (required, string, max 4096) → **201** `{message, created_message}` (pending; el envío es async por job) |
+| POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/messages` | `messages.send` (owner/admin/agent) | Envía `{body*}` (required, string, max 4096) en `open|pending` → **201** `{message, created_message}`. Agent exige assignment vigente propia; owner/admin tienen override. Agent incorrecto → **403** `CONVERSATION_REPLY_FORBIDDEN`; estado cerrado → **409** `CONVERSATION_INVALID_STATE`. `tenant_id`, `sent_by_user_id`, `metadata`, `origin`, `direction` y `status` están prohibidos |
 
-**MessageResource**: `id`, `conversation_id`, `provider_message_id`, `direction`, `type`, `status`,
+**MessageResource**: `id`, `conversation_id`, `sent_by_user_id`, `provider_message_id`, `direction`, `type`, `status`,
 `body`, `media_url`, `media_mime`, `media_size`, `metadata`, `sent_at`, `delivered_at`, `read_at`,
 `failed_at`, `created_at`, `updated_at`.
 

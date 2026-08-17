@@ -277,6 +277,8 @@ final class ConversationController extends Controller
             return $this->tenantNotActive();
         } catch (ConversationNotFoundException) {
             throw new NotFoundHttpException('Conversación no encontrada.');
+        } catch (ConversationInvalidStateException $e) {
+            return $this->invalidState($e);
         }
 
         return response()->json([

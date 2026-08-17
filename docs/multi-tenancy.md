@@ -239,7 +239,9 @@ Nunca se acepta `tenant_id` desde el request (se ignora o se rechaza — test
 - **Handoff data (FASE 15 U1, ADR-051/052)**: assignments/participants reciben el tenant solo
   desde `TenantContext`, nunca del request; sin contexto las lecturas devuelven vacío y las
   escrituras fallan seguro. `messages.sent_by_user_id` no es fillable ni se confía desde payload
-  público; U3 resolverá el actor desde el usuario autenticado y validará pertenencia al tenant.
+  público; U3 resuelve el actor desde el usuario autenticado, revalida membership activa y exige
+  assignment propia para agent. Owner/admin conservan override dentro del tenant. El origen
+  `automation|human|handoff` también lo fija exclusivamente el backend.
 - **Assignment/claim atómico (FASE 15 U2)**: las tres operaciones resuelven la conversación con
   filtro explícito de tenant y `FOR UPDATE`, y vuelven a leer memberships activas después de
   adquirir el `conversationLock`. Claim no acepta IDs del cliente. FKs compuestas y scopes impiden

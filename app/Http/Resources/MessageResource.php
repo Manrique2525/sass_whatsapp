@@ -21,6 +21,7 @@ final class MessageResource extends JsonResource
         return [
             'id' => $this->id,
             'conversation_id' => $this->conversation_id,
+            'sent_by_user_id' => $this->sent_by_user_id,
             'provider_message_id' => $this->provider_message_id,
             'direction' => $this->direction->value,
             'type' => $this->type->value,

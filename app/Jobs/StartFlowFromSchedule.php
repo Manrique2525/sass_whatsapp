@@ -6,7 +6,6 @@ namespace App\Jobs;
 
 use App\Application\Audit\Services\AuditLogger;
 use App\Application\Flows\Services\FlowEngine;
-use App\Application\Flows\Services\FlowExecutionService;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Flows\Enums\FlowStatus;
 use App\Domain\Flows\Enums\FlowTriggerType;
@@ -131,19 +130,9 @@ final class StartFlowFromSchedule implements ShouldBeUnique, ShouldQueue
         }
 
         try {
-            $conversation->refresh();
-
-            if ($conversation->bot_paused) {
+            if (! app(FlowEngine::class)->handleScheduleTrigger($tenant, $flow, $conversation)) {
                 return;
             }
-
-            $active = app(FlowExecutionService::class)->findActive($conversation);
-
-            if ($active !== null) {
-                return;
-            }
-
-            app(FlowEngine::class)->handleScheduleTrigger($tenant, $flow, $conversation);
 
             app(AuditLogger::class)->record(
                 action: 'flow.schedule_triggered',

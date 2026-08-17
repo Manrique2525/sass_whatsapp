@@ -6,21 +6,29 @@ namespace App\Application\Flows\Services;
 
 use App\Application\Audit\Services\AuditLogger;
 use App\Application\Users\Services\AuthorizationService;
+use App\Domain\Audit\Models\AuditLog;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Flows\Enums\FlowExecutionStatus;
+use App\Domain\Flows\Enums\FlowNodeType;
 use App\Domain\Flows\Exceptions\FlowExecutionInvalidStateException;
 use App\Domain\Flows\Exceptions\FlowExecutionNotFoundException;
 use App\Domain\Flows\Exceptions\FlowInvalidException;
 use App\Domain\Flows\Models\Flow;
 use App\Domain\Flows\Models\FlowExecution;
 use App\Domain\Flows\Models\FlowExecutionLog;
+use App\Domain\Messages\Enums\MessageDirection;
+use App\Domain\Messages\Enums\MessageOrigin;
+use App\Domain\Messages\Enums\MessageStatus;
 use App\Domain\Messages\Models\Message;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Enums\TenantPermission;
 use App\Domain\Users\Models\User;
+use App\Jobs\RecoverPendingWhatsAppMessage;
 use Illuminate\Contracts\Cache\Lock;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Persistencia y casos de uso de las ejecuciones de flujos (FASE 11, ADR-037).
@@ -41,13 +49,14 @@ final class FlowExecutionService
     public function __construct(
         private readonly AuthorizationService $authorization,
         private readonly AuditLogger $auditLogger,
+        private readonly ConversationLockContext $lockContext,
     ) {}
 
-    public function conversationLock(Tenant $tenant, string $conversationId): Lock
+    public function conversationLock(Tenant $tenant, string $conversationId, int $seconds = 150): Lock
     {
         return Cache::lock(
             "lock:tenant:{$tenant->id}:flow:{$conversationId}",
-            seconds: 30,
+            seconds: $seconds,
         );
     }
 
@@ -59,6 +68,9 @@ final class FlowExecutionService
 
         /** @var FlowExecution|null $execution */
         $execution = FlowExecution::query()
+            ->withoutTenantScope()
+            ->where('tenant_id', $conversation->tenant_id)
+            ->where('conversation_id', $conversation->id)
             ->whereKey($conversation->flow_execution_id)
             ->active()
             ->first();
@@ -133,23 +145,103 @@ final class FlowExecutionService
         string $event,
         array $payload = [],
     ): void {
-        $execution->forceFill(['status' => $status])->save();
+        DB::transaction(function () use ($execution, $status, $event, $payload): void {
+            $lockedExecution = FlowExecution::query()
+                ->withoutTenantScope()
+                ->where('tenant_id', $execution->tenant_id)
+                ->whereKey($execution->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        $conversation = $execution->conversation;
+            if ($lockedExecution->status->isTerminal()) {
+                return;
+            }
 
-        if ($conversation->flow_execution_id === $execution->id) {
-            $conversation->forceFill(['flow_execution_id' => null])->save();
+            $conversation = Conversation::query()
+                ->withoutTenantScope()
+                ->where('tenant_id', $lockedExecution->tenant_id)
+                ->whereKey($lockedExecution->conversation_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $lockedExecution->forceFill(['status' => $status])->save();
+
+            if ($conversation->flow_execution_id === $lockedExecution->id) {
+                $conversation->forceFill(['flow_execution_id' => null])->save();
+            }
+
+            $this->log(
+                $lockedExecution,
+                event: $event,
+                nodeId: $lockedExecution->current_node_id,
+                payload: $payload,
+            );
+
+            $this->auditLogger->record(
+                action: 'flow.execution_'.($status === FlowExecutionStatus::Completed ? 'completed' : ($status === FlowExecutionStatus::Failed ? 'failed' : 'handed_off')),
+                data: ['execution_id' => $lockedExecution->id],
+                subjectType: FlowExecution::class,
+                subjectId: $lockedExecution->id,
+                tenantId: (string) $lockedExecution->tenant_id,
+            );
+        });
+
+        $execution->refresh();
+    }
+
+    /**
+     * Repara el único gap tolerado por ADR-051: handoff comprometido y crash
+     * antes de finalizar la execution. Debe llamarse bajo conversationLock.
+     */
+    public function finalizeCommittedHandoff(Conversation $conversation): bool
+    {
+        $execution = $this->findActive($conversation);
+
+        if ($execution === null) {
+            return false;
         }
 
-        $this->log($execution, event: $event, nodeId: $execution->current_node_id, payload: $payload);
+        $execution->loadMissing('currentNode');
 
-        $this->auditLogger->record(
-            action: 'flow.execution_'.($status === FlowExecutionStatus::Completed ? 'completed' : ($status === FlowExecutionStatus::Failed ? 'failed' : 'handed_off')),
-            data: ['execution_id' => $execution->id],
-            subjectType: FlowExecution::class,
-            subjectId: $execution->id,
-            tenantId: (string) $execution->tenant_id,
-        );
+        if ($execution->currentNode?->type !== FlowNodeType::Human) {
+            return false;
+        }
+
+        $committed = AuditLog::query()
+            ->where('tenant_id', $conversation->tenant_id)
+            ->where('action', 'flow.handoff')
+            ->where('subject_type', Conversation::class)
+            ->where('subject_id', $conversation->id)
+            ->where('data->flow_execution_id', $execution->id)
+            ->exists();
+
+        if (! $committed) {
+            return false;
+        }
+
+        $notice = Message::query()
+            ->withoutTenantScope()
+            ->where('tenant_id', $conversation->tenant_id)
+            ->where('conversation_id', $conversation->id)
+            ->where('direction', MessageDirection::Outbound->value)
+            ->where('status', MessageStatus::Pending->value)
+            ->where('metadata->origin', MessageOrigin::Handoff->value)
+            ->where('metadata->flow_execution_id', $execution->id)
+            ->first();
+
+        if ($notice !== null) {
+            dispatch(
+                (new RecoverPendingWhatsAppMessage(
+                    (string) $conversation->tenant_id,
+                    $conversation->id,
+                    $notice->id,
+                ))->forTenant((string) $conversation->tenant_id),
+            );
+        }
+
+        $this->finish($execution, FlowExecutionStatus::HandedOff, 'execution.handed_off');
+
+        return true;
     }
 
     /**
@@ -242,10 +334,34 @@ final class FlowExecutionService
         $this->authorization->authorize($user, TenantPermission::ManageFlows, $tenant);
 
         $execution = $this->findForTenant($tenant, $executionId);
+        $lock = $this->conversationLock($tenant, (string) $execution->conversation_id);
 
-        $this->assertActive($execution);
+        try {
+            $lock->block(seconds: 10);
+        } catch (LockTimeoutException) {
+            throw new FlowExecutionInvalidStateException(
+                'La conversación está siendo modificada; intente nuevamente.',
+            );
+        }
 
-        $execution->conversation->forceFill(['bot_paused' => false])->save();
+        $this->lockContext->enter($tenant->id, (string) $execution->conversation_id, $lock);
+
+        try {
+            $execution->refresh();
+            $conversation = $execution->conversation;
+
+            if ($this->finalizeCommittedHandoff($conversation)) {
+                throw new FlowExecutionInvalidStateException(
+                    'La ejecución ya finalizó por handoff y no puede reanudarse.',
+                );
+            }
+
+            $this->assertActive($execution);
+            $conversation->forceFill(['bot_paused' => false])->save();
+        } finally {
+            $this->lockContext->leave($tenant->id, (string) $execution->conversation_id);
+            $lock->release();
+        }
 
         $this->log($execution, event: 'execution.resumed');
 

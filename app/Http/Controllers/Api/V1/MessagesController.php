@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\V1;
 
 use App\Application\Messages\Services\MessageService;
+use App\Domain\Conversations\Exceptions\ConversationInvalidStateException;
 use App\Domain\Conversations\Exceptions\ConversationNotFoundException;
+use App\Domain\Conversations\Exceptions\ConversationReplyForbiddenException;
 use App\Domain\Tenants\Exceptions\PermissionDeniedException;
 use App\Domain\Tenants\Exceptions\TenantMembershipException;
 use App\Domain\Tenants\Exceptions\TenantNotActiveException;
@@ -71,6 +73,16 @@ final class MessagesController extends Controller
             return $this->tenantNotActive();
         } catch (ConversationNotFoundException) {
             throw new NotFoundHttpException('Conversación no encontrada.');
+        } catch (ConversationInvalidStateException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'code' => ConversationInvalidStateException::ERROR_CODE,
+            ], ConversationInvalidStateException::HTTP_STATUS);
+        } catch (ConversationReplyForbiddenException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'code' => $e->errorCode,
+            ], $e->httpStatus);
         }
 
         return response()->json([

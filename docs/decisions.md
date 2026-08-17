@@ -1149,7 +1149,7 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
 ## ADR-051: Semántica terminal de Human Handoff
 
 - **Fecha**: 2026-08-17
-- **Estado**: Aceptado — FASE 15 UNIDAD 1
+- **Estado**: Aceptado — FASE 15 UNIDADES 1 y 3
 - **Contexto**: el handoff básico de FASE 11 pausa el bot y finaliza la ejecución, pero la
   documentación también describía `human` como waiting y sugería reanudar la ejecución previa.
   El motor ya trata `FlowExecutionStatus::HandedOff` como terminal y limpia
@@ -1165,13 +1165,33 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - `handoff_message` es opcional; ausente, null o vacío es válido. Su envío se implementará en
     U3, antes de finalizar el handoff cuando tenga texto.
   - `conversations.handoff_requested_at` distingue una solicitud humana de una pausa manual. El
-    HumanNode lo escribirá en U3; claim/resume no lo limpian por sí solos.
+    HumanNode lo escribe en U3; claim/resume no lo limpian por sí solos. Una nueva pausa manual,
+    después de haber reanudado, limpia el marcador histórico para no convertir la pausa en un
+    handoff reclamable.
   - Un outbound automático aún no enviado debe bloquearse después del handoff; la comprobación
     operativa pertenece a U3.
+  - Human conserva `status=open|pending`. Si la conversación está `resolved|archived`, el handoff
+    falla con `CONVERSATION_INVALID_STATE`; nunca reabre implícitamente. Reopen sigue siendo una
+    acción explícita del lifecycle.
+  - `HumanHandoffService` corre bajo el `conversationLock` que ya mantiene `FlowEngine` y no lo
+    readquiere. En una transacción con conversation `FOR UPDATE` pausa el bot, fija el timestamp,
+    crea una única notificación opcional y audita `flow.handoff`; solo después del commit el motor
+    finaliza y audita `flow.execution_handed_off`. La consulta de audit por execution hace el paso
+    idempotente ante reintento.
+  - `messages.metadata.origin` distingue `automation`, `human` y `handoff`, sin DDL. Un mensaje
+    legacy sin actor se trata fail-closed como automation. `SendWhatsAppMessage` comparte el
+    `conversationLock` durante la llamada al provider: si observa el handoff antes de enviar,
+    termina el mensaje como `failed`, guarda `BOT_PAUSED_HANDOFF`/`internal` en metadata, audita y
+    no crea `message_send_attempts` ni reintenta como error Meta. Human y handoff siguen permitidos.
+    En cola sync, un contexto process-local reconoce el lock que ya posee el caller y evita una
+    readquisición; entre procesos la exclusión continúa dependiendo exclusivamente de Redis.
+  - Una respuesta manual toma `sent_by_user_id` exclusivamente del usuario autenticado. Agents
+    solo responden la conversación asignada; owner/admin conservan el override de gestión. Solo se
+    responde en `open|pending`; actor/origin/tenant/direction/status públicos están prohibidos.
   - El notification center y emails automáticos se difieren a FASE 22.
 - **Consecuencias**: `human` deja de clasificarse como waiting y es un terminal válido alternativo
-  a `end`. U1 corrige validación/configuración, pero no cambia `HumanNodeExecutor`, resume,
-  mensajería ni realtime.
+  a `end`. U3 implementa el runtime, resume atómico, actor y barrera outbound sin migraciones ni
+  ampliar el realtime tenant-wide reservado para U4.
 
 ## ADR-052: Consistencia de asignación de conversaciones
 
@@ -1204,10 +1224,10 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
     `left_at`; períodos múltiples requerirían DDL futuro y no forman parte de U2.
   - Audit forma parte de la transacción y `ConversationUpdated` se despacha tras ella con broadcast
     after-commit. `InboxConversationChanged` sigue reservado para U4.
-  - `messages.sent_by_user_id` nullable atribuye mensajes humanos. Inbound y bot permanecen null;
-    U3 aplicará la policy tenant-aware y no confiará en payload público.
-- **Consecuencias**: U2 implementa claim/assign/transfer, no release, HumanNodeExecutor, resume ni
-  atribución desde MessageService. `auto_assigned` permanece false. La UNIQUE parcial es backstop,
+  - `messages.sent_by_user_id` nullable atribuye mensajes humanos. Inbound, automation y handoff
+    permanecen null; U3 aplica la policy tenant-aware y no confía en payload público.
+- **Consecuencias**: U2 implementa claim/assign/transfer, no release. U3 implementa
+  HumanNodeExecutor, resume y atribución desde MessageService. `auto_assigned` permanece false. La UNIQUE parcial es backstop,
   no el mecanismo primario de concurrencia. Como esquema y código empiezan a exigir `tenant_id`
   juntos, el cambio U1 se despliega coordinadamente, no con workers de versiones mezcladas.
 

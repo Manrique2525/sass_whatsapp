@@ -7,28 +7,37 @@ namespace App\Application\Messages\Services;
 use App\Application\Audit\Services\AuditLogger;
 use App\Application\Contacts\Services\ContactService;
 use App\Application\Conversations\Services\ConversationService;
+use App\Application\Flows\Services\ConversationLockContext;
+use App\Application\Flows\Services\FlowExecutionService;
 use App\Application\Users\Services\AuthorizationService;
 use App\Domain\Conversations\Enums\ConversationStatus;
+use App\Domain\Conversations\Exceptions\ConversationInvalidStateException;
 use App\Domain\Conversations\Exceptions\ConversationNotFoundException;
+use App\Domain\Conversations\Exceptions\ConversationReplyForbiddenException;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Messages\Enums\MessageDirection;
+use App\Domain\Messages\Enums\MessageOrigin;
 use App\Domain\Messages\Enums\MessageStatus;
 use App\Domain\Messages\Enums\MessageType;
 use App\Domain\Messages\Exceptions\UnsupportedMessageTypeException;
 use App\Domain\Messages\Models\Message;
 use App\Domain\Messages\ValueObjects\InboundMessageResult;
 use App\Domain\Tenants\Models\Tenant;
+use App\Domain\Users\Enums\TenantMembershipStatus;
 use App\Domain\Users\Enums\TenantPermission;
+use App\Domain\Users\Models\TenantUser;
 use App\Domain\Users\Models\User;
 use App\Events\ConversationUpdated;
 use App\Events\MessageCreated;
 use App\Events\MessageStatusUpdated;
 use App\Infrastructure\Tenancy\TenantContext;
 use App\Jobs\SendWhatsAppMessage;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\QueryException;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -48,12 +57,21 @@ use Illuminate\Support\Facades\Log;
  */
 final class MessageService
 {
+    public const HANDOFF_BLOCK_CODE = 'BOT_PAUSED_HANDOFF';
+
+    public const QUEUE_EXHAUSTED_CODE = 'MESSAGE_QUEUE_ATTEMPTS_EXHAUSTED';
+
+    public const LOCK_TIMEOUT_CODE = 'MESSAGE_CONVERSATION_LOCK_TIMEOUT';
+
     public function __construct(
         private readonly AuditLogger $auditLogger,
         private readonly ContactService $contacts,
         private readonly ConversationService $conversations,
         private readonly AuthorizationService $authorization,
         private readonly Dispatcher $events,
+        private readonly FlowExecutionService $flowExecutions,
+        private readonly ConversationLockContext $lockContext,
+        private readonly MessageOriginClassifier $originClassifier,
     ) {}
 
     /**
@@ -209,27 +227,126 @@ final class MessageService
      * Refresca los timestamps de la conversación (`last_message_at` /
      * `last_interaction_at`) para mantener el orden de la lista del inbox y
      * emite `MessageCreated` + `ConversationUpdated` (FASE 10, ADR-033).
+     *
+     * @param  array<string, mixed>  $metadata
      */
-    public function createOutbound(Tenant $tenant, Conversation $conversation, string $body): Message
-    {
+    public function createOutbound(
+        Tenant $tenant,
+        Conversation $conversation,
+        string $body,
+        MessageOrigin $origin = MessageOrigin::Automation,
+        ?User $actor = null,
+        array $metadata = [],
+    ): Message {
+        if ($conversation->tenant_id !== $tenant->id) {
+            throw new \InvalidArgumentException('La conversación no pertenece al tenant del outbound.');
+        }
+
+        if (($origin === MessageOrigin::Human) !== ($actor !== null)) {
+            throw new \InvalidArgumentException('Los mensajes humanos requieren actor y solo ellos pueden atribuirlo.');
+        }
+
+        if ($actor !== null && ! TenantUser::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('user_id', $actor->id)
+            ->where('status', TenantMembershipStatus::Active->value)
+            ->exists()) {
+            throw new \InvalidArgumentException('El actor del mensaje no es miembro activo del tenant.');
+        }
+
         // `withId()` no limpia un contexto ya activo (p. ej. el del motor de
         // flujos); solo setea/limpia si no había ninguno.
-        $message = TenantContext::withId($tenant->id, fn (): Message => Message::query()->create([
-            'conversation_id' => $conversation->id,
-            'direction' => MessageDirection::Outbound,
-            'type' => MessageType::Text,
-            'status' => MessageStatus::Pending,
-            'body' => $body,
-            'metadata' => ['text' => $body],
-        ]));
+        $message = TenantContext::withId($tenant->id, function () use ($conversation, $body, $origin, $actor, $metadata): Message {
+            $message = new Message([
+                'conversation_id' => $conversation->id,
+                'direction' => MessageDirection::Outbound,
+                'type' => MessageType::Text,
+                'status' => MessageStatus::Pending,
+                'body' => $body,
+                'metadata' => array_merge($metadata, [
+                    'text' => $body,
+                    'origin' => $origin->value,
+                    'attempt_tracking' => 'message_id_v1',
+                ]),
+            ]);
+            $message->forceFill(['sent_by_user_id' => $actor?->id]);
+            $message->save();
+
+            return $message;
+        });
 
         $this->bumpConversationTimestamps($tenant, $conversation->id);
 
-        dispatch((new SendWhatsAppMessage($tenant->id, $conversation->id, $message->id))->forTenant($tenant->id));
+        dispatch(
+            (new SendWhatsAppMessage($tenant->id, $conversation->id, $message->id))
+                ->forTenant($tenant->id),
+        );
 
         $this->events->dispatch(new MessageCreated($message));
 
         return $message;
+    }
+
+    /**
+     * Cancela de forma persistente automation creada antes del handoff. Debe
+     * ejecutarse dentro de la transacción y conversationLock del handoff.
+     */
+    public function blockAutomationForHandoff(Tenant $tenant, Conversation $conversation): int
+    {
+        $messages = Message::query()
+            ->withoutTenantScope()
+            ->where('tenant_id', $tenant->id)
+            ->where('conversation_id', $conversation->id)
+            ->where('direction', MessageDirection::Outbound->value)
+            ->whereIn('status', [MessageStatus::Pending->value, MessageStatus::Sending->value])
+            ->get();
+
+        $blocked = 0;
+
+        foreach ($messages as $message) {
+            if (! $this->originClassifier->isAutomation($message)) {
+                continue;
+            }
+
+            $this->blockAutomaticMessageForHandoff($tenant, $message);
+            $blocked++;
+        }
+
+        return $blocked;
+    }
+
+    public function blockAutomaticMessageForHandoff(Tenant $tenant, Message $message): void
+    {
+        if ($message->tenant_id !== $tenant->id
+            || ! in_array($message->status, [MessageStatus::Pending, MessageStatus::Sending], true)) {
+            return;
+        }
+
+        $previous = $message->status->value;
+
+        $message->forceFill([
+            'status' => MessageStatus::Failed,
+            'failed_at' => now(),
+            'metadata' => array_merge($message->metadata ?? [], [
+                'error_code' => self::HANDOFF_BLOCK_CODE,
+                'error_source' => 'internal',
+            ]),
+        ])->save();
+
+        $this->auditLogger->record(
+            action: 'message.failed',
+            data: [
+                'tenant_id' => $tenant->id,
+                'conversation_id' => $message->conversation_id,
+                'error_code' => self::HANDOFF_BLOCK_CODE,
+                'error_message' => null,
+            ],
+            subjectType: Message::class,
+            subjectId: $message->id,
+            tenantId: $tenant->id,
+        );
+
+        $this->events->dispatch(new MessageStatusUpdated($message, $previous));
     }
 
     /**
@@ -265,9 +382,68 @@ final class MessageService
     {
         $this->authorization->authorize($user, TenantPermission::SendMessages, $tenant);
 
-        $conversation = $this->findConversationForTenant($tenant, $conversationId);
+        $lock = $this->flowExecutions->conversationLock($tenant, $conversationId);
+        $acquired = false;
 
-        return $this->createOutbound($tenant, $conversation, $body);
+        try {
+            $lock->block(seconds: 10);
+            $acquired = true;
+            $this->lockContext->enter($tenant->id, $conversationId, $lock);
+
+            return DB::transaction(function () use ($user, $tenant, $conversationId, $body): Message {
+                $conversation = $this->findConversationForTenantForUpdate($tenant, $conversationId);
+
+                TenantUser::query()
+                    ->where('tenant_id', $tenant->id)
+                    ->where('user_id', $user->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                $this->authorization->authorize($user, TenantPermission::SendMessages, $tenant);
+
+                if (! in_array($conversation->status, [ConversationStatus::Open, ConversationStatus::Pending], true)) {
+                    throw new ConversationInvalidStateException(
+                        'Solo se puede responder una conversación abierta o pendiente.',
+                    );
+                }
+
+                if (! $this->authorization->can($user, TenantPermission::ManageConversations, $tenant)
+                    && (int) $conversation->agent_id !== $user->id) {
+                    throw ConversationReplyForbiddenException::notAssignedToActor();
+                }
+
+                return $this->createOutbound(
+                    $tenant,
+                    $conversation,
+                    $body,
+                    MessageOrigin::Human,
+                    $user,
+                );
+            });
+        } catch (LockTimeoutException) {
+            throw ConversationReplyForbiddenException::busy();
+        } finally {
+            if ($acquired) {
+                $this->lockContext->leave($tenant->id, $conversationId);
+                $lock->release();
+            }
+        }
+    }
+
+    private function findConversationForTenantForUpdate(Tenant $tenant, string $conversationId): Conversation
+    {
+        $conversation = Conversation::query()
+            ->withoutTenantScope()
+            ->where('tenant_id', $tenant->id)
+            ->whereKey($conversationId)
+            ->lockForUpdate()
+            ->first();
+
+        if ($conversation === null) {
+            throw new ConversationNotFoundException;
+        }
+
+        return $conversation;
     }
 
     private function findConversationForTenant(Tenant $tenant, string $conversationId): Conversation

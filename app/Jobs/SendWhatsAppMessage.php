@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Application\Audit\Services\AuditLogger;
+use App\Application\Flows\Services\ConversationLockContext;
+use App\Application\Flows\Services\FlowExecutionService;
+use App\Application\Messages\Services\MessageOriginClassifier;
+use App\Application\Messages\Services\MessageService;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Messages\Enums\MessageStatus;
 use App\Domain\Messages\Enums\MessageType;
@@ -16,12 +20,15 @@ use App\Domain\WhatsApp\Enums\PhoneNumberStatus;
 use App\Domain\WhatsApp\Exceptions\WhatsAppMessageFailedException;
 use App\Domain\WhatsApp\Models\MessageSendAttempt;
 use App\Events\MessageStatusUpdated;
+use App\Infrastructure\Tenancy\TenantContext;
 use App\Jobs\Concerns\TenantAwareJob;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Throwable;
 
 /**
  * Envío asíncrono de un mensaje saliente (FASE 9, ADR-032; diseño §6 whatsapp.md).
@@ -39,6 +46,8 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
     use InteractsWithQueue;
     use SerializesModels;
     use TenantAwareJob;
+
+    public bool $afterCommit = true;
 
     public int $timeout = 60;
 
@@ -62,7 +71,7 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
 
     public function tries(): int
     {
-        return (int) config('whatsapp.max_attempts', 3);
+        return $this->providerMaxAttempts() + 10;
     }
 
     /**
@@ -81,9 +90,68 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        $lockContext = app(ConversationLockContext::class);
+
+        if ($lockContext->refreshHeld($tenant->id, $this->conversationId, $this->timeout + 30)) {
+            $this->sendLocked($tenant);
+
+            return;
+        }
+
+        $lock = app(FlowExecutionService::class)->conversationLock(
+            $tenant,
+            $this->conversationId,
+            seconds: $this->timeout + 30,
+        );
+        try {
+            $lock->block(seconds: 10);
+        } catch (LockTimeoutException) {
+            if (config('queue.default') === 'sync') {
+                $message = Message::query()
+                    ->withoutTenantScope()
+                    ->where('tenant_id', $this->tenantId)
+                    ->where('conversation_id', $this->conversationId)
+                    ->whereKey($this->messageId)
+                    ->first();
+
+                if ($message !== null) {
+                    $this->failMessage(
+                        $tenant,
+                        $message,
+                        MessageService::LOCK_TIMEOUT_CODE,
+                        metadata: [
+                            'error_code' => MessageService::LOCK_TIMEOUT_CODE,
+                            'error_source' => 'internal',
+                        ],
+                    );
+                }
+
+                return;
+            }
+
+            if ($this->job === null) {
+                throw new LockTimeoutException;
+            }
+
+            $this->release(1);
+
+            return;
+        }
+
+        try {
+            $this->sendLocked($tenant);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function sendLocked(Tenant $tenant): void
+    {
+
         $message = Message::query()
             ->withoutTenantScope()
             ->where('tenant_id', $this->tenantId)
+            ->where('conversation_id', $this->conversationId)
             ->whereKey($this->messageId)
             ->first();
 
@@ -103,6 +171,16 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        if ($conversation->bot_paused
+            && $conversation->handoff_requested_at !== null
+            && app(MessageOriginClassifier::class)->isAutomation($message)) {
+            app(MessageService::class)->blockAutomaticMessageForHandoff($tenant, $message);
+
+            return;
+        }
+
+        $claimedPending = false;
+
         if ($message->status === MessageStatus::Pending) {
             $taken = Message::query()
                 ->withoutTenantScope()
@@ -114,6 +192,9 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
             if ($taken === 0) {
                 return;
             }
+
+            $message->refresh();
+            $claimedPending = true;
         }
 
         if ($message->type !== MessageType::Text) {
@@ -144,14 +225,30 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        $recordedAttempts = MessageSendAttempt::query()
+            ->withoutTenantScope()
+            ->where('tenant_id', $this->tenantId)
+            ->where('payload->message_id', $message->id)
+            ->count();
+        $providerMaxAttempts = $this->providerMaxAttempts();
+        $tracksAttemptsByMessage = ($message->metadata['attempt_tracking'] ?? null) === 'message_id_v1';
+        $providerAttempt = $recordedAttempts > 0
+            ? $recordedAttempts + 1
+            : ($claimedPending || $tracksAttemptsByMessage
+                ? 1
+                : min(max(1, $this->attempts()), $providerMaxAttempts));
+
         $attempt = MessageSendAttempt::create([
             'whatsapp_phone_number_id' => $phone->id,
             'to' => $to,
             'type' => $message->type->value,
-            'payload' => ['text' => $message->body],
+            'payload' => [
+                'message_id' => $message->id,
+                'text' => $message->body,
+            ],
             'status' => MessageSendStatus::Pending,
-            'attempt' => $this->attempts(),
-            'max_attempts' => $this->tries(),
+            'attempt' => $providerAttempt,
+            'max_attempts' => $providerMaxAttempts,
         ]);
 
         $provider = app(WhatsAppProviderInterface::class);
@@ -170,7 +267,7 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
                 'attempted_at' => now(),
             ])->save();
 
-            if ($e->retryable() && $this->attempts() < $this->tries()) {
+            if ($e->retryable() && $providerAttempt < $providerMaxAttempts) {
                 throw $e;
             }
 
@@ -208,13 +305,55 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
         event(new MessageStatusUpdated($message, $previous));
     }
 
-    private function failMessage(Tenant $tenant, Message $message, string $errorCode, ?string $errorMessage = null): void
+    public function failed(?Throwable $exception): void
     {
+        TenantContext::withId($this->tenantId, function () use ($exception): void {
+            $tenant = Tenant::query()->find($this->tenantId);
+            $message = Message::query()
+                ->withoutTenantScope()
+                ->where('tenant_id', $this->tenantId)
+                ->where('conversation_id', $this->conversationId)
+                ->whereKey($this->messageId)
+                ->first();
+
+            if ($tenant === null
+                || $message === null
+                || ! in_array($message->status, [MessageStatus::Pending, MessageStatus::Sending], true)) {
+                return;
+            }
+
+            $this->failMessage(
+                $tenant,
+                $message,
+                MessageService::QUEUE_EXHAUSTED_CODE,
+                $exception?->getMessage(),
+                [
+                    'error_code' => MessageService::QUEUE_EXHAUSTED_CODE,
+                    'error_source' => 'internal',
+                ],
+            );
+        });
+    }
+
+    private function providerMaxAttempts(): int
+    {
+        return max(1, (int) config('whatsapp.max_attempts', 3));
+    }
+
+    /** @param array<string, mixed> $metadata */
+    private function failMessage(
+        Tenant $tenant,
+        Message $message,
+        string $errorCode,
+        ?string $errorMessage = null,
+        array $metadata = [],
+    ): void {
         $previous = $message->status->value;
 
         $message->forceFill([
             'status' => MessageStatus::Failed,
             'failed_at' => now(),
+            'metadata' => array_merge($message->metadata ?? [], $metadata),
         ])->save();
 
         app(AuditLogger::class)->record(

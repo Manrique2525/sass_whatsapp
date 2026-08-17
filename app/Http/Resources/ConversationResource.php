@@ -37,6 +37,7 @@ final class ConversationResource extends JsonResource
                 : null),
             'auto_assigned' => $this->auto_assigned,
             'bot_paused' => $this->bot_paused,
+            'handoff_requested_at' => $this->handoff_requested_at,
             'context' => $this->context,
             'flow_execution_id' => $this->flow_execution_id,
             'participants' => $this->whenLoaded('participants', fn (): array => $this->participants

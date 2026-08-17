@@ -26,6 +26,12 @@ final class StoreMessageRequest extends FormRequest
     {
         return [
             'body' => ['required', 'string', 'max:4096'],
+            'tenant_id' => ['prohibited'],
+            'sent_by_user_id' => ['prohibited'],
+            'metadata' => ['prohibited'],
+            'origin' => ['prohibited'],
+            'direction' => ['prohibited'],
+            'status' => ['prohibited'],
         ];
     }
 }

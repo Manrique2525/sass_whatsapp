@@ -3,14 +3,18 @@
 declare(strict_types=1);
 
 use App\Application\Conversations\Services\ConversationService;
+use App\Application\Flows\Services\FlowExecutionService;
 use App\Domain\Conversations\Exceptions\ConversationAgentNotInTenantException;
 use App\Domain\Conversations\Exceptions\ConversationAssignmentConflictException;
+use App\Domain\Messages\Models\Message;
 use App\Domain\Tenants\Exceptions\TenantMembershipException;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Models\User;
 use App\Infrastructure\Tenancy\TenantContext;
+use App\Jobs\SendWhatsAppMessage;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 require dirname(__DIR__, 2).'/vendor/autoload.php';
@@ -19,7 +23,8 @@ $app = require dirname(__DIR__, 2).'/bootstrap/app.php';
 $app->make(Kernel::class)->bootstrap();
 
 [$script, $applicationName, $operation, $tenantId, $actorId, $conversationId] = $argv;
-$agentId = isset($argv[6]) ? (int) $argv[6] : null;
+$targetId = $argv[6] ?? null;
+$agentId = $targetId === null ? null : (int) $targetId;
 
 try {
     $database = DB::selectOne('SELECT current_database() AS name');
@@ -54,9 +59,34 @@ try {
 
     $tenant = Tenant::query()->findOrFail($tenantId);
     $actor = User::query()->findOrFail((int) $actorId);
-    $service = app(ConversationService::class);
 
     TenantContext::setId($tenantId);
+
+    if ($operation === 'send-message') {
+        $probe = app(FlowExecutionService::class)->conversationLock($tenant, $conversationId);
+        $contended = ! $probe->get();
+
+        if (! $contended) {
+            $probe->release();
+            throw new RuntimeException('El worker outbound adquirió el lock de prueba antes del handoff.');
+        }
+
+        Cache::put('handoff-pg-ready:'.$applicationName, $contended, 30);
+        (new SendWhatsAppMessage($tenantId, $conversationId, (string) $targetId))->handle();
+        $message = Message::withoutTenantScope()
+            ->where('tenant_id', $tenantId)
+            ->whereKey((string) $targetId)
+            ->firstOrFail();
+
+        echo json_encode([
+            'status' => 'ok',
+            'message_status' => $message->status->value,
+            'error_code' => $message->metadata['error_code'] ?? null,
+        ], JSON_THROW_ON_ERROR).PHP_EOL;
+        exit(0);
+    }
+
+    $service = app(ConversationService::class);
 
     $conversation = match ($operation) {
         'assign' => $service->assign($actor, $tenant, $conversationId, (int) $agentId),

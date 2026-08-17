@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Application\Flows\Services\ConversationLockContext;
 use App\Application\Flows\Services\Executors\ButtonsNodeExecutor;
 use App\Application\Flows\Services\Executors\ConditionNodeExecutor;
 use App\Application\Flows\Services\Executors\DelayNodeExecutor;
@@ -32,6 +33,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->singleton(ConversationLockContext::class);
+
         $this->app->bind(WhatsAppProviderInterface::class, function (): MetaWhatsAppProvider {
             return new MetaWhatsAppProvider(
                 graphUrl: (string) config('whatsapp.graph_url'),

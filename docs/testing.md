@@ -348,6 +348,21 @@ Pirámide de tests con prioridad en lo crítico:
   Suite PostgreSQL adicional: **9 tests / 50 assertions**. Pint, PHPStan (0 errores, 1G),
   `vue-tsc`, build Vite, Docker y healthcheck verdes.
 
+### Human handoff runtime — FASE 15 UNIDAD 3 (ADR-051/052)
+
+- `HandoffRuntimeTest` (HANDOFF-RUNTIME): conserva `open|pending`, conflicto controlado en estados
+  cerrados, aviso opcional antes del terminal, timestamp, audits/log, idempotencia, rollback tardío,
+  resume sin revive/replay/release y distinción de pausa manual.
+- `MessageApiTest` U3: actor autenticado/origen human, agent limitado a assignment vigente,
+  override owner/admin, estados cerrados y rechazo de campos manipulados.
+- `OutboundTest` HANDOFF-OUT: automation y legacy bloqueados con `BOT_PAUSED_HANDOFF`, sin request ni
+  attempt Meta; human y handoff permitidos con bot pausado.
+- Suite PostgreSQL/Redis acumulativa: `HCON-U3-01` mantiene un worker real esperando el
+  `conversationLock`, confirma el handoff y verifica cancelación determinista sin side effect.
+- Suite total FASE 15 U3: **621 tests backend / 2615 assertions**; frontend **151 tests Vitest**.
+  Suite PostgreSQL adicional: **10 tests / 60 assertions**. Pint, PHPStan (0 errores, 1G),
+  migraciones PostgreSQL desde cero, `vue-tsc` y build Vite verdes.
+
 ### Auth
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 
@@ -367,7 +382,7 @@ php artisan test --testsuite=Feature  # API/feature
 ./vendor/bin/phpstan analyze          # estático
 npm run test                          # Vitest
 npm run typecheck                     # vue-tsc
-# Suite PostgreSQL U2: la creación explícita evita tocar la DB principal.
+# Suite PostgreSQL U2/U3: la creación explícita evita tocar la DB principal.
 docker compose exec -T postgres dropdb -U saas --if-exists --force whatsapp_saas_handoff_u2_test
 docker compose exec -T postgres createdb -U saas -O saas whatsapp_saas_handoff_u2_test
 docker compose exec -T app ./vendor/bin/pest --configuration=phpunit.pgsql.xml --testsuite=PostgresConcurrency --do-not-cache-result

@@ -190,6 +190,11 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
   backfill deriva tenant exclusivamente de la conversación y aborta si no puede hacerlo.
 - **Máquina de estados**: transiciones inválidas → 409 `CONVERSATION_INVALID_STATE` (nunca se
   muta `status` libremente vía PATCH); mismo estado = no-op. `status` validado contra el enum.
+- **Runtime handoff U3**: Human opera solo en `open|pending`; nunca reabre `resolved|archived`.
+  Bajo el lock del motor, una transacción con row lock fija `bot_paused`/`handoff_requested_at`,
+  crea el aviso opcional y audita. No altera agente ni proyecciones. Resume usa el mismo orden,
+  conserva timestamp/asignación y solo habilita futuros inbound; una pausa manual nueva limpia el
+  marcador histórico para no habilitar claim por error.
 - **Validación (backend)**: `ConversationIndexRequest` acota `per_page` a 100 y valida
   `status`/`agent_id`; `StoreConversationRequest` exige `contact_id` uuid; `AssignConversationRequest`
   exige `agent_id`. `ConversationResource` jamás expone `tenant_id`.
@@ -208,10 +213,10 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
   número del tenant B jamás persiste en datos del A (tests CRITICOS MSG-6 y STAT-8 A/B).
   `TenantContext` se setea solo alrededor de los creates y se libera en `finally` (sin
   contaminación entre jobs; el audit pasa `tenantId:` explícito porque el contexto ya se limpió).
-- **Actor humano preparado (FASE 15 U1)**: `messages.sent_by_user_id` es nullable y usa FK
-  `nullOnDelete` con índice propio; no está en `$fillable` ni se acepta del cliente. Inbound y bot
-  quedan null. La atribución desde el usuario autenticado y la policy de assignment se
-  implementarán en U3.
+- **Actor humano U3**: `messages.sent_by_user_id` es nullable y usa FK `nullOnDelete` con índice
+  propio; no está en `$fillable` ni se acepta del cliente. Solo `origin=human` recibe el ID del
+  usuario autenticado después de revalidar membership. Inbound, automation y handoff quedan null.
+  Agents solo responden su `conversation.agent_id`; owner/admin conservan override administrativo.
 - **Idempotencia / anti-duplicados**: UNIQUE `(tenant_id, provider_message_id)` (mensaje inbound
   creado una sola vez; backstop `QueryException` → re-consulta, ADR-032) + dedupe de plataforma
   `webhook_events.provider_event_id` (para statuses, clave compuesta `id|status|timestamp`: Meta
@@ -222,9 +227,14 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
   Reintento solo de errores retryable de Meta (timeout/5xx/429) con backoff; errores permanentes o
   intentos agotados → `failed` (sin reintento en bucle). El worker re-valida cuenta conectada +
   número default + tipo text (nunca confía en estado previo).
+- **Barrera handoff U3**: creación y worker etiquetan origen interno en metadata. El worker toma el
+  mismo `conversationLock` con TTL mayor que su timeout y lo conserva durante el provider. Si
+  observa `bot_paused` + `handoff_requested_at`, automation (incluido legacy sin actor) termina
+  `failed/BOT_PAUSED_HANDOFF`, sin `message_send_attempts`, llamada Meta ni retry; human/handoff no
+  se autocancelan. La carrera PostgreSQL/Redis usa procesos independientes.
 - **Nunca confiar en el frontend**: los mensajes inbound provienen del webhook firmado; el
-  outbound se crea por servicio (sin campos del request en FASE 9). El `tenant_id`/`conversation_id`
-  jamás se aceptan del frontend (FASE 10).
+  outbound se crea por servicio. `tenant_id`, `sent_by_user_id`, `metadata`, `origin`, `direction`
+  y `status` están prohibidos en el request; conversación, actor y origen se resuelven en backend.
 - **DoS / entrega**: el request del webhook no hace trabajo pesado; eventos desconocidos/
   malformados → 200. El outbox (`whatsapp:reprocess-webhook-events`, cada minuto) re-encola
   eventos `received` viejos para no perder mensajes si el proceso cae entre insert y encolado.
