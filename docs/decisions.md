@@ -1176,14 +1176,14 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
 ## ADR-052: Consistencia de asignación de conversaciones
 
 - **Fecha**: 2026-08-17
-- **Estado**: Aceptado — FASE 15 UNIDAD 1
+- **Estado**: Aceptado — FASE 15 UNIDADES 1-2
 - **Contexto**: `conversations.agent_id` representa el agente vigente, mientras
   `conversation_assignments` conserva historial y `conversation_participants` participación.
   Las tablas hijas no tenían `tenant_id` ni una barrera DB contra assignments abiertas duplicadas.
 - **Decisión**:
   - `conversations.agent_id` es la fuente operativa; assignments son historial y participants
-    participación. Las tres proyecciones deberán mutarse en una transacción bajo el lock de
-    conversación a partir de U2.
+    participación. Desde U2 las tres proyecciones mutan en una transacción bajo el lock de
+    conversación existente.
   - Assignments y participants incorporan `tenant_id` UUID NOT NULL, FK a tenants, FK compuesta
     `(tenant_id, conversation_id)` a conversations, índices tenant-first y `BelongsToTenant`. La
     barrera compuesta impide asociar una fila al tenant correcto pero a una conversación ajena.
@@ -1191,14 +1191,25 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
     ante datos no derivables.
   - Solo puede existir una assignment con `unassigned_at IS NULL` por conversación; PostgreSQL y
     SQLite lo protegen con un índice UNIQUE parcial sobre `conversation_id`.
-  - Claim será manual y atómico en U2. El cliente no aportará el agente destino: siempre será el
-    usuario autenticado. `conversations.assign` continúa reservado para administración.
+  - Claim es manual y atómico. El cliente no aporta el agente destino: siempre es el usuario
+    autenticado. `conversations.claim` se concede a owner/admin/agent; `conversations.assign`
+    continúa reservado para assign/transfer administrativos.
+  - Orden único: conversation lock Redis → transacción → conversation `FOR UPDATE` → memberships
+    bloqueadas por `users.id`. La membership y el permiso se revalidan dentro de la operación.
+  - Assign solo toma conversaciones libres; repetir el mismo target es idempotente si assignment y
+    participant coinciden. Transfer exige agente, assignment y participant vigentes; A→A es 409.
+    Inconsistencias previas fallan controladamente y no reescriben historial silenciosamente.
+  - `conversation_participants` conserva su UNIQUE `(conversation_id,user_id)`: una fila representa
+    participación acumulativa. Una reactivación conserva `joined_at`, actualiza rol y limpia
+    `left_at`; períodos múltiples requerirían DDL futuro y no forman parte de U2.
+  - Audit forma parte de la transacción y `ConversationUpdated` se despacha tras ella con broadcast
+    after-commit. `InboxConversationChanged` sigue reservado para U4.
   - `messages.sent_by_user_id` nullable atribuye mensajes humanos. Inbound y bot permanecen null;
     U3 aplicará la policy tenant-aware y no confiará en payload público.
-- **Consecuencias**: U1 establece esquema y scopes, no implementa claim, release, transacciones
-  operativas ni atribución desde MessageService. `auto_assigned` permanece false. Como esquema y
-  código empiezan a exigir `tenant_id` juntos, este cambio se despliega de forma coordinada, no
-  mediante rolling deploy con workers de versiones mezcladas.
+- **Consecuencias**: U2 implementa claim/assign/transfer, no release, HumanNodeExecutor, resume ni
+  atribución desde MessageService. `auto_assigned` permanece false. La UNIQUE parcial es backstop,
+  no el mecanismo primario de concurrencia. Como esquema y código empiezan a exigir `tenant_id`
+  juntos, el cambio U1 se despliega coordinadamente, no con workers de versiones mezcladas.
 
 ## ADR-053: Frontera realtime del Inbox para handoff
 

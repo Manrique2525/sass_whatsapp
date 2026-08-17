@@ -15,8 +15,8 @@ use Illuminate\Support\Carbon;
  * Asignación registrada de una conversación a un agente (FASE 8, ADR-031).
  *
  * Historial acumulativo: cada asignación/transferencia inserta una fila y
- * cierra la anterior (`unassigned_at`). `reason` distingue asignación manual
- * de transferencia. `assigned_by` es el usuario que la realizó.
+ * cierra la anterior (`unassigned_at`). `reason` distingue asignación manual,
+ * transferencia o claim. `assigned_by` es el usuario que la realizó.
  *
  * @property int $id
  * @property string $tenant_id

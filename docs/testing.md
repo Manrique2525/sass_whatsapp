@@ -333,6 +333,21 @@ Pirámide de tests con prioridad en lo crítico:
 - Suite total FASE 15 U1: **565 tests backend / 2378 assertions**; frontend **149 tests Vitest**.
   Pint, PHPStan (0 errores, 1G), `vue-tsc` y build Vite también verdes.
 
+### Assignment, claim y transfer — FASE 15 UNIDAD 2 (ADR-052)
+
+- `HandoffAssignmentTest` (HA/HT/HC/HMT): assign libre e idempotente, transfer con cierre/
+  reactivación, claim propio sin IDs confiados, membership activa, permisos, payload de audit,
+  aislamiento A/B, inconsistencias controladas y `ConversationUpdated.afterCommit`.
+- `MemberUserIdContract.test.ts`: selectors de assign/transfer/filtro usan `member.user.id`
+  (`users.id`), nunca `tenant_users.id`.
+- Suite PostgreSQL aislada `phpunit.pgsql.xml`: procesos PHP independientes y Redis real prueban
+  `FOR UPDATE`, dos assigns, dos transfers, claim vs assign, transfer vs claim, membership
+  desactivada mientras espera lock, rollback por fallo tardío de audit y UNIQUE parcial con
+  SQLSTATE `23505`. La DB permitida es únicamente `whatsapp_saas_handoff_u2_test`.
+- Suite total FASE 15 U2: **601 tests backend / 2490 assertions**; frontend **151 tests Vitest**.
+  Suite PostgreSQL adicional: **9 tests / 50 assertions**. Pint, PHPStan (0 errores, 1G),
+  `vue-tsc`, build Vite, Docker y healthcheck verdes.
+
 ### Auth
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 
@@ -352,6 +367,11 @@ php artisan test --testsuite=Feature  # API/feature
 ./vendor/bin/phpstan analyze          # estático
 npm run test                          # Vitest
 npm run typecheck                     # vue-tsc
+# Suite PostgreSQL U2: la creación explícita evita tocar la DB principal.
+docker compose exec -T postgres dropdb -U saas --if-exists --force whatsapp_saas_handoff_u2_test
+docker compose exec -T postgres createdb -U saas -O saas whatsapp_saas_handoff_u2_test
+docker compose exec -T app ./vendor/bin/pest --configuration=phpunit.pgsql.xml --testsuite=PostgresConcurrency --do-not-cache-result
+docker compose exec -T postgres dropdb -U saas --if-exists --force whatsapp_saas_handoff_u2_test
 npx playwright test                   # E2E
 ```
 

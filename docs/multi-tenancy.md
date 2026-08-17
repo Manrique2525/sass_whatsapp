@@ -58,10 +58,11 @@ y tiene un **tenant activo** seleccionable:
   `TenantContext::id()` → `users.current_tenant_id` → `null` (roles globales).
 - La autorización por tenant (FASE 4, ADR-026) exige SIEMPRE tres condiciones:
   `current_tenant_id == tenant` (tenant activo) + `tenant_users.status = active` + permiso en la
-  matriz de código   `TenantPermission::permissionsForRole(rol)` (23 permisos; FASE 5 añade
+  matriz de código `TenantPermission::permissionsForRole(rol)` (24 permisos; FASE 5 añade
   `business_profile.view/update`; FASE 6 añade `whatsapp.view`/`whatsapp.manage`; FASE 7 añade
   `contacts.view`/`contacts.manage`; FASE 8 añade `conversations.view`/`conversations.manage`/
-  `conversations.assign`; FASE 11 añade `flows.view`/`flows.manage`). Sin membresía
+  `conversations.assign`; FASE 11 añade `flows.view`/`flows.manage`; FASE 15 añade
+  `conversations.claim`). Sin membresía
   o inactivo → **404**; sin permiso → **403**
   `PERMISSION_DENIED`. Los roles spatie se mantienen como espejo de `tenant_users.role` vía
   `TenantRoleManager` (`syncRoles` reemplaza, nunca suma).
@@ -223,11 +224,13 @@ Nunca se acepta `tenant_id` desde el request (se ignora o se rechaza — test
   `conversation_assignments` con trait `BelongsToTenant`; los endpoints `/tenants/{tenant}/
   conversations*` exigen `{tenant}` activo (otro → 404) y permiso `conversations.view` (lectura)
   / `conversations.manage` (mutaciones de estado y bot, owner/admin) /
-  `conversations.assign` (asignar/transferir, owner/admin). El `{conversation}` del path NO usa
+  `conversations.assign` (asignar/transferir, owner/admin) / `conversations.claim` (claim propio,
+  todos los roles activos). El `{conversation}` del path NO usa
   route-model binding implícito: el servicio resuelve con `withoutTenantScope()` filtrando SIEMPRE
   por `tenant_id` del tenant autorizado → conversación a ajena o inexistente → **404**. Crear
   sobre un contacto ajeno → **404** (`ConversationContactNotFoundException`). El `tenant_id` del
-  body se ignora (CONV-20). Aislamiento CRITICO (CONV-18/19): el tenant A jamás lee, modifica ni
+  body se ignora en assign/create/update y se rechaza en claim (CONV-20/HMT-05). Aislamiento
+  CRITICO (CONV-18/19): el tenant A jamás lee, modifica ni
   asigna conversaciones de contactos del tenant B, y una conversación creada sobre un contacto de
   B es invisible para A (404). Asignación solo a miembros activos del tenant (422
   `AGENT_NOT_IN_TENANT` en caso contrario). `findOrCreateActiveForContact` (webhook, FASE 9)
@@ -237,6 +240,11 @@ Nunca se acepta `tenant_id` desde el request (se ignora o se rechaza — test
   desde `TenantContext`, nunca del request; sin contexto las lecturas devuelven vacío y las
   escrituras fallan seguro. `messages.sent_by_user_id` no es fillable ni se confía desde payload
   público; U3 resolverá el actor desde el usuario autenticado y validará pertenencia al tenant.
+- **Assignment/claim atómico (FASE 15 U2)**: las tres operaciones resuelven la conversación con
+  filtro explícito de tenant y `FOR UPDATE`, y vuelven a leer memberships activas después de
+  adquirir el `conversationLock`. Claim no acepta IDs del cliente. FKs compuestas y scopes impiden
+  referencias A/B, mientras la UNIQUE parcial evita dos assignments abiertas incluso ante bypass
+  de aplicación.
 - `messages` (FASE 9, ADR-032): tabla con trait `BelongsToTenant`, `tenant_id` FK
   `cascadeOnDelete` y `conversation_id` FK→`conversations` del **mismo tenant** (cascade; el
   contacto se resuelve por la conversación, no se duplica). `Tenant::messages()` (hasMany). La

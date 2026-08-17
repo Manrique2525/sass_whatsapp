@@ -123,13 +123,15 @@ con `TriggerValidator` al crear/actualizar/publicar (422 `errors.config`):
   ni continúa desde ese nodo.
 - `resume-bot` solo habilita automatización para futuros inbound. No revive executions ni procesa
   retroactivamente mensajes recibidos durante handoff. No libera automáticamente al agente.
-- El modelo aprobado es cola manual sin auto-routing. U2 implementará claim; U3 implementará el
-  handoff operativo y el envío opcional de `handoff_message` cuando tenga texto.
+- El modelo aprobado es cola manual sin auto-routing. U2 implementa claim propio mediante
+  `conversations.claim`, además de assign/transfer atómicos bajo el mismo conversation lock del
+  motor. U3 implementará el handoff operativo y el envío opcional de `handoff_message`.
 - `handoff_requested_at` distingue solicitud humana de pausa manual. U1 solo prepara el campo.
 - Inbound durante handoff se persiste pero el bot no lo procesa. Un outbound automático pendiente
   debe bloquearse en U3 antes de enviarse.
-- `ConversationUpdated` permanece para detalle; U4 añadirá `InboxConversationChanged` tenant-wide
-  after-commit. Notification center y email automático se difieren a FASE 22.
+- `ConversationUpdated` permanece para detalle y sus broadcasts de asignación usan after-commit;
+  U4 añadirá `InboxConversationChanged` tenant-wide. Notification center y email automático se
+  difieren a FASE 22.
 
 ## 8. Validación de flujo (publicar)
 

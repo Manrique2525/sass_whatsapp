@@ -28,7 +28,8 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - Error de login genérico (mismo mensaje para email inexistente o contraseña incorrecta).
 
 ### Autorización
-- `Policies` por entidad (TenantPolicy, ConversationPolicy, ContactPolicy, FlowPolicy...).
+- Policies donde existen (`TenantPolicy`, `TenantUserPolicy`, `TenantInvitationPolicy`) y
+  enforcement de dominio en Application Services que delegan a `AuthorizationService`.
 - `Middleware tenant` resuelve el tenant activo (ver `multi-tenancy.md`).
 - Roles por tenant con spatie en modo `teams` (`team_id = tenant_id`): `owner`, `admin`,
   `agent`; `super_admin` global de plataforma. Permisos: `manage_contacts`,
@@ -65,13 +66,12 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
   (`isCurrentTenant`), (2) membresía con `status = active`, (3) permiso en la matriz. Sin
   membresía/no-activa → 404 (no revela existencia); sin permiso → 403 `PERMISSION_DENIED`;
   tenant suspendido → 409 `TENANT_NOT_ACTIVE`.
-- **23 permisos granulares** (`tenants.view/update`, `users.view/invite/update/remove`,
+- **24 permisos granulares** (`tenants.view/update`, `users.view/invite/update/remove`,
   `roles.view/assign`, `agents.view/manage`, `audit.view`, `business_profile.view/update`,
-  `whatsapp.view/manage`, `contacts.view/manage`, `conversations.view/manage/assign`,
+  `whatsapp.view/manage`, `contacts.view/manage`, `conversations.view/manage/assign/claim`,
   `flows.view/manage`). Matriz:
-  owner = todos; admin = operativo sin `roles.assign`; agent = solo `tenants.view`,
-  `business_profile.view`, `whatsapp.view`, `contacts.view`, `conversations.view` y
-  `flows.view`;
+  owner = todos; admin = operativo sin `roles.assign`; agent incluye lectura, `messages.send` y
+  claim propio mediante `conversations.claim`, pero nunca `conversations.assign`;
   `super_admin` = global (sin permisos de tenant).
 - **Roles espejo en spatie**: `TenantRoleManager` sincroniza spatie con `tenant_users.role`
   usando `syncRoles` (reemplaza, no acumula) con el team del `TenantTeamResolver`
@@ -159,12 +159,12 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 ### Conversaciones (FASE 8)
 - **Autorización**: `conversations.view` (todos los roles del tenant), `conversations.manage`
   (owner/admin: crear, editar, cerrar/reabrir, pausar/reanudar bot) y `conversations.assign`
-  (owner/admin: asignar/transferir) en la matriz ADR-026 (→ 20 permisos). Agent → solo lectura;
-  cualquier mutación → 403 `PERMISSION_DENIED` (test CONV-22).
+  (owner/admin: asignar/transferir). FASE 15 U2 añade `conversations.claim` a owner/admin/agent sin
+  ampliar `conversations.assign`: agent solo puede reclamarse a sí mismo una conversación handoff.
 - **Aislamiento**: `conversations`/`conversation_participants`/`conversation_assignments` usan
   `BelongsToTenant` (scope global + forzado de `tenant_id` por `TenantContext`). El `tenant_id` no
-  es fillable ni tiene regla de validación: un `tenant_id` enviado en el body se ignora (test
-  CONV-20). El `{conversation}` del path se resuelve SIN route-model binding implícito: el
+  es fillable: assign/create/update ignoran un `tenant_id` del body (CONV-20/HMT-05), mientras
+  claim lo prohíbe explícitamente. El `{conversation}` del path se resuelve SIN route-model binding implícito: el
   servicio filtra SIEMPRE por `tenant_id` del tenant autorizado; conversación ajena o inexistente
   → **404** (no revela existencia, ADR-010/023). Crear sobre un contacto de otro tenant → 404
   (tests CRITICOS CONV-18/19 A/B: crear sobre contacto de B y leer/modificar/asignar con usuario
@@ -173,6 +173,16 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
   tenant con `status = active` en `tenant_users` (sin confiar en el frontend). Usuario fuera del
   tenant → 422 `AGENT_NOT_IN_TENANT`; sin permiso → 403. La transferencia cierra la asignación y
   participación previas (`unassigned_at`/`left_at`) y registra historial acumulativo.
+- **Atomicidad U2 (ADR-052)**: assign/transfer/claim reutilizan el mismo `conversationLock` del
+  motor y, dentro de una transacción, bloquean conversation con `FOR UPDATE`, revalidan actor,
+  permiso y target membership bajo lock, mutan assignment/participant/`agent_id` y escriben audit.
+  El orden fijo Redis → conversation row → memberships ordenadas evita carreras y deadlocks.
+- **Claim anti-tampering**: `agent_id` y `tenant_id` están prohibidos; el target se deriva de
+  `$request->user()->id`. Solo opera sobre `bot_paused=true`, `handoff_requested_at != null`, sin
+  agente y status open/pending. Dos claimants producen un ganador y 409 para el otro.
+- **Inconsistencias/races**: una proyección previa corrupta falla 409 controlado, no se repara
+  silenciosamente. La UNIQUE parcial sigue como backstop y su violación nunca expone SQL. Un fallo
+  tardío de audit revierte las tres proyecciones y no emite realtime.
 - **Invariantes de handoff (FASE 15 U1, ADR-051/052)**: assignments/participants tienen
   `tenant_id` NOT NULL, FK a tenants, scope global y forzado desde `TenantContext`; nunca es
   mass-assignable. Una FK compuesta `(tenant_id, conversation_id)` impide referencias cruzadas
@@ -186,8 +196,8 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - **Uso interno sin auth**: `findOrCreateActiveForContact` (FASE 9) busca fuera del scope pero
   SIEMPRE filtrando por `tenant_id`; setea y libera `TenantContext` en `finally`. Reutiliza la
   conversación activa del contacto o crea una nueva; un contacto soft-deleted jamás se resucita.
-- **Auditoría FASE 8**: `conversation.created`, `conversation.updated`, `conversation.assigned`,
-  `conversation.transferred`, `conversation.closed`, `conversation.reopened`,
+- **Auditoría FASE 8/15**: `conversation.created`, `conversation.updated`, `conversation.assigned`,
+  `conversation.transferred`, `conversation.claimed`, `conversation.closed`, `conversation.reopened`,
   `conversation.bot_paused`, `conversation.bot_resumed`.
 
 ### Mensajes (FASE 9)

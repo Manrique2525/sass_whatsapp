@@ -772,7 +772,13 @@ COMPLETADO / BLOQUEADO
       frontend local. Migration UP/DOWN/UP verificada en PostgreSQL real aislado.
 - [x] **Gates U1**: `php artisan test` (565/2378 assertions), Pint, PHPStan 0 errores (1G),
       Vitest (149), `vue-tsc`, Vite build, Docker y healthcheck verdes.
-- [ ] **UNIDAD 2** — Claim manual y assign/transfer atómicos (NO iniciada).
+- [x] **UNIDAD 2 — Assignment, claim y transfer atómicos**: permission `conversations.claim` para
+      claim propio; Redis conversation lock → DB transaction → `FOR UPDATE`; memberships
+      revalidadas; audit transaccional; `ConversationUpdated` after-commit; frontend usa users.id.
+- [x] **Tests U2**: HA/HT/HC/HMT y contrato frontend; suite PostgreSQL aislada con procesos reales
+      para row lock, concurrent assign/transfer/claim, rollback tardío y UNIQUE SQLSTATE 23505.
+- [x] **Gates U2**: backend 601/2490, PostgreSQL 9/50, Vitest 151, Pint, PHPStan 0 errores (1G),
+      `vue-tsc`, Vite build, Docker y `health:check` verdes.
 - [ ] **UNIDAD 3** — Human handoff operativo, resume y outbound pendiente (NO iniciada).
 - [ ] **UNIDAD 4** — Realtime tenant-wide `InboxConversationChanged` (NO iniciada).
 - [ ] **UNIDAD 5** — Inbox UX (NO iniciada).

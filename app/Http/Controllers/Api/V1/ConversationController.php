@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Application\Conversations\Services\ConversationService;
 use App\Domain\Conversations\Exceptions\ConversationAgentNotInTenantException;
+use App\Domain\Conversations\Exceptions\ConversationAssignmentConflictException;
 use App\Domain\Conversations\Exceptions\ConversationContactNotFoundException;
 use App\Domain\Conversations\Exceptions\ConversationInvalidStateException;
 use App\Domain\Conversations\Exceptions\ConversationNotFoundException;
@@ -15,6 +16,7 @@ use App\Domain\Tenants\Exceptions\TenantNotActiveException;
 use App\Domain\Tenants\Models\Tenant;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Conversation\AssignConversationRequest;
+use App\Http\Requests\Conversation\ClaimConversationRequest;
 use App\Http\Requests\Conversation\ConversationIndexRequest;
 use App\Http\Requests\Conversation\StoreConversationRequest;
 use App\Http\Requests\Conversation\UpdateConversationRequest;
@@ -135,6 +137,35 @@ final class ConversationController extends Controller
         return $this->changeAgent($request, $tenant, $conversation, transfer: true);
     }
 
+    public function claim(ClaimConversationRequest $request, Tenant $tenant, string $conversation): JsonResponse
+    {
+        try {
+            $conversation = $this->service->claim($request->user(), $tenant, $conversation);
+        } catch (TenantMembershipException) {
+            throw new NotFoundHttpException('Tenant no encontrado.');
+        } catch (PermissionDeniedException $e) {
+            return $this->forbidden($e);
+        } catch (TenantNotActiveException) {
+            return $this->tenantNotActive();
+        } catch (ConversationNotFoundException) {
+            throw new NotFoundHttpException('Conversación no encontrada.');
+        } catch (ConversationAgentNotInTenantException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'code' => ConversationAgentNotInTenantException::ERROR_CODE,
+            ], ConversationAgentNotInTenantException::HTTP_STATUS);
+        } catch (ConversationAssignmentConflictException $e) {
+            return $this->assignmentConflict($e);
+        } catch (ConversationInvalidStateException $e) {
+            return $this->invalidState($e);
+        }
+
+        return response()->json([
+            'message' => 'Conversación reclamada.',
+            'conversation' => new ConversationResource($conversation),
+        ]);
+    }
+
     public function close(Request $request, Tenant $tenant, string $conversation): JsonResponse
     {
         try {
@@ -220,6 +251,10 @@ final class ConversationController extends Controller
                 'message' => $e->getMessage(),
                 'code' => ConversationAgentNotInTenantException::ERROR_CODE,
             ], ConversationAgentNotInTenantException::HTTP_STATUS);
+        } catch (ConversationAssignmentConflictException $e) {
+            return $this->assignmentConflict($e);
+        } catch (ConversationInvalidStateException $e) {
+            return $this->invalidState($e);
         }
 
         return response()->json([
@@ -256,6 +291,14 @@ final class ConversationController extends Controller
             'message' => $e->getMessage(),
             'code' => ConversationInvalidStateException::ERROR_CODE,
         ], ConversationInvalidStateException::HTTP_STATUS);
+    }
+
+    private function assignmentConflict(ConversationAssignmentConflictException $e): JsonResponse
+    {
+        return response()->json([
+            'message' => $e->getMessage(),
+            'code' => $e->errorCode,
+        ], ConversationAssignmentConflictException::HTTP_STATUS);
     }
 
     private function forbidden(PermissionDeniedException $e): JsonResponse

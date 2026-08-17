@@ -14,9 +14,9 @@ use Illuminate\Support\Carbon;
 /**
  * Participación de un usuario en una conversación (FASE 8, ADR-031).
  *
- * `role` replica el rol del usuario en el tenant al momento de participar.
- * El participante activo es `left_at IS NULL`; al transferir se marca
- * `left_at` y se da de alta el nuevo participante.
+ * La unicidad conversación/usuario modela participación acumulativa: al
+ * reingresar se conserva `joined_at`, se actualiza el rol y se limpia `left_at`.
+ * El participante activo es `left_at IS NULL`.
  *
  * @property int $id
  * @property string $tenant_id

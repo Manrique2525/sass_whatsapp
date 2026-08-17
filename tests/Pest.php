@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Support\Facades\RateLimiter;
+use Tests\Postgres\PostgresConcurrencyTestCase;
 use Tests\TestCase;
 
 /*
@@ -28,6 +29,9 @@ pest()->extend(TestCase::class)
         RateLimiter::clear('auth-login|test@example.com');
         RateLimiter::clear('auth-password|test@example.com');
     });
+
+pest()->extend(PostgresConcurrencyTestCase::class)
+    ->in('Postgres');
 
 /*
 |--------------------------------------------------------------------------

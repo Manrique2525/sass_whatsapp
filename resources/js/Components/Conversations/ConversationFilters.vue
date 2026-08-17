@@ -70,7 +70,7 @@ function clear(): void {
                 class="flex-1 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700"
             >
                 <option value="">Todos los agentes</option>
-                <option v-for="member in props.members" :key="member.id" :value="member.id">
+                <option v-for="member in props.members" :key="member.id" :value="member.user.id">
                     {{ member.user.name }}
                 </option>
             </select>

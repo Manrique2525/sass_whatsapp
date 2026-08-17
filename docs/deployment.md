@@ -170,7 +170,9 @@ jobs:
   NULL en el mismo release y ejecuta backfill/constraints sobre tablas existentes. No admite un
   rolling deploy con procesos de versiones mezcladas.
 - Secuencia obligatoria: activar mantenimiento, detener workers/scheduler, desplegar la nueva
-  imagen, ejecutar `php artisan migrate --force`, verificar healthcheck y reactivar procesos y
+  imagen, ejecutar `php artisan migrate --force` y luego
+  `php artisan db:seed --class=RolesAndPermissionsSeeder --force` (idempotente; sincroniza el
+  espejo spatie, incluido `conversations.claim`), verificar healthcheck y reactivar procesos y
   tráfico. Dimensionar la ventana con una copia representativa porque PostgreSQL retiene locks
   durante el backfill y la creación de constraints/índices.
 

@@ -101,6 +101,7 @@ Route::prefix('v1')->group(function (): void {
                 Route::patch('{tenant}/conversations/{conversation}', [ConversationController::class, 'update']);
                 Route::post('{tenant}/conversations/{conversation}/assign', [ConversationController::class, 'assign']);
                 Route::post('{tenant}/conversations/{conversation}/transfer', [ConversationController::class, 'transfer']);
+                Route::post('{tenant}/conversations/{conversation}/claim', [ConversationController::class, 'claim']);
                 Route::post('{tenant}/conversations/{conversation}/close', [ConversationController::class, 'close']);
                 Route::post('{tenant}/conversations/{conversation}/reopen', [ConversationController::class, 'reopen']);
                 Route::post('{tenant}/conversations/{conversation}/pause-bot', [ConversationController::class, 'pauseBot']);

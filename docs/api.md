@@ -101,7 +101,7 @@ tenant **activo** del usuario; otro tenant → **404**; sin permiso → **403** 
 
 | Método | Ruta | Permiso | Descripción |
 |---|---|---|---|
-| GET | `/api/v1/tenants/{tenant}/users` | `users.view` | Miembros del tenant (status activo) → `{data: MemberResource[]}`. `MemberResource`: `{id, user{id,name,email}, role, status, joined_at, invited_at}` |
+| GET | `/api/v1/tenants/{tenant}/users` | `users.view` | Miembros del tenant (status activo) → `{members: MemberResource[]}`. `MemberResource`: `{id, user{id,name,email}, role, status, joined_at, invited_at}`; `id` es `tenant_users.id`, mientras `user.id` es el identificador que aceptan assign/transfer |
 | PATCH | `/api/v1/tenants/{tenant}/users/{user}` | `users.update` + `roles.assign` | Cambia el rol. Body `{role: owner|admin|agent}`. Owner puede cambiar admin↔agent; admin no asigna roles (403); quitar el último owner → **422** `ROLE_CHANGE_NOT_ALLOWED`. Audita `user.role_changed` |
 | DELETE | `/api/v1/tenants/{tenant}/users/{user}` | `users.remove` | Remueve del tenant (y de spatie). Owner remueve no-owners u otro owner si quedan más; admin solo agents (422 para owner/admin). Audita `user.removed`. Si el miembro tenía este tenant activo, `current_tenant_id` se pone a null |
 | GET | `/api/v1/tenants/{tenant}/users/invitations` | `users.invite` | Invitaciones del tenant (todas). `MemberInvitationResource`: `{id, email, role, status, invited_by, expires_at, created_at}` |
@@ -115,8 +115,9 @@ tenant **activo** del usuario; otro tenant → **404**; sin permiso → **403** 
 `permissions` (matriz de permisos del rol activo) e `is_super_admin`.
 
 Roles por tenant (matriz ADR-026): `owner` = todos los permisos; `admin` = gestión operativa y de
-agentes (sin `roles.assign`); `agent` = solo lectura (`tenants.view` + `business_profile.view` +
-`whatsapp.view` + `contacts.view`). `super_admin` es global de plataforma (sin permisos de tenant).
+agentes (sin `roles.assign`); `agent` conserva capacidades operativas acotadas como
+`messages.send` y `conversations.claim`, pero nunca `conversations.assign`. `super_admin` es global
+de plataforma (sin permisos de tenant).
 
 ### 3.3 Business profile (implementado en FASE 5)
 
@@ -142,7 +143,7 @@ pendiente de la fase de storage).
 | WhatsApp | Ver §3.4: `GET /api/v1/tenants/{tenant}/whatsapp`, `POST .../connect`, `POST .../disconnect` |
 | Contacts | Ver §3.5: `GET/POST /api/v1/tenants/{tenant}/contacts`, `GET/PATCH/DELETE /api/v1/tenants/{tenant}/contacts/{id}` (import pendiente) |
 | Tags | `GET/POST /api/v1/tags`, `PATCH/DELETE /api/v1/tags/{id}` (pendiente, FASE 20) |
-| Conversations | `GET /api/v1/conversations`, `GET/PATCH /api/v1/conversations/{id}`, `POST /api/v1/conversations/{id}/assign`, `POST .../transfer`, `POST .../close`, `POST .../reopen`, `POST .../resume-bot` |
+| Conversations | `GET /api/v1/conversations`, `GET/PATCH /api/v1/conversations/{id}`, `POST /api/v1/conversations/{id}/assign`, `POST .../transfer`, `POST .../claim`, `POST .../close`, `POST .../reopen`, `POST .../resume-bot` |
 | Messages | Ver §3.7: `GET/POST /api/v1/tenants/{tenant}/conversations/{conversation}/messages` (`conversations.view` / `messages.send`) |
 | Chatbots | `GET/POST /api/v1/chatbots`, `PATCH/DELETE /api/v1/chatbots/{id}` |
 | Flows | `GET/POST /api/v1/chatbots/{id}/flows`, `PATCH /api/v1/flows/{id}`, `POST /api/v1/flows/{id}/validate`, `POST /api/v1/flows/{id}/publish`, `POST /api/v1/flows/{id}/deactivate` |
@@ -216,12 +217,20 @@ estado es **no-op (200)**; una transición inválida → **409** `CONVERSATION_I
 | POST | `/api/v1/tenants/{tenant}/conversations` | `conversations.manage` (owner/admin) | Crea para un contacto del MISMO tenant → **201**. Body: `{contact_id* (uuid), status? (default open), bot_paused?, context?}`. Contacto de otro tenant/inexistente → **404**. Audita `conversation.created`. *Endpoint añadido en FASE 8 (no estaba en la especificación original) por ser el punto de alta natural para CONV-1 y para el webhook de FASE 9 (ADR-031)* |
 | GET | `/api/v1/tenants/{tenant}/conversations/{conversation}` | `conversations.view` | Detalle con contacto, agente, participantes y asignaciones (`whenLoaded`). 404 si no existe/no es del tenant |
 | PATCH | `/api/v1/tenants/{tenant}/conversations/{conversation}` | `conversations.manage` | Actualización **parcial**: `status` (máquina de estados → 409 inválida) y `context` (merge por claves, `null` lo limpia). Audita `conversation.updated` (solo si hay cambios) |
-| POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/assign` | `conversations.assign` (owner/admin) | Asigna a un agente (miembro ACTIVO del tenant) → **200**. Body: `{agent_id*}`. Usuario no miembro → **422** `AGENT_NOT_IN_TENANT`. Registra `conversation_assignments` (reason `manual`) + participante. Audita `conversation.assigned` |
-| POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/transfer` | `conversations.assign` | Transfiere a otro agente: cierra la asignación/participación previa (`unassigned_at`/`left_at`) y crea la nueva (reason `transfer`). Mismas validaciones/errores que assign. Audita `conversation.transferred` |
+| POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/assign` | `conversations.assign` (owner/admin) | Asigna una conversación libre a un miembro ACTIVO mediante `users.id` → **200**. Body: `{agent_id*}`; `tenant_id` se ignora. Repetir el mismo agente es idempotente solo si las proyecciones coinciden; otro agente vigente → **409** `CONVERSATION_ALREADY_ASSIGNED`. Registra assignment `manual`, participant y auditoría `conversation.assigned` |
+| POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/transfer` | `conversations.assign` | Exige agente, assignment y participant vigentes; cierra A y activa B en una transacción. Body `{agent_id*}` con `users.id`. Sin agente → **409** `CONVERSATION_NOT_ASSIGNED`; A→A → **409** `CONVERSATION_TRANSFER_SAME_AGENT`; target no activo → **422** `AGENT_NOT_IN_TENANT`. Assignment `transfer`; audita `conversation.transferred` |
+| POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/claim` | `conversations.claim` (owner/admin/agent) | Claim propio y atómico: body vacío; `agent_id`/`tenant_id` están **prohibidos**. El target siempre es el usuario autenticado y exige `bot_paused=true`, `handoff_requested_at != null`, `agent_id=null`, status open/pending y membership activa. Ganador → **200**; segundo claimant → **409** `CONVERSATION_ALREADY_ASSIGNED`; no handoff → **409** `CONVERSATION_NOT_AWAITING_HANDOFF`. Assignment `claim`; audita `conversation.claimed` |
 | POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/close` | `conversations.manage` | Cierra (→ `resolved`). Sobre archivada → **409** `CONVERSATION_INVALID_STATE`; sobre resuelta → no-op. Audita `conversation.closed` |
 | POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/reopen` | `conversations.manage` | Reabre (→ `open`). Sobre abierta → no-op. Audita `conversation.reopened` |
 | POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/pause-bot` | `conversations.manage` | Pausa el bot (`bot_paused=true`), handoff a humano. Audita `conversation.bot_paused` |
 | POST | `/api/v1/tenants/{tenant}/conversations/{conversation}/resume-bot` | `conversations.manage` | Reanuda el bot (`bot_paused=false`). Audita `conversation.bot_resumed` |
+
+Assign/transfer/claim comparten el orden de concurrencia
+`conversationLock` Redis → transacción DB → `SELECT ... FOR UPDATE` de conversation → memberships
+bloqueadas en orden de `users.id`. Solo aceptan status `open|pending`. Proyecciones preexistentes
+inconsistentes → **409** `CONVERSATION_ASSIGNMENT_INCONSISTENT`; timeout del lock → **409**
+`CONVERSATION_ASSIGNMENT_BUSY`. La UNIQUE parcial de assignment abierta se traduce a conflicto sin
+exponer SQL.
 
 `ConversationResource`: `{id, status, status_label, contact (ContactResource), agent {id, name,
 email} | null, last_message_at, last_interaction_at, auto_assigned, bot_paused, context,
@@ -268,7 +277,7 @@ En FASE 9 los mensajes se **persisten y procesan por backend** (sin endpoints RE
 |---|---|---|
 | `MessageCreated` | `{message}` | inbound (webhook) y outbound (envío del agente) |
 | `MessageStatusUpdated` | `{message, previous_status}` | status de Meta y `sent`/`failed` del job |
-| `ConversationUpdated` | `{conversation}` | touch timestamps, reabrir por inbound, update/close/reopen/pause-bot/resume-bot/assign/transfer |
+| `ConversationUpdated` | `{conversation}` | touch timestamps, reabrir por inbound, update/close/reopen/pause-bot/resume-bot/assign/transfer/claim; el broadcast usa `afterCommit=true` |
 
 ### 3.8 Flujos, chatbots, triggers y ejecuciones (implementado en FASE 11)
 

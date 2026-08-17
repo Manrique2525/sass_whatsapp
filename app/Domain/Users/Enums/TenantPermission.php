@@ -27,6 +27,9 @@ namespace App\Domain\Users\Enums;
  * roles, inbox de conversaciones), `conversations.manage` (owner/admin:
  * crear/actualizar/cerrar/reabrir y pausar bot) y `conversations.assign`
  * (owner/admin: asignar/transferir a agentes).
+ *
+ * FASE 15 añade `conversations.claim` para que cualquier miembro activo pueda
+ * reclamarse a sí mismo una conversación que espera atención humana.
  */
 enum TenantPermission: string
 {
@@ -58,6 +61,7 @@ enum TenantPermission: string
     case ViewConversations = 'conversations.view';
     case ManageConversations = 'conversations.manage';
     case AssignConversations = 'conversations.assign';
+    case ClaimConversations = 'conversations.claim';
 
     case SendMessages = 'messages.send';
 
@@ -92,6 +96,7 @@ enum TenantPermission: string
             self::ViewConversations,
             self::ManageConversations,
             self::AssignConversations,
+            self::ClaimConversations,
             self::SendMessages,
             self::ViewFlows,
             self::ManageFlows,
@@ -109,8 +114,8 @@ enum TenantPermission: string
      *   (conectar/desconectar y envío).
      * - contacts: view para todos (CRM); manage solo owner/admin
      *   (crear/editar/eliminar contactos).
-     * - conversations: view para todos (inbox); manage y assign solo owner/admin
-     *   (estados, bot, asignación/transferencia a agentes).
+     * - conversations: view y claim propio para todos (inbox); manage y assign
+     *   solo owner/admin (estados, bot, asignación/transferencia a agentes).
      * - messages: send para todos los roles del tenant (responder en el chat).
      * - flows: view para todos (leer flujos/chatbots/ejecuciones); manage solo
      *   owner/admin (crear/editar/publicar/desactivar flujos y triggers).
@@ -139,6 +144,7 @@ enum TenantPermission: string
                 self::ViewConversations,
                 self::ManageConversations,
                 self::AssignConversations,
+                self::ClaimConversations,
                 self::SendMessages,
                 self::ViewFlows,
                 self::ManageFlows,
@@ -149,6 +155,7 @@ enum TenantPermission: string
                 self::ViewWhatsApp,
                 self::ViewContacts,
                 self::ViewConversations,
+                self::ClaimConversations,
                 self::SendMessages,
                 self::ViewFlows,
             ],

@@ -120,8 +120,8 @@ conversation_participants                      → quién estuvo/está involucra
   tenant_id FK → tenants (cascadeOnDelete)
   conversation_id FK → conversations (cascadeOnDelete)
   user_id FK → users (BIGINT, cascadeOnDelete)
-  role varchar(50)                             → espejo del rol del tenant al participar (owner/admin/agent)
-  joined_at / left_at timestamp nullable       → participante activo = left_at IS NULL
+  role varchar(50)                             → rol del tenant en la activación más reciente
+  joined_at / left_at timestamp nullable       → participación acumulativa; reactivar conserva joined_at
   UNIQUE (conversation_id, user_id) + índices (user_id, conversation_id),
   (tenant_id, conversation_id), (tenant_id, user_id)
 
@@ -133,7 +133,7 @@ conversation_assignments                       → historial acumulativo de asig
   assigned_by FK → users (BIGINT) nullable     → quién realizó la asignación (nullOnDelete)
   assigned_at timestamp                        → inicio de la asignación
   unassigned_at timestamp nullable             → se rellena al transferir/reasignar
-  reason varchar(30) default 'manual'          → manual | transfer
+  reason varchar(30) default 'manual'          → manual | transfer | claim
   UNIQUE parcial (conversation_id) WHERE unassigned_at IS NULL
   índices (conversation_id, assigned_at), (agent_id, assigned_at),
   (tenant_id, conversation_id), (tenant_id, agent_id)

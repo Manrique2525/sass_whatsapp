@@ -100,7 +100,7 @@ const closeAction = computed<'close' | 'reopen' | null>(() => {
                 @change="onAssignChange"
             >
                 <option value="" disabled>Asignar a...</option>
-                <option v-for="member in props.members" :key="member.id" :value="member.id">
+                <option v-for="member in props.members" :key="member.id" :value="member.user.id">
                     {{ member.user.name }}
                 </option>
             </select>

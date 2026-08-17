@@ -26,6 +26,9 @@ final class ConversationUpdated implements ShouldBroadcast
     use InteractsWithSockets;
     use SerializesModels;
 
+    /** El broadcast encolado nunca puede ejecutarse antes del commit. */
+    public bool $afterCommit = true;
+
     public function __construct(
         public readonly Conversation $conversation,
     ) {}

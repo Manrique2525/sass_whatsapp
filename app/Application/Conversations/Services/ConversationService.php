@@ -5,16 +5,19 @@ declare(strict_types=1);
 namespace App\Application\Conversations\Services;
 
 use App\Application\Audit\Services\AuditLogger;
+use App\Application\Flows\Services\FlowExecutionService;
 use App\Application\Users\Services\AuthorizationService;
 use App\Domain\Contacts\Models\Contact;
 use App\Domain\Conversations\Enums\ConversationStatus;
 use App\Domain\Conversations\Exceptions\ConversationAgentNotInTenantException;
+use App\Domain\Conversations\Exceptions\ConversationAssignmentConflictException;
 use App\Domain\Conversations\Exceptions\ConversationContactNotFoundException;
 use App\Domain\Conversations\Exceptions\ConversationInvalidStateException;
 use App\Domain\Conversations\Exceptions\ConversationNotFoundException;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Conversations\Models\ConversationAssignment;
 use App\Domain\Conversations\Models\ConversationParticipant;
+use App\Domain\Tenants\Exceptions\TenantMembershipException;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Enums\TenantMembershipStatus;
 use App\Domain\Users\Enums\TenantPermission;
@@ -22,8 +25,12 @@ use App\Domain\Users\Models\TenantUser;
 use App\Domain\Users\Models\User;
 use App\Events\ConversationUpdated;
 use App\Infrastructure\Tenancy\TenantContext;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Database\QueryException;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Casos de uso del inbox de conversaciones (FASE 8, ADR-031).
@@ -43,10 +50,13 @@ use Illuminate\Pagination\LengthAwarePaginator;
  */
 final class ConversationService
 {
+    private const OPEN_ASSIGNMENT_UNIQUE = 'conversation_assignments_open_unique';
+
     public function __construct(
         private readonly AuthorizationService $authorization,
         private readonly AuditLogger $auditLogger,
         private readonly Dispatcher $events,
+        private readonly FlowExecutionService $flowExecutions,
     ) {}
 
     /**
@@ -193,7 +203,7 @@ final class ConversationService
      */
     public function assign(User $user, Tenant $tenant, string $conversationId, int $agentId): Conversation
     {
-        return $this->changeAgent($user, $tenant, $conversationId, $agentId, transfer: false);
+        return $this->changeAgent($user, $tenant, $conversationId, $agentId, operation: 'assign');
     }
 
     /**
@@ -201,7 +211,15 @@ final class ConversationService
      */
     public function transfer(User $user, Tenant $tenant, string $conversationId, int $agentId): Conversation
     {
-        return $this->changeAgent($user, $tenant, $conversationId, $agentId, transfer: true);
+        return $this->changeAgent($user, $tenant, $conversationId, $agentId, operation: 'transfer');
+    }
+
+    /**
+     * Reclama para el usuario autenticado una conversación en cola de handoff.
+     */
+    public function claim(User $user, Tenant $tenant, string $conversationId): Conversation
+    {
+        return $this->changeAgent($user, $tenant, $conversationId, $user->id, operation: 'claim');
     }
 
     public function close(User $user, Tenant $tenant, string $conversationId): Conversation
@@ -340,77 +358,320 @@ final class ConversationService
     }
 
     /**
-     * Lógica compartida de asignación manual y transferencia.
+     * @param  'assign'|'transfer'|'claim'  $operation
      */
-    private function changeAgent(User $user, Tenant $tenant, string $conversationId, int $agentId, bool $transfer): Conversation
-    {
-        $this->authorization->authorize($user, TenantPermission::AssignConversations, $tenant);
+    private function changeAgent(
+        User $user,
+        Tenant $tenant,
+        string $conversationId,
+        int $agentId,
+        string $operation,
+    ): Conversation {
+        $permission = $operation === 'claim'
+            ? TenantPermission::ClaimConversations
+            : TenantPermission::AssignConversations;
 
-        $conversation = $this->findForTenant($tenant, $conversationId);
+        $this->authorization->authorize($user, $permission, $tenant);
 
-        if ($conversation->agent_id === $agentId) {
-            return $conversation;
+        $lock = $this->flowExecutions->conversationLock($tenant, $conversationId);
+
+        try {
+            $lock->block(seconds: 10);
+        } catch (LockTimeoutException) {
+            throw ConversationAssignmentConflictException::busy();
         }
 
-        $membership = $this->activeMembership($tenant, $agentId);
+        try {
+            return $this->changeAgentLocked(
+                $user,
+                $tenant,
+                $conversationId,
+                $agentId,
+                $operation,
+                $permission,
+            );
+        } finally {
+            $lock->release();
+        }
+    }
 
-        $now = now();
+    /**
+     * @param  'assign'|'transfer'|'claim'  $operation
+     */
+    private function changeAgentLocked(
+        User $user,
+        Tenant $tenant,
+        string $conversationId,
+        int $agentId,
+        string $operation,
+        TenantPermission $permission,
+    ): Conversation {
+        try {
+            $changed = DB::transaction(function () use (
+                $user,
+                $tenant,
+                $conversationId,
+                $agentId,
+                $operation,
+                $permission,
+            ): bool {
+                $conversation = $this->findForTenantForUpdate($tenant, $conversationId);
+                $memberships = $this->lockedMemberships($tenant, $user->id, $agentId);
 
-        ConversationAssignment::query()
-            ->where('conversation_id', $conversation->id)
-            ->whereNull('unassigned_at')
-            ->update(['unassigned_at' => $now]);
+                // La autorización se repite después de bloquear la membresía del actor.
+                $this->authorization->authorize($user, $permission, $tenant);
 
-        ConversationParticipant::query()
-            ->where('conversation_id', $conversation->id)
-            ->whereNull('left_at')
-            ->update(['left_at' => $now]);
+                $targetMembership = $memberships[$agentId] ?? null;
+                if ($targetMembership === null || $targetMembership->status !== TenantMembershipStatus::Active) {
+                    throw new ConversationAgentNotInTenantException;
+                }
 
-        $conversation->assignments()->create([
-            'agent_id' => $agentId,
-            'assigned_by' => $user->id,
-            'assigned_at' => $now,
-            'reason' => $transfer ? 'transfer' : 'manual',
-        ]);
+                $this->assertAssignableStatus($conversation);
 
-        ConversationParticipant::query()->updateOrCreate(
-            ['conversation_id' => $conversation->id, 'user_id' => $agentId],
-            ['role' => $membership->role->value, 'joined_at' => $now, 'left_at' => null],
-        );
+                $openAssignment = $this->openAssignmentForUpdate($tenant, $conversation);
+                $previousAgentId = $conversation->agent_id === null ? null : (int) $conversation->agent_id;
+                $now = now();
 
-        $conversation->forceFill(['agent_id' => $agentId, 'auto_assigned' => false])->save();
+                if ($operation === 'claim') {
+                    $this->assertClaimable($conversation, $openAssignment);
+                } elseif ($operation === 'assign') {
+                    if ($previousAgentId === $agentId) {
+                        if ($openAssignment === null
+                            || (int) $openAssignment->agent_id !== $agentId
+                            || $this->activeParticipantForUpdate($tenant, $conversation, $agentId) === null) {
+                            throw ConversationAssignmentConflictException::inconsistent();
+                        }
 
-        $this->auditLogger->record(
-            action: $transfer ? 'conversation.transferred' : 'conversation.assigned',
-            data: [
-                'tenant_id' => $tenant->id,
-                'agent_id' => $agentId,
-                'assigned_by' => $user->id,
-            ],
-            subjectType: Conversation::class,
-            subjectId: $conversation->id,
-        );
+                        return false;
+                    }
 
+                    if ($previousAgentId !== null) {
+                        throw ConversationAssignmentConflictException::alreadyAssigned();
+                    }
+
+                    if ($openAssignment !== null) {
+                        throw ConversationAssignmentConflictException::inconsistent();
+                    }
+                } else {
+                    if ($previousAgentId === null) {
+                        throw ConversationAssignmentConflictException::notAssigned();
+                    }
+
+                    if ($previousAgentId === $agentId) {
+                        throw ConversationAssignmentConflictException::sameTransferAgent();
+                    }
+
+                    if ($openAssignment === null || (int) $openAssignment->agent_id !== $previousAgentId) {
+                        throw ConversationAssignmentConflictException::inconsistent();
+                    }
+
+                    $previousParticipant = $this->activeParticipantForUpdate(
+                        $tenant,
+                        $conversation,
+                        $previousAgentId,
+                    );
+
+                    if ($previousParticipant === null) {
+                        throw ConversationAssignmentConflictException::inconsistent();
+                    }
+
+                    $openAssignment->forceFill(['unassigned_at' => $now])->save();
+                    $previousParticipant->forceFill(['left_at' => $now])->save();
+                }
+
+                $reason = match ($operation) {
+                    'assign' => 'manual',
+                    'transfer' => 'transfer',
+                    'claim' => 'claim',
+                };
+
+                $conversation->assignments()->create([
+                    'agent_id' => $agentId,
+                    'assigned_by' => $user->id,
+                    'assigned_at' => $now,
+                    'reason' => $reason,
+                ]);
+
+                $this->activateParticipant($tenant, $conversation, $targetMembership, $now);
+
+                $conversation->forceFill([
+                    'agent_id' => $agentId,
+                    'auto_assigned' => false,
+                ])->save();
+
+                $this->auditLogger->record(
+                    action: match ($operation) {
+                        'assign' => 'conversation.assigned',
+                        'transfer' => 'conversation.transferred',
+                        'claim' => 'conversation.claimed',
+                    },
+                    data: [
+                        'conversation_id' => $conversation->id,
+                        'previous_agent_id' => $previousAgentId,
+                        'agent_id' => $agentId,
+                        'reason' => $reason,
+                    ],
+                    subjectType: Conversation::class,
+                    subjectId: $conversation->id,
+                    actorUserId: $user->id,
+                    tenantId: $tenant->id,
+                );
+
+                return true;
+            });
+        } catch (QueryException $e) {
+            if ($this->isOpenAssignmentUniqueViolation($e)) {
+                throw ConversationAssignmentConflictException::alreadyAssigned();
+            }
+
+            throw $e;
+        }
+
+        $conversation = $this->findForTenant($tenant, $conversationId);
         $conversation->loadMissing(['contact', 'agent']);
 
-        $this->events->dispatch(new ConversationUpdated($conversation));
+        if ($changed) {
+            $this->events->dispatch(new ConversationUpdated($conversation));
+        }
 
         return $conversation;
     }
 
-    private function activeMembership(Tenant $tenant, int $userId): TenantUser
+    /**
+     * Bloquea memberships en orden determinista para evitar deadlocks entre
+     * operaciones sobre conversaciones distintas.
+     *
+     * @return array<int, TenantUser>
+     */
+    private function lockedMemberships(Tenant $tenant, int $actorId, int $agentId): array
     {
-        $membership = TenantUser::query()
-            ->where('tenant_id', $tenant->id)
-            ->where('user_id', $userId)
-            ->where('status', TenantMembershipStatus::Active)
-            ->first();
+        $userIds = array_values(array_unique([$actorId, $agentId]));
+        sort($userIds);
 
-        if ($membership === null) {
-            throw new ConversationAgentNotInTenantException;
+        /** @var array<int, TenantUser> $memberships */
+        $memberships = TenantUser::query()
+            ->where('tenant_id', $tenant->id)
+            ->whereIn('user_id', $userIds)
+            ->orderBy('user_id')
+            ->lockForUpdate()
+            ->get()
+            ->keyBy(static fn (TenantUser $membership): int => (int) $membership->user_id)
+            ->all();
+
+        if (! isset($memberships[$actorId])
+            || $memberships[$actorId]->status !== TenantMembershipStatus::Active) {
+            throw new TenantMembershipException('El usuario no es miembro activo del tenant.');
         }
 
-        return $membership;
+        return $memberships;
+    }
+
+    private function assertAssignableStatus(Conversation $conversation): void
+    {
+        if (! in_array($conversation->status, [ConversationStatus::Open, ConversationStatus::Pending], true)) {
+            throw new ConversationInvalidStateException(
+                'Solo se puede asignar una conversación abierta o pendiente.',
+            );
+        }
+    }
+
+    private function assertClaimable(
+        Conversation $conversation,
+        ?ConversationAssignment $openAssignment,
+    ): void {
+        if ($conversation->agent_id !== null) {
+            throw ConversationAssignmentConflictException::alreadyAssigned();
+        }
+
+        if (! $conversation->bot_paused || $conversation->handoff_requested_at === null) {
+            throw ConversationAssignmentConflictException::notAwaitingHandoff();
+        }
+
+        if ($openAssignment !== null) {
+            throw ConversationAssignmentConflictException::inconsistent();
+        }
+    }
+
+    private function openAssignmentForUpdate(
+        Tenant $tenant,
+        Conversation $conversation,
+    ): ?ConversationAssignment {
+        return ConversationAssignment::query()
+            ->withoutTenantScope()
+            ->where('tenant_id', $tenant->id)
+            ->where('conversation_id', $conversation->id)
+            ->whereNull('unassigned_at')
+            ->lockForUpdate()
+            ->first();
+    }
+
+    private function activeParticipantForUpdate(
+        Tenant $tenant,
+        Conversation $conversation,
+        int $userId,
+    ): ?ConversationParticipant {
+        return ConversationParticipant::query()
+            ->withoutTenantScope()
+            ->where('tenant_id', $tenant->id)
+            ->where('conversation_id', $conversation->id)
+            ->where('user_id', $userId)
+            ->whereNull('left_at')
+            ->lockForUpdate()
+            ->first();
+    }
+
+    private function activateParticipant(
+        Tenant $tenant,
+        Conversation $conversation,
+        TenantUser $membership,
+        Carbon $now,
+    ): void {
+        $participant = ConversationParticipant::query()
+            ->withoutTenantScope()
+            ->where('tenant_id', $tenant->id)
+            ->where('conversation_id', $conversation->id)
+            ->where('user_id', $membership->user_id)
+            ->lockForUpdate()
+            ->first();
+
+        if ($participant === null) {
+            $conversation->participants()->create([
+                'user_id' => $membership->user_id,
+                'role' => $membership->role->value,
+                'joined_at' => $now,
+            ]);
+
+            return;
+        }
+
+        $participant->forceFill([
+            'role' => $membership->role->value,
+            'left_at' => null,
+        ])->save();
+    }
+
+    private function findForTenantForUpdate(Tenant $tenant, string $conversationId): Conversation
+    {
+        $conversation = Conversation::query()
+            ->withoutTenantScope()
+            ->where('tenant_id', $tenant->id)
+            ->whereKey($conversationId)
+            ->lockForUpdate()
+            ->first();
+
+        if ($conversation === null) {
+            throw new ConversationNotFoundException;
+        }
+
+        return $conversation;
+    }
+
+    private function isOpenAssignmentUniqueViolation(QueryException $exception): bool
+    {
+        $message = $exception->getMessage();
+
+        return str_contains($message, self::OPEN_ASSIGNMENT_UNIQUE)
+            || str_contains($message, 'conversation_assignments.conversation_id');
     }
 
     private function findContactForTenant(Tenant $tenant, string $contactId): Contact
