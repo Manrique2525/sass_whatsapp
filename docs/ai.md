@@ -294,3 +294,61 @@ TelemetryPayload solo acepta campos seguros:
   clock, bot_paused, invalid output_variable, safe schema keys.
 - **Suite FASE 16 U4**: 25 tests / 120 assertions.
 - **Suite total**: 751 tests / 3014 assertions.
+
+## 12. Hardening y Cierre (FASE 16 U5)
+
+### Bug fix: RuntimeException → AIProviderException
+
+- `OpenAIProvider::parseResponse()` lanzaba `RuntimeException` para respuestas
+  malformadas (200 sin `choices[0]['message']['content']`).
+- **Problema**: violaba el contrato de `AIProviderInterface` que declara solo
+  `AIAuthFailedException | AIRateLimitException | AIInvalidRequestException | AIProviderException`.
+  El `catch (AIException)` en `AiNodeExecutor` no la capturaba (caía en `\Throwable`).
+- **Fix**: cambiado a `AIProviderException` (1 línea). Test AI-P14 actualizado.
+
+### Security Matrix: AI-SEC-F01..F12
+
+12 tests formales que verifican cada propiedad de seguridad en un solo archivo:
+
+| Test | Propiedad | Verificación |
+|---|---|---|
+| F01 | API key → logs | `sk-test-*` absent from `flow_execution_logs` |
+| F02 | API key → frontend | Config contains no `api_key`, `provider`, `model` |
+| F03 | API key → audit | `sk-test-*` absent from `audit_logs` |
+| F04 | Prompt → telemetry | Prompt text absent from `ai_completed` payload |
+| F05 | Response → telemetry | Response content absent from payload |
+| F06 | PII → telemetry | Contact name/email/phone absent from payload |
+| F07 | Tenant isolation | A's payload contains no B data |
+| F08 | Output safety | `<script>`, `<?php`, SQL stored as plain text |
+| F09 | bot_paused | Provider not invoked, 0 logs created |
+| F10 | DI enforcement | Constructor type-hint is `AIProviderInterface` |
+| F11 | Config injection | `tenant_id` in config ignored |
+| F12 | Exception sanitization | No stack traces in error logs |
+
+### Boundary verification
+
+- **RAG (FASE 17)**: cero código, solo docs. `knowledge_bases`, `knowledge_documents`,
+  `knowledge_chunks`, embedding search — no implementados.
+- **FAQ (FASE 18)**: cero código, solo docs. No `faqs` table, no FAQ matching.
+- **Billing/UsageGuard (FASE 23-25)**: cero código, solo docs. No `usage_records`,
+  no `subscriptions`, no Stripe, no quota enforcement.
+- **DDL**: cero migraciones AI/usage en `database/migrations/`.
+
+### Tests U5
+
+- **AiSecurityMatrixTest** (AI-SEC-F01..F12): 12 tests / 41 assertions.
+- **OpenAIProviderTest** AI-P14: actualizado para `AIProviderException`.
+- **Suite FASE 16 U5**: 13 tests / 44 assertions.
+- **Suite total**: 763 tests / 3055 assertions.
+
+### FASE 16 — Resumen Final
+
+| Unidad | Tests | Assertions | Estado |
+|---|---|---|---|
+| U1 Provider | 15 | 43 | COMPLETADA |
+| U2 Runtime | 41 | 86 | COMPLETADA |
+| U3 Flow Builder | 49 (FE) | — | COMPLETADA |
+| U4 Telemetry | 25 | 120 | COMPLETADA |
+| U5 Hardening | 13 | 44 | COMPLETADA |
+| **Total backend** | **763** | **3055** | **COMPLETADA** |
+| **Total frontend** | **244** | **—** | **COMPLETADA** |

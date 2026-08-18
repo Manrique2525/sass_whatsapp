@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 16 EN PROGRESO** (U1+U2+U3+U4 completadas, U5 pendiente).
+Estado general: **FASE 16 COMPLETADA** (U1+U2+U3+U4+U5 completadas).
 
 ## Fases
 
@@ -22,7 +22,7 @@ Estado general: **FASE 16 EN PROGRESO** (U1+U2+U3+U4 completadas, U5 pendiente).
 | 13 | Variables de conversación | COMPLETADA |
 | 14 | Triggers | COMPLETADA |
 | 15 | Transferencia a humano | COMPLETADA |
-| 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime + Telemetry) | EN PROGRESO (U1+U2+U3+U4 DONE, U5 pendiente) |
+| 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime + Telemetry + Security) | COMPLETADA |
 | 17 | Base de conocimiento (RAG + pgvector) | PENDIENTE |
 | 18 | FAQ inteligente | PENDIENTE |
 | 19 | Leads | PENDIENTE |
@@ -1179,3 +1179,50 @@ ADR-057 (AI Usage Telemetry)
 
 #### ESTADO
 COMPLETADO
+
+---
+
+### FASE 16 — U5: Hardening, Auditoría Final y Cierre
+
+#### Bug fix
+
+- `OpenAIProvider::parseResponse()` — `RuntimeException` → `AIProviderException` para
+  respuestas malformadas. Test AI-P14 actualizado.
+
+#### Security Matrix
+
+- `tests/Feature/Flows/AiSecurityMatrixTest.php` — 12 tests formales (AI-SEC-F01..F12):
+  - F01: API key never in execution logs
+  - F02: API key/provider/model never in frontend config
+  - F03: API key never in audit logs
+  - F04: Prompt never in telemetry
+  - F05: Response never in telemetry
+  - F06: Contact PII never in telemetry
+  - F07: Tenant A telemetry isolated from B
+  - F08: Malicious output stored as plain text
+  - F09: bot_paused blocks provider completely
+  - F10: Provider dependency is AIProviderInterface only
+  - F11: tenant_id config injection ignored
+  - F12: Exceptions sanitized (no stack traces)
+
+#### Boundary verification
+
+- **RAG**: cero código, solo docs (FASE 17)
+- **FAQ**: cero código, solo docs (FASE 18)
+- **Billing/UsageGuard**: cero código, solo docs (FASE 23-25)
+- **DDL**: cero migraciones AI/usage
+
+#### Puertas
+
+- php artisan test: 763/763 PASS (3055 assertions)
+- pint: PASS
+- phpstan: 0 errores
+- npm test: 244/244 PASS
+- vue-tsc: PASS
+
+#### ADRs
+
+ADR-056 (AI Prompt/Data Security Boundaries)
+
+#### ESTADO
+COMPLETADO — FASE 16 CERRADA

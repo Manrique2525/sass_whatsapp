@@ -15,7 +15,6 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
-use RuntimeException;
 use Throwable;
 
 /**
@@ -135,7 +134,7 @@ final class OpenAIProvider implements AIProviderInterface
         $data = $response->json();
 
         if (! is_array($data) || ! isset($data['choices'][0]['message']['content'])) {
-            throw new RuntimeException('Invalid response structure from OpenAI API');
+            throw new AIProviderException('Invalid response structure from OpenAI API');
         }
 
         $content = (string) $data['choices'][0]['message']['content'];

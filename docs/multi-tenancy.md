@@ -377,3 +377,7 @@ tenant distinto del propietario:
     de A no son resolubles en templates de B (`VariableResolver` recibe solo `custom` del
     contexto actual). Config injection en `node.config` no puede cambiar `tenant_id` del
     contexto (AI-S10). Tests AI-MT-01..06 verifican aislamiento cross-tenant.
+21. (FASE 16 U5) Security matrix AI-SEC-F07 verifica que telemetría de Tenant A contiene
+    solo datos de A (prompt, business, contact). AI-SEC-F11 verifica que `tenant_id` injection
+    en node config no altera el contexto. Tests AI-SEC-F01..F12 formalizan 12 propiedades
+    de seguridad AI.

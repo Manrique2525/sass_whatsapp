@@ -1343,3 +1343,39 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Suite FASE 16 U4: 25 tests / 120 assertions.
   - Suite total: 751 tests / 3014 assertions.
   - `docs/ai.md` §11 documenta el safe schema y la arquitectura de telemetry.
+
+## ADR-056: AI Prompt/Data Security Boundaries (FASE 16 U5)
+
+- **Fecha**: 2026-08-18
+- **Estado**: Formalizado (FASE 16 UNIDAD 5)
+- **Contexto**: FASE 16 U1-U4 implementaron AI provider, runtime, UI y telemetría.
+  Las propiedades de seguridad estaban distribuidas en tests individuales (AI-S01..S10,
+  AI-MT-01..06, AI-U07..U08, AI-U21) pero no existía una matriz formal que verificara
+  todas las propiedades de seguridad de forma compacta y auditable.
+- **Decisión**:
+  - **Security Matrix AI-SEC-F01..F12**: 12 tests formales que verifican cada propiedad
+    de seguridad en un solo archivo `AiSecurityMatrixTest.php`:
+    - F01: API key nunca en flow_execution_logs
+    - F02: API key/provider/model nunca en frontend config
+    - F03: API key nunca en audit_logs
+    - F04: Prompt completo nunca en telemetría
+    - F05: Response completo nunca en telemetría
+    - F06: PII (contacto) nunca en telemetría
+    - F07: Tenant A telemetry sin datos de Tenant B
+    - F08: Output malicioso almacenado como texto plano
+    - F09: bot_paused bloquea provider completamente
+    - F10: Dependencia solo AIProviderInterface (no OpenAIProvider)
+    - F11: tenant_id injection en config no altera contexto
+    - F12: Excepciones AI sanitizadas (sin stack traces)
+  - **Bug fix**: `OpenAIProvider::parseResponse()` lanzaba `RuntimeException` para
+    respuestas malformadas en lugar de `AIProviderException`. Esto violaba el contrato
+    de `AIProviderInterface` y permitía que errores escapearan del `catch (AIException)`.
+    Corregido a `AIProviderException` (1 línea). Test AI-P14 actualizado.
+  - **Boundary formalization**: RAG (FASE 17), FAQ (FASE 18), Billing/UsageGuard
+    (FASE 23-25) verificados como ausentes — solo documentación, cero código.
+  - **DDL verification**: cero migraciones AI/usage en el codebase.
+- **Consecuencias**:
+  - Security matrix: 12 tests / 41 assertions (AI-SEC-F01..F12).
+  - Suite FASE 16 U5: 13 tests / 44 assertions (12 matrix + 1 Pint fix).
+  - Suite total: 763 tests / 3055 assertions.
+  - FASE 16 cerrada formalmente.

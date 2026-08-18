@@ -289,9 +289,9 @@ test('AI-P13: Timeout de conexión es retryable', function (): void {
 });
 
 // ---------------------------------------------------------------------------
-// AI-P14: Respuesta 200 pero sin choices → RuntimeException
+// AI-P14: Respuesta 200 pero sin choices → AIProviderException
 // ---------------------------------------------------------------------------
-test('AI-P14: Respuesta 200 sin choices lanza RuntimeException', function (): void {
+test('AI-P14: Respuesta 200 sin choices lanza AIProviderException', function (): void {
     Http::fake([
         'api.openai.com/v1/chat/completions' => Http::response([
             'id' => 'chatcmpl-bad',
@@ -300,7 +300,7 @@ test('AI-P14: Respuesta 200 sin choices lanza RuntimeException', function (): vo
     ]);
 
     expect(fn () => ai_provider()->generateResponse(new AIRequest(prompt: 'Test')))
-        ->toThrow(RuntimeException::class, 'Invalid response structure from OpenAI API');
+        ->toThrow(AIProviderException::class, 'Invalid response structure from OpenAI API');
 });
 
 // ---------------------------------------------------------------------------

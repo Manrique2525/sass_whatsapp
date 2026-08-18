@@ -494,6 +494,15 @@ Pirámide de tests con prioridad en lo crítico:
   invalid output_variable → no logs, safe schema keys only.
 - Suite FASE 16 U4: **25 tests / 120 assertions**. Suite total: **751 tests / 3014 assertions**.
 
+### FASE 16 — Security Matrix + Hardening (U5)
+- `AiSecurityMatrixTest` (AI-SEC-F01..F12): API key not in logs/frontend/audit,
+  prompt/response not in telemetry, contact PII not in telemetry, tenant A/B isolation,
+  malicious output as plain text, bot_paused blocks provider, provider dependency injection,
+  tenant_id injection ignored, exceptions sanitized (no stack traces).
+- `OpenAIProviderTest` AI-P14 updated: malformed response now throws `AIProviderException`
+  (was `RuntimeException`).
+- Suite FASE 16 U5: **13 tests / 44 assertions**. Suite total: **763 tests / 3055 assertions**.
+
 ### Auth
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 

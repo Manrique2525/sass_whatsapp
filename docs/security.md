@@ -492,3 +492,12 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - [ ] (FASE 16 U2) AI node output tratado como texto plano (sin eval). Prompt/response
         nunca completos en logs. bot_paused verificado antes de provider call. VariableGuard
         en output_variable. Aislamiento cross-tenant AI verificado (AI-S01..S10, AI-MT-01..06).
+- [ ] (FASE 16 U4) Telemetría AI usa safe schema (TelemetryPayload VO). PII (prompt,
+        response, contact, business, custom.secret) nunca en payload. Latencia con monotonic
+        clock. Tokens validados >= 0. Tests AI-U01..U25.
+- [ ] (FASE 16 U5) Security matrix AI-SEC-F01..F12 formaliza 12 propiedades de seguridad:
+        API key no logs/frontend/audit, prompt/response no telemetry, PII no telemetry,
+        tenant isolation, output plain text, bot_paused blocks, provider DI, config injection
+        ignored, exceptions sanitized. Bug fix: RuntimeException → AIProviderException.
+        RAG/FAQ/Billing boundaries verificados ausentes. DDL boundary verificado (0 migrations).
+        FASE 16 cerrada. Suite total: 763 tests / 3055 assertions.
