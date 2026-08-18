@@ -47,4 +47,17 @@ return [
 
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | AI Fallback Message
+    |--------------------------------------------------------------------------
+    |
+    | Mensaje por defecto cuando el proveedor de IA falla y el nodo no define
+    | un fallback_message propio. Si es null, el output_variable queda sin
+    | valor y el flow continúa.
+    |
+    */
+
+    'fallback_message' => env('AI_FALLBACK_MESSAGE'),
+
 ];

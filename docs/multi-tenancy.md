@@ -371,3 +371,9 @@ tenant distinto del propietario:
     scope activo → siempre reflejan el estado real del tenant. El canal Reverb tenant-wide
     `tenant.{tenantId}.inbox` está aislado por `belongsToTenantWithPermission` (membresía
     activa + `conversations.view`); usuario de otro tenant recibe 403.
+
+20. (FASE 16 U2) AI node output de Tenant A jamás aparece en Tenant B. El output se guarda
+    en `execution.variables.custom` dentro del `TenantContext` del flow engine. Variables custom
+    de A no son resolubles en templates de B (`VariableResolver` recibe solo `custom` del
+    contexto actual). Config injection en `node.config` no puede cambiar `tenant_id` del
+    contexto (AI-S10). Tests AI-MT-01..06 verifican aislamiento cross-tenant.

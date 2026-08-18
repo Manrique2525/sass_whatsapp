@@ -30,10 +30,13 @@ enum FlowNodeType: string
     /**
      * Nodos que quedan en `waiting` (esperando el siguiente mensaje del
      * cliente o una tarea asíncrona) tras su ejecución.
+     *
+     * AI NO es waiting: FASE 16 U2 ejecuta AI de forma síncrona dentro
+     * del worker; el output se guarda en custom.* y el flow continúa.
      */
     public function isWaitingType(): bool
     {
-        return in_array($this, [self::Question, self::Buttons, self::AI], true);
+        return in_array($this, [self::Question, self::Buttons], true);
     }
 
     /**

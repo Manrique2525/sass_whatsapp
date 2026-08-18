@@ -214,7 +214,7 @@ final class FlowValidator
                 break;
 
             case FlowNodeType::AI:
-                $errors[] = "El nodo \"{$name}\" es de tipo 'ai': no disponible en esta versión (reservado para FASE 16).";
+                $this->validateAiNode($config, $name, $errors);
                 break;
 
             case FlowNodeType::Human:
@@ -505,6 +505,56 @@ final class FlowValidator
                 $errors[] = "El nodo \"{$name}\" (etiquetar) tiene una etiqueta que excede la longitud máxima.";
 
                 return;
+            }
+        }
+    }
+
+    /**
+     * Valida la config del nodo AI (FASE 16 U2).
+     *
+     * prompt: required, string, non-empty, max length
+     * output_variable: required, VariableGuard-valid
+     * system_prompt: nullable string, max length
+     * fallback_message: nullable string, max length
+     *
+     * @param  array<string, mixed>  $config
+     * @param  list<string>  $errors
+     */
+    private function validateAiNode(array $config, string $name, array &$errors): void
+    {
+        $prompt = $config['prompt'] ?? null;
+
+        if (! $this->isNonEmptyString($prompt)) {
+            $errors[] = "El nodo \"{$name}\" (IA) requiere 'prompt' no vacío.";
+        } elseif (strlen($prompt) > self::MAX_TEXT_LENGTH) {
+            $errors[] = "El nodo \"{$name}\" (IA) excede la longitud máxima de prompt.";
+        } else {
+            $this->validateReferences($prompt, $name, 'IA', $errors);
+        }
+
+        $outputVariable = $config['output_variable'] ?? null;
+
+        if (! is_string($outputVariable) || ! VariableGuard::isValidKey(VariableGuard::normalizeKey($outputVariable))) {
+            $errors[] = "El nodo \"{$name}\" (IA) requiere 'output_variable' con nombre de variable válido.";
+        }
+
+        $systemPrompt = $config['system_prompt'] ?? null;
+
+        if ($systemPrompt !== null) {
+            if (! is_string($systemPrompt)) {
+                $errors[] = "El nodo \"{$name}\" (IA) tiene un 'system_prompt' inválido.";
+            } elseif (strlen($systemPrompt) > self::MAX_TEXT_LENGTH) {
+                $errors[] = "El nodo \"{$name}\" (IA) excede la longitud máxima de system_prompt.";
+            }
+        }
+
+        $fallbackMessage = $config['fallback_message'] ?? null;
+
+        if ($fallbackMessage !== null) {
+            if (! is_string($fallbackMessage)) {
+                $errors[] = "El nodo \"{$name}\" (IA) tiene un 'fallback_message' inválido.";
+            } elseif (strlen($fallbackMessage) > self::MAX_TEXT_LENGTH) {
+                $errors[] = "El nodo \"{$name}\" (IA) excede la longitud máxima de fallback_message.";
             }
         }
     }

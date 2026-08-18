@@ -350,6 +350,6 @@ test('HANDOFF-CONTRACT-06: human no es waiting y los tipos existentes conservan 
     expect(FlowNodeType::Human->isWaitingType())->toBeFalse()
         ->and(FlowNodeType::Question->isWaitingType())->toBeTrue()
         ->and(FlowNodeType::Buttons->isWaitingType())->toBeTrue()
-        ->and(FlowNodeType::AI->isWaitingType())->toBeTrue()
+        ->and(FlowNodeType::AI->isWaitingType())->toBeFalse()
         ->and(FlowNodeType::End->isWaitingType())->toBeFalse();
 });

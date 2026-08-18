@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Application\Flows\Services\ConversationLockContext;
+use App\Application\Flows\Services\Executors\AiNodeExecutor;
 use App\Application\Flows\Services\Executors\ButtonsNodeExecutor;
 use App\Application\Flows\Services\Executors\ConditionNodeExecutor;
 use App\Application\Flows\Services\Executors\DelayNodeExecutor;
@@ -65,6 +66,7 @@ class AppServiceProvider extends ServiceProvider
                 $app->make(DelayNodeExecutor::class),
                 $app->make(TagNodeExecutor::class),
                 $app->make(WebhookNodeExecutor::class),
+                $app->make(AiNodeExecutor::class),
                 $app->make(HumanNodeExecutor::class),
                 $app->make(EndNodeExecutor::class),
             ]);

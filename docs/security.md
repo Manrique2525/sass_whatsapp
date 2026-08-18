@@ -489,3 +489,6 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - [ ] (FASE 16 U1) API key OpenAI nunca en response, logs, auditoría, exceptions ni frontend.
         Provider stateless re: tenant. Tests con Http::fake (sin llamadas reales).
         Binding AIProviderInterface → OpenAIProvider en AppServiceProvider (singleton lazy).
+- [ ] (FASE 16 U2) AI node output tratado como texto plano (sin eval). Prompt/response
+        nunca completos en logs. bot_paused verificado antes de provider call. VariableGuard
+        en output_variable. Aislamiento cross-tenant AI verificado (AI-S01..S10, AI-MT-01..06).

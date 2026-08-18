@@ -459,6 +459,22 @@ Pirámide de tests con prioridad en lo crítico:
   mapeado correctamente. Todos con `Http::fake` (sin llamadas reales).
 - Suite FASE 16 U1: **15 tests / 43 assertions**. Suite total: **685 tests / 2808 assertions**.
 
+### FASE 16 — AI Node Runtime (U2)
+- `AiNodeExecutorTest` (AI-01..15): provider invocation, output persistence in custom.*,
+  prompt variable resolution, invalid output_variable → fallback, empty/timeout/rate-limit/auth
+  errors → fallback, no message sending, idempotency (second execution reuses), bot_paused
+  defense-in-depth, control character sanitization, MAX_VALUE_LENGTH truncation, AIRequest
+  security (no secrets), config abstraction.
+- `AiFlowTest` (AI-F01..F10): publish, end-to-end execution, AI→condition branching,
+  AI→message interpolation, provider failure→fallback→continue, bot_paused prevents execution,
+  idempotency, full completion, handoff preserves invariants, AI cannot be start node.
+- `AiSecurityTest` (AI-S01..10): cross-tenant output isolation, API key not in execution/audit
+  logs, prompt/response not logged, output as plain text, injection via contact/custom/config,
+  business secrets excluded.
+- `AiTenantIsolationTest` (AI-MT-01..6): correct tenant context, data isolation, output
+  isolation, template isolation, wrong context cleanup, sequential A→B execution.
+- Suite FASE 16 U2: **41 tests / 86 assertions**. Suite total: **726 tests / 2894 assertions**.
+
 ### Auth
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 

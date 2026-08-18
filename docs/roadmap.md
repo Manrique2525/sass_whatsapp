@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 15 COMPLETADA** (Transferencia a humano). Todas las unidades completadas.
+Estado general: **FASE 16 EN PROGRESO** (U1+U2 completadas, U3 pendiente).
 
 ## Fases
 
@@ -22,7 +22,7 @@ Estado general: **FASE 15 COMPLETADA** (Transferencia a humano). Todas las unida
 | 13 | Variables de conversación | COMPLETADA |
 | 14 | Triggers | COMPLETADA |
 | 15 | Transferencia a humano | COMPLETADA |
-| 16 | IA (AIProviderInterface, OpenAI) | PENDIENTE |
+| 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime) | EN PROGRESO (U1+U2 DONE, U3 pendiente) |
 | 17 | Base de conocimiento (RAG + pgvector) | PENDIENTE |
 | 18 | FAQ inteligente | PENDIENTE |
 | 19 | Leads | PENDIENTE |
@@ -947,6 +947,107 @@ COMPLETADO
 #### ADRs
 
 ADR-054 (AI Provider Infrastructure)
+
+#### ESTADO
+COMPLETADO
+
+### UNIDAD 2 (U2): AI Node Runtime
+
+**Objetivo**: Integrar el nodo AI en el motor de flujos. Genera contenido con IA, lo guarda en `custom.*`, el flow continúa.
+
+#### Archivos creados
+
+- `app/Application/Flows/Services/Executors/AiNodeExecutor.php` — ejecutor del nodo AI
+- `app/Application/Flows/Services/AiPromptBuilder.php` — construye SYSTEM/CONTEXT/USER para el prompt
+- `config/ai.php` (extendido) — sección `fallback_message`
+- `tests/Fakes/FakeAIProvider.php` — provider falso para tests (sin llamadas reales)
+- `tests/Unit/Flows/AiNodeExecutorTest.php` — 15 tests (AI-01..15)
+- `tests/Feature/Flows/AiFlowTest.php` — 10 tests (AI-F01..F10)
+- `tests/Feature/Flows/AiSecurityTest.php` — 10 tests (AI-S01..S10)
+- `tests/Feature/Flows/AiTenantIsolationTest.php` — 6 tests (AI-MT-01..06)
+
+#### Archivos modificados
+
+- `app/Domain/Flows/Enums/FlowNodeType.php` — AI removido de `isWaitingType()`
+- `app/Domain/Flows/Services/FlowValidator.php` — `validateAiNode()` para config de AI
+- `app/Providers/AppServiceProvider.php` — registro de `AiNodeExecutor` en `NodeExecutorRegistry`
+- `tests/Unit/Flows/FlowValidatorTest.php` — `HANDOFF-CONTRACT-06` actualizado
+
+#### Tests
+
+- **Unit (AiNodeExecutorTest)**: 15 tests / 33 assertions:
+  - AI-01: provider se invoca con AIRequest
+  - AI-02: output se persiste en custom.{output_variable}
+  - AI-03: variables del prompt se resuelven
+  - AI-04: output_variable inválida → fallback sin provider call
+  - AI-05: respuesta vacía → fallback
+  - AI-06: timeout → fallback
+  - AI-07: rate limit → fallback
+  - AI-08: AIAuthFailedException → fallback
+  - AI-09: AI node NO envía mensajes (solo guarda en custom)
+  - AI-10: segunda ejecución reutiliza output sin nueva llamada (idempotencia)
+  - AI-11: bot_paused es defense-in-depth
+  - AI-12: caracteres de control sanitizados
+  - AI-13: output que excede MAX_VALUE_LENGTH se trunca
+  - AI-14: AIRequest no contiene secrets ni API keys
+  - AI-15: AIRequest usa config del provider abstraction
+
+- **Feature (AiFlowTest)**: 10 tests / 24 assertions:
+  - AI-F01: flow con AI se puede publicar
+  - AI-F02: end-to-end con fake provider
+  - AI-F03: AI → condition usando custom output
+  - AI-F04: AI → message interpolando {{custom.output}}
+  - AI-F05: provider falla → fallback → flow continúa
+  - AI-F06: bot_paused impide ejecución
+  - AI-F07: idempotencia → una sola llamada
+  - AI-F08: ejecución completa exitosamente
+  - AI-F09: handoff posterior al AI mantiene invariantes
+  - AI-F10: AI node no puede ser start node
+
+- **Security (AiSecurityTest)**: 10 tests / 15 assertions:
+  - AI-S01: output tenant A nunca aparece en tenant B
+  - AI-S02: API key no aparece en execution logs
+  - AI-S03: API key no aparece en audit logs
+  - AI-S04: prompt completo no se registra
+  - AI-S05: response completa no se registra
+  - AI-S06: output malicioso tratado como texto plano
+  - AI-S07: prompt injection en contact.name no altera system
+  - AI-S08: custom values maliciosos no ejecutan código
+  - AI-S09: business internal/secret no incluidos en AI context
+  - AI-S10: config injection no cambia tenant context
+
+- **Multi-tenant (AiTenantIsolationTest)**: 6 tests / 14 assertions:
+  - AI-MT-01: usa contexto correcto del tenant A
+  - AI-MT-02: usa solo datos del tenant B
+  - AI-MT-03: output guardado solo en execution del tenant A
+  - AI-MT-04: template de A no resuelve variables custom de B
+  - AI-MT-05: wrong tenant context no filtra datos
+  - AI-MT-06: ejecución secuencial A→B limpia tenant context
+
+#### SEGURIDAD
+
+- API key nunca en logs/audit/response/exceptions/frontend
+- Prompt y response nunca completos en logs (solo token counts y output_length)
+- Output tratado como texto plano (no se ejecuta como código)
+- bot_paused verificado primero (defense-in-depth)
+- Inyección bloqueada (system prompt separado de datos del usuario)
+- VariableGuard en output_variable
+- Aislamiento cross-tenant verificado
+
+#### PUERTAS
+
+- php artisan test: 726/726 PASS (2894 assertions)
+- Pint: PASS
+- PHPStan: 0 errores
+- npm test: 194/194 PASS
+- vue-tsc: PASS
+- Vite build: PASS
+- Docker: all healthy
+- Healthcheck: ok
+
+#### ADRs
+
+ADR-055 (AI Node Runtime)
 
 #### ESTADO
 COMPLETADO

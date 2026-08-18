@@ -1274,4 +1274,37 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
 - **Consecuencias**:
   - U2 integrará el nodo AI en FlowEngine usando el binding de `AIProviderInterface`.
   - La interfaz se extenderá cuando se necesite (RAG, embeddings, etc.).
-  - Tests unitarios cubren VO inmutabilidad, Http::fake, manejo de errores y telemetría.
+   - Tests unitarios cubren VO inmutabilidad, Http::fake, manejo de errores y telemetría.
+
+## ADR-055: AI Node Runtime (FASE 16 U2)
+
+- **Fecha**: 2026-08-18
+- **Estado**: Implementado (FASE 16 UNIDAD 2)
+- **Contexto**: U1 estableció la infraestructura de IA (contract, provider, VOs, exceptions, config).
+  El motor de flujos tiene un nodo `AI` pero `FlowValidator` lo rechaza como "no disponible".
+  Se necesita integrar el nodo AI en el motor para que los flujos puedan generar contenido con
+  IA, guardarlo en `custom.*` y continuar el flow.
+- **Decisión**:
+  - **Ejecución síncrona**: AI NO es waiting type. El nodo se ejecuta inline dentro del worker,
+    guarda el output en `execution.variables.custom[output_variable]` y devuelve `continue`.
+    No hay pausa ni reintento diferido.
+  - **Genera contenido, no envía mensajes**: `AiNodeExecutor` llama al provider, sanitiza la
+    respuesta y la persiste. Un nodo `message` posterior interpola `{{custom.output_variable}}`.
+  - **Prompt builder separado**: `AiPromptBuilder` construye SYSTEM (instrucciones de plataforma),
+    CONTEXT (contacto, negocio, custom vars) y USER (prompt del nodo resuelto). Separación clara
+    para evitar inyección.
+  - **Fallback**: si el provider falla o devuelve vacío, se aplica `config.fallback_message` del
+    nodo o el global. El flow siempre continúa.
+  - **Idempotencia**: `isAlreadyCompleted()` verifica output existe + log `ai_completed` registrado.
+    Si ambos cierran, reutiliza sin nueva llamada al provider.
+  - **bot_paused**: verificado primero como defense-in-depth. Si el conversation tiene
+    `bot_paused = true`, el nodo se salta sin llamar al provider.
+  - **Validación**: `FlowValidator::validateAiNode()` valida prompt (required, non-empty, max length),
+    output_variable (VariableGuard), system_prompt y fallback_message opcionales.
+  - **AI no puede ser start node**: validado en `FlowValidator`.
+- **Consecuencias**:
+  - Suite AI: 41 tests / 86 assertions (unit 15 + feature 10 + security 10 + tenant 6).
+  - Aislamiento tenant: el output de Tenant A jamás aparece en Tenant B (AI-MT-01..06).
+  - Seguridad: API key nunca en logs/audit, prompt/response nunca completos en logs,
+    output tratado como texto plano, inyección bloqueada (AI-S01..S10).
+  - `isWaitingType()` ahora solo incluye `[Question, Buttons]`. AI y Delay excluidos.

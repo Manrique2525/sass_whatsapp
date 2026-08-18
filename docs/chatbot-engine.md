@@ -27,7 +27,7 @@ Entidades:
 | `delay` | segundos | Espera programada (job encolado con `delay`) |
 | `tag` | tag(s) | Aplica etiquetas al contacto/conversación |
 | `webhook` | URL + método + headers + payload | POST externo con contexto (idempotencia: `execution_id`) |
-| `ai` | prompt + system + kb bool | Genera respuesta con IA (con/sin contexto RAG), aplica límites |
+| `ai` | prompt + output_variable + system_prompt + fallback_message | Genera contenido con IA (síncrono), guarda en `custom.{output_variable}`, flow continúa |
 | `human` | mensaje de aviso opcional | Terminal `handed_off`; handoff operativo desde FASE 15 U3 |
 | `end` | — | Finaliza ejecución (estado `completed`) |
 
@@ -43,7 +43,7 @@ handleMessage(conversation, inboundMessage):
   repeat (guard: max N pasos, timeout total):
     node = execution.currentNode()
     step(node, execution)             # cada paso se loguea
-    if node.type in [question, buttons, ai]:
+    if node.type in [question, buttons]:
       execution.status = waiting      # espera siguiente mensaje del cliente
       break
     if node.type == human:

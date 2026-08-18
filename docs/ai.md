@@ -113,8 +113,59 @@ return [
 - **Implementado**: `OpenAIProviderTest` (AI-P01..P15) — VO inmutabilidad, resolución desde
   contenedor, Http::fake con respuesta exitosa, system prompt incluido/omitido, manejo de
   errores (401, 429, 400, 500, timeout, respuesta malformada), telemetría de tokens.
-- Pendiente: Mock del provider (interfaz) para tests de motor sin red (U2).
 - Pendiente: Límite de tokens → se corta la llamada antes del API.
 - Pendiente: Fallback timeout/rechazo → respuesta estática + log.
 - Pendiente: Aislamiento RAG: Tenant A no ve chunks de Tenant B.
 - Pendiente: Costos: `usage_records` se crean por llamada.
+
+## 9. AI Node Runtime (FASE 16 U2)
+
+### Ejecutor: AiNodeExecutor
+
+- `app/Application/Flows/Services/Executors/AiNodeExecutor.php`
+- Ejecuta síncronamente: genera contenido con IA y lo guarda en `custom.{output_variable}`.
+- **NO envía mensajes** directamente al contacto. Un nodo `message` posterior interpola la variable.
+- `bot_paused` verificado primero (defense-in-depth).
+- Output sanitizado: `preg_replace` control chars + `VariableGuard::truncateValue`.
+- Fallback: si provider falla o devuelve vacío → `config.fallback_message` del nodo o global.
+- Idempotencia: si `output_variable` ya existe + log `ai_completed` registrado → reutiliza sin provider call.
+
+### Prompt Builder: AiPromptBuilder
+
+- `app/Application/Flows/Services/AiPromptBuilder.php`
+- Separa conceptualmente SYSTEM / CONTEXT / USER.
+- **SYSTEM**: instrucciones de plataforma (nunca revelar secrets, grounding en contexto).
+- **CONTEXT**: whitelist de campos de contacto, negocio y custom vars (máx 5 campos escalares).
+- **USER**: prompt del nodo resuelto con `VariableResolver`.
+- `MAX_PROMPT_LENGTH = 8000` trunca el mensaje completo.
+
+### Seguridad del nodo AI
+
+- API key nunca en logs, audit, response ni frontend.
+- Prompt completo y response completos nunca registrados (solo token counts).
+- Output tratado como texto plano (sin eval, sin dynamic execution).
+- Inyección bloqueada: system prompt separado de datos del usuario.
+- VariableGuard en `output_variable`.
+- Aislamiento cross-tenant: output de Tenant A jamás en Tenant B.
+
+### Config
+
+```php
+// config/ai.php (añadido en U2)
+'fallback_message' => env('AI_FALLBACK_MESSAGE'),
+```
+
+### Tests U2
+
+- **Unit (AiNodeExecutorTest)**: 15 tests / 33 assertions — provider invocation, output
+  persistence, prompt resolution, fallback on invalid/empty/timeout/rate-limit/auth errors,
+  no message sending, idempotency, bot_paused, sanitization, truncation, security.
+- **Feature (AiFlowTest)**: 10 tests / 24 assertions — publish, end-to-end execution,
+  AI→condition, AI→message interpolation, fallback→continue, bot_paused, idempotency,
+  completion, handoff, validation.
+- **Security (AiSecurityTest)**: 10 tests / 15 assertions — cross-tenant isolation,
+  API key not in logs/audit, prompt/response not logged, output as plain text,
+  injection via contact/custom/config.
+- **Multi-tenant (AiTenantIsolationTest)**: 6 tests / 14 assertions — correct tenant context,
+  data isolation, output isolation, template isolation, context cleanup.
+- **Total AI**: 41 tests / 86 assertions.
