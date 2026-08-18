@@ -1473,3 +1473,40 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - POST/PUT/DELETE de documents rechazados (405) hasta U2.2.
   - Partial unique index `(tenant_id, name) WHERE deleted_at IS NULL` validado en PG; skip en
     SQLite (test KB-U21-04).
+
+## ADR-061: Private Knowledge Document Storage (FASE 17 U2.2)
+
+- **Fecha**: 2026-08-18
+- **Estado**: ACEPTADO
+- **Contexto**: U2.1 completó el CRUD de metadata (index/show/delete) de knowledge documents pero
+  POST upload no estaba implementado. U2.2 agrega el upload real: HTTP multipart → validación →
+  storage privado → DB row. Requiere Server-side MIME detection, SHA-256 dedup, compensación
+  storage/DB, path server-side para mitigar traversal, y validación de estructura DOCX/PDF/TXT.
+- **Decisión**:
+  - **Validación en capas**: Extension whitelist → finfo MIME (con bypass DOCX→application/zip) →
+    magic bytes (%PDF-, PK) → tamaño → emptiness → DOCX ZIP structure → TXT null-byte/UTF-8.
+    Todo en `DocumentUploadValidator` (Application layer), no en FormRequest.
+  - **Config centralizada**: `config/knowledge.php` (upload.allowed_extensions, allowed_mime_types,
+    max_file_size, storage_disk, storage_prefix). Env override para storage_disk.
+  - **Domain Exceptions**: `DocumentStorageFailedException` (500), `DocumentInvalidFileException`
+    (422), `DocumentTooLargeException` (413), `DocumentUnsupportedTypeException` (422),
+    `DocumentDuplicateException` (409). Cada una con ERROR_CODE y HTTP_STATUS.
+  - **Storage path**: `knowledge/tenant/{tenantId}/knowledge-bases/{kbId}/documents/{docId}/source.{ext}`
+    100% server-side, UUID-based, deterministic, sin nombres de usuario.
+  - **Dedup**: SHA-256 streaming → misma KB + mismo hash + active doc → 409 DOCUMENT_DUPLICATE.
+    Soft-deleted docs permiten re-upload (partial unique index PG).
+  - **Compensación**: Storage write primero → DB row en transaction → si DB falla, delete storage.
+  - **Audit**: `knowledge_document.uploaded` con document_id, knowledge_base_id, mime_type, file_size,
+    status. Sin storage_path ni file_hash en audit data.
+  - **DOCX MIME bypass**: `finfo` detecta DOCX como `application/zip`, no OOXML MIME. Validator
+    permite `application/zip` cuando extensión es `.docx` y structure validation confirma.
+  - **NO extraction/chunking/embeddings**: status queda `uploaded`, chunk_count=0. Extracción
+    diferida a U3+.
+- **Consecuencias**:
+  - 39 tests: KB-U22-01..06 (upload valid), V01..V07 (validación), D01..D04 (dedup),
+    S01..S06 (storage), MT01..MT08 (tenancy), A01..A02 (audit), NO-01..03 (confirmations),
+    SEC-01..03 (seguridad).
+  - DocumentResource no expone storage_disk, storage_path, file_hash.
+  - FormRequest solo valida `required|file|max:10MB`. Toda validación de seguridad en service.
+  - Tests usan `Storage::fake()` (minio disk). No requieren MinIO real.
+  - POST `/api/v1/tenants/{tenant}/knowledge-bases/{kb}/documents` agregado a routes.

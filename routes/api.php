@@ -151,6 +151,7 @@ Route::prefix('v1')->group(function (): void {
                 Route::delete('{tenant}/knowledge-bases/{knowledgeBase}', [KnowledgeBaseController::class, 'destroy']);
 
                 Route::get('{tenant}/knowledge-bases/{knowledgeBase}/documents', [DocumentController::class, 'index']);
+                Route::post('{tenant}/knowledge-bases/{knowledgeBase}/documents', [DocumentController::class, 'store']);
                 Route::get('{tenant}/knowledge-bases/{knowledgeBase}/documents/{document}', [DocumentController::class, 'show']);
                 Route::delete('{tenant}/knowledge-bases/{knowledgeBase}/documents/{document}', [DocumentController::class, 'destroy']);
             });

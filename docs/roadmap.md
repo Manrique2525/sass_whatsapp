@@ -1337,4 +1337,73 @@ COMPLETADA Y VERIFICADA EN POSTGRESQL REAL — commit base 9beecf0 + fix commit 
 ADR-060 (Knowledge Base API Contract + Permissions)
 
 #### ESTADO
-COMPLETADO — U2.1 finalizada, commit pendiente. NO PUSH.
+COMPLETADO — commit 5738444. NO PUSH.
+
+---
+
+### FASE 17 — UNIDAD 2.2: Private Knowledge Document Upload + Storage
+
+#### Archivos creados
+
+- `config/knowledge.php` — upload config (extensions, MIME, max_file_size, storage_disk, prefix)
+- `app/Domain/KnowledgeBase/Exceptions/DocumentStorageFailedException.php` — 500
+- `app/Domain/KnowledgeBase/Exceptions/DocumentInvalidFileException.php` — 422
+- `app/Domain/KnowledgeBase/Exceptions/DocumentTooLargeException.php` — 413
+- `app/Domain/KnowledgeBase/Exceptions/DocumentUnsupportedTypeException.php` — 422
+- `app/Domain/KnowledgeBase/Exceptions/DocumentDuplicateException.php` — 409
+- `app/Application/KnowledgeBase/Services/DocumentUploadValidator.php` — validate + magic bytes + DOCX structure + text validation + finfo MIME
+- `app/Http/Requests/KnowledgeBase/StoreDocumentRequest.php` — file required + file + max
+- `tests/Feature/KnowledgeBase/DocumentUploadTest.php` — 39 tests (KB-U22-01..06, V01..V07, D01..D04, S01..S06, MT01..MT08, A01..A02, NO-01..03, SEC-01..03)
+
+#### Archivos modificados
+
+- `app/Application/KnowledgeBase/Services/DocumentService.php` — +upload() method with hash, dedup, storage write, DB transaction, compensation
+- `app/Http/Controllers/Api/V1/DocumentController.php` — +store() method with full exception handling
+- `routes/api.php` — +POST `/{tenant}/knowledge-bases/{kb}/documents`
+
+#### API
+
+| Método | Endpoint | Descripción | Permiso |
+|--------|----------|-------------|---------|
+| POST | `/api/v1/tenants/{tenant}/knowledge-bases/{kb}/documents` | Upload documento (multipart) | knowledge.manage |
+
+#### Validación de seguridad (capas)
+
+1. Extension whitelist (pdf, docx, txt)
+2. Server-side MIME (finfo + DOCX→application/zip bypass)
+3. Magic bytes (%PDF-, PK)
+4. Tamaño max 10MB
+5. Empty file check
+6. DOCX ZIP structure ([Content_Types].xml + word/document.xml, 1-500 entries, no traversal)
+7. TXT null-byte + UTF-8 check
+
+#### Storage path
+
+`knowledge/tenant/{tenantId}/knowledge-bases/{kbId}/documents/{docId}/source.{ext}`
+
+Server-side, UUID-based, deterministic. No nombres de usuario en path.
+
+#### Dedup
+
+SHA-256 streaming → misma KB + mismo hash + doc active → 409 DOCUMENT_DUPLICATE.
+Soft-deleted docs permiten re-upload.
+
+#### Tests
+
+39 tests: KB-U22-01..06 (upload valid), V01..V07 (validación), D01..D04 (dedup), S01..S06 (storage), MT01..MT08 (tenancy), A01..A02 (audit), NO-01..03 (confirmations), SEC-01..03 (seguridad).
+
+#### Puertas
+
+- php artisan test: 855/855 PASS (3371 assertions) — 816 pre-U2.2 + 39 nuevas
+- pint: PASS (pendiente verificación)
+- phpstan: 0 errores (pendiente verificación)
+- npm test: 244/244 PASS
+- vue-tsc: PASS
+- vite build: PASS
+
+#### ADRs
+
+ADR-061 (Private Knowledge Document Storage)
+
+#### ESTADO
+COMPLETADO — pendiente commit. NO PUSH.
