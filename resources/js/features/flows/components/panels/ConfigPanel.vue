@@ -10,6 +10,7 @@ import TagNodeConfig from './config/TagNodeConfig.vue';
 import WebhookNodeConfig from './config/WebhookNodeConfig.vue';
 import HumanNodeConfig from './config/HumanNodeConfig.vue';
 import EndNodeConfig from './config/EndNodeConfig.vue';
+import AiNodeConfig from './config/AiNodeConfig.vue';
 
 const props = defineProps<{ data: FlowEditorNodeData; context: NodeConfigContext }>();
 
@@ -31,5 +32,6 @@ const config = computed({
     <WebhookNodeConfig v-else-if="data.type === 'webhook'" v-model="config" />
     <HumanNodeConfig v-else-if="data.type === 'human'" v-model="config" />
     <EndNodeConfig v-else-if="data.type === 'end'" v-model="config" />
+    <AiNodeConfig v-else-if="data.type === 'ai'" v-model="config" :context="context" />
     <p v-else class="text-xs text-zinc-500">Este tipo de nodo no tiene configuración editable.</p>
 </template>

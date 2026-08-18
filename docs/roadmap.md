@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 16 EN PROGRESO** (U1+U2 completadas, U3 pendiente).
+Estado general: **FASE 16 EN PROGRESO** (U1+U2+U3 completadas, U4+U5 pendientes).
 
 ## Fases
 
@@ -1048,6 +1048,82 @@ COMPLETADO
 #### ADRs
 
 ADR-055 (AI Node Runtime)
+
+#### ESTADO
+COMPLETADO
+
+### UNIDAD 3 (U3): Flow Builder AI UX
+
+**Objetivo**: Habilitar visualmente el nodo AI en el Flow Builder existente. Agregar, configurar, validar y publicar flujos con nodos AI desde la UI.
+
+#### Archivos creados
+
+- `resources/js/features/flows/components/panels/config/AiNodeConfig.vue` — panel de configuración del nodo AI
+- `resources/js/features/flows/aiFlowBuilder.test.ts` — 20 tests AI-V01..V20
+
+#### Archivos modificados
+
+- `resources/js/features/flows/components/NodePalette.vue` — eliminado bloque AI, descripción actualizada
+- `resources/js/features/flows/components/nodes/AINode.vue` — eliminado badge "Reservado", delega a FlowNodeBase
+- `resources/js/features/flows/components/nodes/FlowNodeBase.vue` — eliminados 3 bloqueos AI (opacity, badge, handle)
+- `resources/js/features/flows/components/nodes/index.ts` — actualizado comentario
+- `resources/js/features/flows/components/panels/ConfigPanel.vue` — añadido AiNodeConfig branch
+- `resources/js/features/flows/flowEditorTypes.ts` — DEFAULT_NODE_CONFIG.ai con defaults reales
+- `resources/js/features/flows/flowUtils.ts` — isImplementedNodeType retorna true para ai, summary mejorado
+- `resources/js/features/flows/flowValidation.ts` — validación real de AI config (prompt, output_variable, longitudes)
+- `resources/js/features/flows/useFlowEditor.ts` — eliminado bloque AI en addNode()
+- `resources/js/features/flows/useFlowEditor.test.ts` — test actualizado para AI creable
+- `resources/js/features/flows/flowUtils.test.ts` — isImplementedNodeType test actualizado
+- `resources/js/features/flows/flowValidation.test.ts` — test AI con validación real
+
+#### Tests Frontend U3
+
+- **AI-V01**: AI aparece en NodePalette
+- **AI-V02**: AI se agrega al canvas
+- **AI-V03**: AI no puede ser start node
+- **AI-V04**: AINodeConfig renderiza
+- **AI-V05**: prompt obligatorio
+- **AI-V06**: output_variable obligatorio
+- **AI-V07**: output_variable peligrosa rechazada
+- **AI-V08**: VariablePicker inserta en prompt
+- **AI-V09**: system_prompt se persiste
+- **AI-V10**: fallback_message se persiste
+- **AI-V11**: roundtrip adapter conserva config AI
+- **AI-V12**: DEFAULT_NODE_CONFIG correcto
+- **AI-V13**: published AI read-only
+- **AI-V14**: agent AI read-only
+- **AI-V15**: source/target handles correctos
+- **AI-V16**: badge Reservado eliminado
+- **AI-V17**: summary no expone system_prompt completo
+- **AI-V18**: save usa draft endpoint existente
+- **AI-V19**: FLOW_CONFLICT sigue funcionando
+- **AI-V20**: AI config no contiene model/provider/api_key
+
+Suite U3: **49 tests**. Suite frontend total: **244 tests**.
+
+#### SEGURIDAD
+
+- No se exponen API keys, provider credentials ni model config al frontend
+- No se crea endpoint nuevo de AI (solo APIs Flow existentes)
+- Prompt preview es solo texto local (sin llamadas al provider)
+- Read-only en published y para agent con flows.view
+
+#### PUERTAS
+
+- php artisan test: 726/726 PASS (2894 assertions)
+- Pint: PASS
+- PHPStan: 0 errores
+- npm test: 244/244 PASS
+- vue-tsc: PASS
+- Vite build: PASS (14.05s)
+- Docker: all healthy
+- Healthcheck: ok
+- git diff --check: clean
+- Security scan: clean
+
+#### ADRs
+
+ADR-056 (Flow Builder AI UX)
 
 #### ESTADO
 COMPLETADO

@@ -115,9 +115,20 @@ describe('configIssuesForNode', () => {
         expect(configIssuesForNode('human', { handoff_message: 123 })).toContain('El mensaje de traspaso debe ser texto.');
     });
 
-    it('end y ai no exigen configuración', () => {
+    it('ai valida prompt requerido, output_variable requerido y longitudes', () => {
+        expect(configIssuesForNode('ai', {})).toContain('Falta el prompt.');
+        expect(configIssuesForNode('ai', { prompt: '  ' })).toContain('Falta el prompt.');
+        expect(configIssuesForNode('ai', { prompt: 'Hola' })).toContain('Se requiere un nombre de variable válido para guardar la respuesta.');
+        expect(configIssuesForNode('ai', { prompt: 'Hola', output_variable: 'respuesta' })).toHaveLength(0);
+        expect(configIssuesForNode('ai', { prompt: 'Hola', output_variable: ' Nombre' })).toContain('Se requiere un nombre de variable válido para guardar la respuesta.');
+        expect(configIssuesForNode('ai', { prompt: 'Hola', output_variable: '__proto__' })).toContain('Se requiere un nombre de variable válido para guardar la respuesta.');
+        expect(configIssuesForNode('ai', { prompt: 'x'.repeat(4097), output_variable: 'r' })).toContain('El prompt excede la longitud máxima de texto.');
+        expect(configIssuesForNode('ai', { prompt: 'Hola', output_variable: 'r', system_prompt: 123 })).toHaveLength(0);
+        expect(configIssuesForNode('ai', { prompt: 'Hola', output_variable: 'r', fallback_message: 123 })).toHaveLength(0);
+    });
+
+    it('end no exige configuración', () => {
         expect(configIssuesForNode('end', {})).toHaveLength(0);
-        expect(configIssuesForNode('ai', {})).toHaveLength(0);
     });
 });
 

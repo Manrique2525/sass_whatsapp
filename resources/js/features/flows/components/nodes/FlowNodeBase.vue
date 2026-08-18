@@ -38,7 +38,6 @@ const terminal = computed(() => props.data.type === 'end' || props.data.type ===
         class="relative w-56 rounded-lg border bg-white shadow-sm transition"
         :class="[
             selected ? 'border-emerald-500 ring-2 ring-emerald-200' : 'border-zinc-200 hover:border-zinc-300',
-            { 'opacity-60 saturate-50': data.type === 'ai' },
         ]"
     >
         <Handle type="target" :position="Position.Left" />
@@ -57,7 +56,7 @@ const terminal = computed(() => props.data.type === 'end' || props.data.type ===
             </p>
 
             <span
-                v-if="issues.length > 0 && data.type !== 'ai'"
+                v-if="issues.length > 0"
                 class="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-amber-500 text-[11px] font-bold text-white"
                 :title="issues.join(' · ')"
             >
@@ -66,7 +65,7 @@ const terminal = computed(() => props.data.type === 'end' || props.data.type ===
         </div>
 
         <Handle
-            v-if="showDefaultSource && !terminal && data.type !== 'ai'"
+            v-if="showDefaultSource && !terminal"
             type="source"
             :position="Position.Right"
         />

@@ -168,4 +168,55 @@ return [
   injection via contact/custom/config.
 - **Multi-tenant (AiTenantIsolationTest)**: 6 tests / 14 assertions — correct tenant context,
   data isolation, output isolation, template isolation, context cleanup.
-- **Total AI**: 41 tests / 86 assertions.
+- **Total AI backend**: 41 tests / 86 assertions.
+
+## 10. Flow Builder AI UX (FASE 16 U3)
+
+### Panel de configuración: AiNodeConfig.vue
+
+- `resources/js/features/flows/components/panels/config/AiNodeConfig.vue`
+- Sigue patrón `modelValue`/`update:modelValue` de los otros NodeConfig.
+- 4 campos: prompt (requerido, textarea, VariablePicker), system_prompt (opcional, textarea),
+  output_variable (requerido, input text, validación snake_case), fallback_message (opcional, textarea).
+- VariablePicker disponible para prompt y system_prompt (no para fallback — el runtime no resuelve variables en fallback).
+- Preview de output variable: `{{custom.respuesta_ia}}` (solo visual, valor enviado es key plana).
+
+### Validación frontend
+
+- `flowValidation.ts` — AI requiere `prompt` no vacío + `output_variable` válido.
+- Longitudes validadas contra `MAX_TEXT_LENGTH` (4096).
+- `system_prompt` y `fallback_message` validados si presentes.
+- `variableReferenceWarnings` escanea AI prompt.
+
+### Desbloqueos del editor
+
+- **NodePalette**: eliminado `if (type === 'ai') { return; }`, badge "Reservado", `:disabled`.
+- **AINode.vue**: delega a FlowNodeBase sin overlay.
+- **FlowNodeBase.vue**: eliminados opacity, badge suppression, handle suppression para AI.
+- **useFlowEditor.ts**: eliminado `|| type === 'ai'` en `addNode()`.
+- **flowUtils.ts**: `isImplementedNodeType('ai')` retorna `true`.
+- **flowAdapter.ts**: `canNodeBeStart('ai')` sigue retornando `false` (AI no puede ser start).
+
+### Handle y wraps
+
+- AI tiene target handle (izquierda) + source handle (derecha) como nodos síncronos no-terminales.
+- AI NO puede ser start node (mantenido en `canNodeBeStart`).
+
+### Read-only
+
+- AI node editable en draft por flows.manage.
+- Read-only en published y para agent con flows.view.
+- Mismo patrón que otros nodos (via `NodePropertiesPanel` → `readOnly` context).
+
+### Seguridad frontend
+
+- No se exponen API keys, provider credentials ni model config.
+- No se llama al provider desde frontend (sin AI playground/preview).
+- Contract UI = contract backend: solo `prompt`, `system_prompt`, `output_variable`, `fallback_message`.
+
+### Tests U3
+
+- **AI-V01..V20**: 20 describe blocks, 49 tests — palette, canvas, start node, config panel,
+  validation, VariablePicker, roundtrip, handles, visual, read-only, save, FLOW_CONFLICT,
+  security (no model/provider/api_key).
+- **Suite frontend total**: 244 tests.

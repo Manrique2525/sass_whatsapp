@@ -179,8 +179,8 @@ describe('findStartNode', () => {
 });
 
 describe('isImplementedNodeType', () => {
-    it('marca ai como pendiente de fases futuras', () => {
-        expect(isImplementedNodeType('ai')).toBe(false);
+    it('todos los tipos están implementados incluyendo ai', () => {
+        expect(isImplementedNodeType('ai')).toBe(true);
         expect(isImplementedNodeType('message')).toBe(true);
         expect(isImplementedNodeType('condition')).toBe(true);
     });

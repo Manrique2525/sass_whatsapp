@@ -258,7 +258,7 @@ export function useFlowEditor(context: FlowEditorContext) {
     // ------------------------------------------------------- Acciones de grafo
 
     function addNode(type: FlowNodeType, position: { x: number; y: number }): FlowEditorNode | null {
-        if (readOnly.value || type === 'ai') {
+        if (readOnly.value) {
             return null;
         }
 

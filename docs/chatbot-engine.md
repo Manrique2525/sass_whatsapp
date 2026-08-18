@@ -269,6 +269,12 @@ objetivo completo; las diferencias marcadas abajo). Referencias: ADR-034..039.
 - **Tests**: backend FLOW-29..43 (secrets, lock, página, estados, aislamiento A/B, permisos,
   publish tras editar); frontend 46 Vitest nuevos (`flowAdapter`, `flowValidation`,
   `useEditorHistory`, `useFlowEditor`).
+- **FASE 16 U3 (Flow Builder AI UX)**: el nodo AI se habilita visualmente en el editor.
+  Bloqueos eliminados: palette, canvas, handles, config panel, validation. `AiNodeConfig.vue`
+  permite configurar prompt (con VariablePicker), system_prompt, output_variable y
+  fallback_message. El panel `nodeConfigSummary` muestra prompt truncado + output variable.
+  AI no puede ser start node (mantenido). Read-only en published y agent. 49 tests frontend
+  (AI-V01..V20).
 
 ## 12. Disparo de triggers schedule (FASE 14, UNIDAD 2, ADR-048)
 

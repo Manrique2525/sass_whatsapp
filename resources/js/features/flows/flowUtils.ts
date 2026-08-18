@@ -101,8 +101,12 @@ export function nodeConfigSummary(type: FlowNodeType, config: Record<string, unk
         }
         case 'webhook':
             return [String(config.method ?? 'POST'), String(config.url ?? '')].filter(Boolean).join(' ');
-        case 'ai':
-            return String(config.prompt ?? '');
+        case 'ai': {
+            const p = typeof config.prompt === 'string' ? config.prompt : '';
+            const v = typeof config.output_variable === 'string' ? config.output_variable : '';
+            const preview = p.length > 40 ? p.slice(0, 40) + '…' : p;
+            return [preview, v !== '' ? `→ ${v}` : ''].filter(Boolean).join(' ');
+        }
         case 'human':
             return '';
         case 'end':
@@ -217,9 +221,9 @@ export function findStartNode(nodes: FlowNode[] | undefined): FlowNode | null {
 }
 
 /**
- * Devuelve los tipos de nodo implementados en FASE 11 (los que puede contener
- * un flujo publicado). `ai` queda marcado para fases posteriores.
+ * Devuelve `true` para todos los tipos de nodo soportados. Usado para
+ * filtrar y validar el catálogo de nodos disponibles.
  */
-export function isImplementedNodeType(type: FlowNodeType): boolean {
-    return type !== 'ai';
+export function isImplementedNodeType(_type: FlowNodeType): boolean {
+    return true;
 }

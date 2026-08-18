@@ -475,6 +475,15 @@ Pirámide de tests con prioridad en lo crítico:
   isolation, template isolation, wrong context cleanup, sequential A→B execution.
 - Suite FASE 16 U2: **41 tests / 86 assertions**. Suite total: **726 tests / 2894 assertions**.
 
+### FASE 16 — Flow Builder AI UX (U3)
+- `aiFlowBuilder.test.ts` (AI-V01..V20): palette visibility, canvas creation, start node prevention,
+  config panel rendering, prompt required, output_variable required, dangerous keys rejected,
+  VariablePicker in prompt, system_prompt persistence, fallback_message persistence, adapter roundtrip,
+  DEFAULT_NODE_CONFIG correctness, published read-only, agent read-only, handles correct,
+  badge eliminated, summary doesn't expose system_prompt, save via existing draft endpoint,
+  FLOW_CONFLICT unchanged, no model/provider/api_key in config.
+- Suite FASE 16 U3: **49 tests**. Suite frontend total: **244 tests**.
+
 ### Auth
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 

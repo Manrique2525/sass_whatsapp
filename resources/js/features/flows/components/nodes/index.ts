@@ -12,8 +12,7 @@ import EndNode from './EndNode.vue';
 
 /**
  * Registro de tipos de nodo de Vue Flow (FASE 12). La clave es el `type` del
- * payload de la API (FASE 11). `ai` se registra con visual bloqueado (no
- * instanciable desde el editor).
+ * payload de la API (FASE 11).
  */
 export const flowNodeTypes: Record<string, Component> = {
     message: MessageNode,

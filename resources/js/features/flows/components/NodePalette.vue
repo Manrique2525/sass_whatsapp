@@ -45,14 +45,10 @@ const descriptions: Partial<Record<FlowNodeType, string>> = {
     webhook: 'Llama a un endpoint HTTP',
     human: 'Transfiere a un agente humano',
     end: 'Finaliza el flujo',
-    ai: 'IA conversacional (FASE 16)',
+    ai: 'Genera contenido con IA y lo guarda en una variable',
 };
 
 function add(type: FlowNodeType): void {
-    if (type === 'ai') {
-        return;
-    }
-
     props.editor.addNode(type, { x: 120 + Math.random() * 160, y: 80 + Math.random() * 120 });
     expanded.value = false;
 }
@@ -75,19 +71,15 @@ function add(type: FlowNodeType): void {
         >
             <div v-for="type in NODE_TYPES" :key="type">
                 <button
-                    v-if="canNodeBeStart(type) || type === 'ai'"
+                    v-if="canNodeBeStart(type)"
                     type="button"
                     class="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-zinc-50"
-                    :disabled="type === 'ai'"
                     @click="add(type)"
                 >
                     <span class="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" :class="accent[type]" />
                     <span class="flex-1">
                         <span class="block text-xs font-semibold text-zinc-800">
                             {{ nodeTypeLabel(type) }}
-                            <span v-if="type === 'ai'" class="ml-1 rounded bg-zinc-100 px-1 py-0.5 text-[9px] font-bold uppercase text-zinc-500">
-                                Reservado
-                            </span>
                         </span>
                         <span class="block text-[11px] text-zinc-500">{{ descriptions[type] }}</span>
                     </span>

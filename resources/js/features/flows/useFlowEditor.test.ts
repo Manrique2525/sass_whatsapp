@@ -85,7 +85,7 @@ describe('useFlowEditor', () => {
         expect(editor.error.value).toBe('No encontrado');
     });
 
-    it('addNode marca dirty y no permite crear ai', async () => {
+    it('addNode marca dirty y crea nodos ai', async () => {
         installAxios(() => Promise.resolve({ data: { flow: makeFlow() } }));
         const editor = useFlowEditor(context);
         await editor.load();
@@ -95,7 +95,9 @@ describe('useFlowEditor', () => {
         expect(created).not.toBeNull();
         expect(editor.nodes.value).toHaveLength(2);
         expect(editor.dirty.value).toBe(true);
-        expect(editor.addNode('ai', { x: 0, y: 0 })).toBeNull();
+        const ai = editor.addNode('ai', { x: 0, y: 0 });
+        expect(ai).not.toBeNull();
+        expect(editor.nodes.value).toHaveLength(3);
     });
 
     it('save envía el draft con base_updated_at y limpia el estado', async () => {

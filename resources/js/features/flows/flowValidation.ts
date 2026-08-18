@@ -98,7 +98,9 @@ export function variableReferenceWarnings(
             ? (typeof c.text === 'string' ? c.text : '')
             : type === 'question'
               ? (typeof c.prompt === 'string' ? c.prompt : '')
-              : '';
+              : type === 'ai'
+                ? (typeof c.prompt === 'string' ? c.prompt : '')
+                : '';
 
     const warnings: string[] = [];
 
@@ -236,8 +238,29 @@ export function configIssuesForNode(type: FlowNodeType, config: Record<string, u
             break;
         }
 
+        case 'ai': {
+            if (!isNonEmptyString(c.prompt)) {
+                issues.push('Falta el prompt.');
+            } else if (typeof c.prompt === 'string' && [...c.prompt].length > MAX_TEXT_LENGTH) {
+                issues.push('El prompt excede la longitud máxima de texto.');
+            }
+
+            if (typeof c.output_variable !== 'string' || !isValidVariableKey(c.output_variable)) {
+                issues.push('Se requiere un nombre de variable válido para guardar la respuesta.');
+            }
+
+            if (c.system_prompt !== undefined && c.system_prompt !== null && typeof c.system_prompt === 'string' && [...c.system_prompt].length > MAX_TEXT_LENGTH) {
+                issues.push('El system prompt excede la longitud máxima de texto.');
+            }
+
+            if (c.fallback_message !== undefined && c.fallback_message !== null && typeof c.fallback_message === 'string' && [...c.fallback_message].length > MAX_TEXT_LENGTH) {
+                issues.push('El mensaje de respaldo excede la longitud máxima de texto.');
+            }
+
+            break;
+        }
+
         case 'end':
-        case 'ai':
             break;
     }
 
