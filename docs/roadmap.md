@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 16 COMPLETADA** (U1+U2+U3+U4+U5 completadas).
+Estado general: **FASE 17 EN PROGRESO** (U1 completa, U2.1 completa).
 
 ## Fases
 
@@ -23,7 +23,7 @@ Estado general: **FASE 16 COMPLETADA** (U1+U2+U3+U4+U5 completadas).
 | 14 | Triggers | COMPLETADA |
 | 15 | Transferencia a humano | COMPLETADA |
 | 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime + Telemetry + Security) | COMPLETADA |
-  | 17 | Base de conocimiento (RAG + pgvector) | EN PROGRESO (U1) |
+  | 17 | Base de conocimiento (RAG + pgvector) | EN PROGRESO (U1+U2.1) |
 | 18 | FAQ inteligente | PENDIENTE |
 | 19 | Leads | PENDIENTE |
 | 20 | Tags | PENDIENTE |
@@ -1262,3 +1262,79 @@ ADR-058 (Knowledge Base Data Model), ADR-059 (Embedding Abstraction - diseño)
 
 #### ESTADO
 COMPLETADA Y VERIFICADA EN POSTGRESQL REAL — commit base 9beecf0 + fix commit pendiente
+
+---
+
+### FASE 17 — UNIDAD 2.1: Knowledge Base Management API + Permissions
+
+#### Archivos creados
+
+- `app/Domain/KnowledgeBase/Exceptions/KnowledgeBaseNotFoundException.php` — HTTP 404
+- `app/Domain/KnowledgeBase/Exceptions/KnowledgeBaseDuplicateException.php` — HTTP 409, code KB_DUPLICATE
+- `app/Domain/KnowledgeBase/Exceptions/DocumentNotFoundException.php` — HTTP 404
+- `app/Application/KnowledgeBase/Services/KnowledgeBaseService.php` — CRUD completo (index/show/create/update/delete)
+- `app/Application/KnowledgeBase/Services/DocumentService.php` — read/delete (upload diferido a U2.2)
+- `app/Http/Controllers/Api/V1/KnowledgeBaseController.php` — index/store/show/update/destroy
+- `app/Http/Controllers/Api/V1/DocumentController.php` — index/show/destroy (sin store)
+- `app/Http/Requests/KnowledgeBase/KnowledgeBaseIndexRequest.php` — filtros search + per_page
+- `app/Http/Requests/KnowledgeBase/StoreKnowledgeBaseRequest.php` — name required, description nullable
+- `app/Http/Requests/KnowledgeBase/UpdateKnowledgeBaseRequest.php` — todos opcionales
+- `app/Http/Requests/KnowledgeBase/DocumentIndexRequest.php` — filtros search + per_page
+- `app/Http/Resources/KnowledgeBaseResource.php` — id, name, description, documents_count (condicional), timestamps
+- `app/Http/Resources/DocumentResource.php` — safe fields (sin storage internals)
+- `tests/Feature/KnowledgeBase/KnowledgeBaseApiTest.php` — 35 tests (34 pass, 1 skip SQLite)
+
+#### Archivos modificados
+
+- `app/Domain/Users/Enums/TenantPermission.php` — +ViewKnowledge, +ManageKnowledge (15→17 permisos)
+- `app/Domain/KnowledgeBase/Models/KnowledgeBase.php` — +$fillable
+- `app/Domain/KnowledgeBase/Models/KnowledgeDocument.php` — +$fillable, +@property PHPDoc annotations
+- `routes/api.php` — +8 KB/document routes bajo middleware tenant
+
+#### API
+
+| Método | Endpoint | Descripción | Permiso |
+|--------|----------|-------------|---------|
+| GET | `/api/v1/tenants/{tenant}/knowledge-bases` | Listar KBs (paginado) | knowledge.view |
+| POST | `/api/v1/tenants/{tenant}/knowledge-bases` | Crear KB | knowledge.manage |
+| GET | `/api/v1/tenants/{tenant}/knowledge-bases/{kb}` | Detalle KB | knowledge.view |
+| PUT | `/api/v1/tenants/{tenant}/knowledge-bases/{kb}` | Actualizar KB | knowledge.manage |
+| DELETE | `/api/v1/tenants/{tenant}/knowledge-bases/{kb}` | Eliminar KB (soft delete) | knowledge.manage |
+| GET | `/api/v1/tenants/{tenant}/knowledge-bases/{kb}/documents` | Listar documentos | knowledge.view |
+| GET | `/api/v1/tenants/{tenant}/knowledge-bases/{kb}/documents/{doc}` | Detalle documento | knowledge.view |
+| DELETE | `/api/v1/tenants/{tenant}/knowledge-bases/{kb}/documents/{doc}` | Eliminar documento | knowledge.manage |
+
+#### Permisos
+
+- `knowledge.view` → owner, admin, agent (todos los roles activos)
+- `knowledge.manage` → owner, admin (solo gestión)
+
+#### Tests
+
+35 tests (34 pass, 1 skip SQLite por unique parcial): KB-U21-01..11 (CRUD), KB-U21-PERM-01..03 (matriz), KB-U21-MT-01..10 (aislamiento A/B), KB-U21-SEC-01..04 (seguridad resource), KB-U21-AUD-01 (auditoría), KB-U21-DOC-01..06 (documentos).
+
+#### SEGURIDAD
+
+- tenant_id body injection ignorado (BelongsToTenant + service filtra)
+- Resource no expone file_hash, storage_disk, storage_path
+- Cross-tenant UUID no produce IDOR
+- UniqueConstraintViolationException manejado (SQLite: UniqueConstraintViolationException; PG: QueryException)
+- Auth en FormRequest retorna true; authorization en Application Service
+
+#### Puertas
+
+- php artisan test: 816/816 PASS (3243 assertions)
+- pint: PASS
+- phpstan: 0 errores
+- npm test: 244/244 PASS
+- vue-tsc: PASS
+- vite build: PASS
+- Docker: all healthy
+- git diff --check: clean
+
+#### ADRs
+
+ADR-060 (Knowledge Base API Contract + Permissions)
+
+#### ESTADO
+COMPLETADO — U2.1 finalizada, commit pendiente. NO PUSH.

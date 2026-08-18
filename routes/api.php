@@ -9,9 +9,11 @@ use App\Http\Controllers\Api\V1\BusinessProfileController;
 use App\Http\Controllers\Api\V1\ChatbotController;
 use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\ConversationController;
+use App\Http\Controllers\Api\V1\DocumentController;
 use App\Http\Controllers\Api\V1\FlowController;
 use App\Http\Controllers\Api\V1\FlowExecutionController;
 use App\Http\Controllers\Api\V1\InvitationController;
+use App\Http\Controllers\Api\V1\KnowledgeBaseController;
 use App\Http\Controllers\Api\V1\MemberController;
 use App\Http\Controllers\Api\V1\MemberInvitationController;
 use App\Http\Controllers\Api\V1\MessagesController;
@@ -140,6 +142,17 @@ Route::prefix('v1')->group(function (): void {
                 Route::post('{tenant}/flow-executions/{execution}/pause', [FlowExecutionController::class, 'pause']);
                 Route::post('{tenant}/flow-executions/{execution}/resume', [FlowExecutionController::class, 'resume']);
                 Route::post('{tenant}/flow-executions/{execution}/cancel', [FlowExecutionController::class, 'cancel']);
+
+                // FASE 17 U2.1 — Knowledge Bases y documentos.
+                Route::get('{tenant}/knowledge-bases', [KnowledgeBaseController::class, 'index']);
+                Route::post('{tenant}/knowledge-bases', [KnowledgeBaseController::class, 'store']);
+                Route::get('{tenant}/knowledge-bases/{knowledgeBase}', [KnowledgeBaseController::class, 'show']);
+                Route::patch('{tenant}/knowledge-bases/{knowledgeBase}', [KnowledgeBaseController::class, 'update']);
+                Route::delete('{tenant}/knowledge-bases/{knowledgeBase}', [KnowledgeBaseController::class, 'destroy']);
+
+                Route::get('{tenant}/knowledge-bases/{knowledgeBase}/documents', [DocumentController::class, 'index']);
+                Route::get('{tenant}/knowledge-bases/{knowledgeBase}/documents/{document}', [DocumentController::class, 'show']);
+                Route::delete('{tenant}/knowledge-bases/{knowledgeBase}/documents/{document}', [DocumentController::class, 'destroy']);
             });
         });
     });

@@ -1441,3 +1441,35 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Separación clara de responsabilidades (SRP): chat ≠ embedding.
   - Testable con FakeEmbeddingProvider sin llamadas a OpenAI.
   - Swap a otros providers (Cohere, open-source) trivial.
+
+## ADR-060: Knowledge Base API Contract + Permissions (FASE 17 U2.1)
+
+- **Fecha**: 2026-08-18
+- **Estado**: ACEPTADO
+- **Contexto**: U1 definió el data model (knowledge_bases, knowledge_documents, knowledge_chunks).
+  U2.1 necesita exponer CRUD de KB y documentos vía REST, con permisos por rol y aislamiento
+  multi-tenant. POST upload se difiere a U2.2 (requiere Storage/MinIO).
+- **Decisión**:
+  - **Permisos**: `knowledge.view` (owner/admin/agent) + `knowledge.manage` (owner/admin) en
+    TenantPermission enum. Matriz y seeder sincronizados.
+  - **Services**: `KnowledgeBaseService` (CRUD completo) + `DocumentService` (index/show/delete
+    only; store diferido a U2.2). Authorization en service, no en FormRequest.
+  - **Controllers**: `KnowledgeBaseController` (5 acciones) + `DocumentController` (3 acciones,
+    sin store). Patrón ContactController: try/catch con helpers `forbidden()`, `tenantNotActive()`,
+    `duplicate()`.
+  - **Routes**: `/knowledge-bases` + `/knowledge-bases/{kb}/documents` bajo middleware `tenant`.
+    Sin route-model binding — {kb} y {doc} son strings resueltos por service.
+  - **Resources**: `KnowledgeBaseResource` (id, name, description, documents_count condicional,
+    timestamps) + `DocumentResource` (safe fields: sin file_hash, storage_disk, storage_path).
+  - **Errors**: `KnowledgeBaseNotFoundException` (404), `KnowledgeBaseDuplicateException` (409,
+    code KB_DUPLICATE), `DocumentNotFoundException` (404). Mapeo por controller.
+  - **Pagination**: search + per_page (1..100) en ambos controllers. Respuesta `{data, meta}`.
+  - **Audit**: events `knowledge_base.created/updated/deleted` + `knowledge_document.deleted`.
+  - **Concurrency**: `UniqueConstraintViolationException` catch en create/update (maneja tanto
+    `Illuminate\Database\QueryException` como `PDOException` para SQLite).
+- **Consecuencias**:
+  - POST upload no crea documentos sin storage (sin código falso, sin records huérfanos).
+  - Auth en FormRequest retorna true (patrón establecido en FASE 8+); authorization en service.
+  - POST/PUT/DELETE de documents rechazados (405) hasta U2.2.
+  - Partial unique index `(tenant_id, name) WHERE deleted_at IS NULL` validado en PG; skip en
+    SQLite (test KB-U21-04).

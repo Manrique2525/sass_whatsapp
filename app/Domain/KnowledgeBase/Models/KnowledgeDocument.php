@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 
 /**
  * Documento subido a una knowledge base (FASE 17, ADR-058).
@@ -26,6 +27,24 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * documento no pueda apuntar a una KB de otro tenant.
  *
  * Soft delete para conservar metadata de auditoría.
+ *
+ * @property string $id
+ * @property string $tenant_id
+ * @property string $knowledge_base_id
+ * @property string $original_filename
+ * @property string|null $storage_disk
+ * @property string|null $storage_path
+ * @property string|null $mime_type
+ * @property int|null $file_size
+ * @property string|null $file_hash
+ * @property KnowledgeDocumentStatus $status
+ * @property string|null $error_message
+ * @property int $chunk_count
+ * @property int|null $total_tokens
+ * @property Carbon|null $processed_at
+ * @property Carbon $created_at
+ * @property Carbon $updated_at
+ * @property Carbon|null $deleted_at
  */
 final class KnowledgeDocument extends Model
 {
@@ -38,6 +57,23 @@ final class KnowledgeDocument extends Model
     use SoftDeletes;
 
     protected $table = 'knowledge_documents';
+
+    /** @var list<string> */
+    protected $fillable = [
+        'tenant_id',
+        'knowledge_base_id',
+        'original_filename',
+        'storage_disk',
+        'storage_path',
+        'mime_type',
+        'file_size',
+        'file_hash',
+        'status',
+        'error_message',
+        'chunk_count',
+        'total_tokens',
+        'processed_at',
+    ];
 
     protected function casts(): array
     {

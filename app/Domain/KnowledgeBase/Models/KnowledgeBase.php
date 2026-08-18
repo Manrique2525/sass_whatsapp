@@ -34,6 +34,13 @@ final class KnowledgeBase extends Model
 
     protected $table = 'knowledge_bases';
 
+    /** @var list<string> */
+    protected $fillable = [
+        'tenant_id',
+        'name',
+        'description',
+    ];
+
     protected function casts(): array
     {
         return [];

@@ -30,6 +30,10 @@ namespace App\Domain\Users\Enums;
  *
  * FASE 15 añade `conversations.claim` para que cualquier miembro activo pueda
  * reclamarse a sí mismo una conversación que espera atención humana.
+ *
+ * FASE 17 U2.1 añade el dominio knowledge: `knowledge.view` (todos los roles,
+ * listar y ver KBs/documentos) y `knowledge.manage` (owner/admin: crear,
+ * editar y eliminar KBs y documentos).
  */
 enum TenantPermission: string
 {
@@ -68,6 +72,9 @@ enum TenantPermission: string
     case ViewFlows = 'flows.view';
     case ManageFlows = 'flows.manage';
 
+    case ViewKnowledge = 'knowledge.view';
+    case ManageKnowledge = 'knowledge.manage';
+
     /**
      * Todos los permisos de la plataforma (para el seeder).
      *
@@ -100,6 +107,8 @@ enum TenantPermission: string
             self::SendMessages,
             self::ViewFlows,
             self::ManageFlows,
+            self::ViewKnowledge,
+            self::ManageKnowledge,
         ];
     }
 
@@ -148,6 +157,8 @@ enum TenantPermission: string
                 self::SendMessages,
                 self::ViewFlows,
                 self::ManageFlows,
+                self::ViewKnowledge,
+                self::ManageKnowledge,
             ],
             UserRole::Agent => [
                 self::ViewTenants,
@@ -158,6 +169,7 @@ enum TenantPermission: string
                 self::ClaimConversations,
                 self::SendMessages,
                 self::ViewFlows,
+                self::ViewKnowledge,
             ],
             // super_admin es rol global de plataforma (spatie, sin team):
             // no obtiene permisos de tenant, se autoriza aparte.
