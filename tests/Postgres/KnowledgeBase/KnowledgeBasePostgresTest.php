@@ -6,9 +6,6 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
-use Tests\Postgres\PgvectorTestCase;
-
-uses(PgvectorTestCase::class);
 
 /*
 |--------------------------------------------------------------------------
@@ -25,24 +22,38 @@ uses(PgvectorTestCase::class);
 |
 */
 
-it('runs knowledge_bases migration up successfully', function (): void {
-    Schema::dropIfExists('knowledge_chunks');
-    Schema::dropIfExists('knowledge_documents');
-    Schema::dropIfExists('knowledge_bases');
+function createTestTenant(string $name = 'Test Tenant'): string
+{
+    $tenantId = (string) Str::uuid();
+    $slug = 'test-'.strtolower(Str::random(8));
+    DB::table('tenants')->insert([
+        'id' => $tenantId,
+        'name' => $name,
+        'slug' => $slug,
+        'status' => 'active',
+        'timezone' => 'UTC',
+        'locale' => 'en',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
 
-    $this->artisan('migrate');
+    return $tenantId;
+}
+
+it('runs knowledge_bases migration up successfully', function (): void {
+    $this->artisan('migrate:fresh');
 
     expect(Schema::hasTable('knowledge_bases'))->toBeTrue();
 })->group('KB-DB-PG-01');
 
 it('runs knowledge_documents migration up successfully', function (): void {
-    $this->artisan('migrate');
+    $this->artisan('migrate:fresh');
 
     expect(Schema::hasTable('knowledge_documents'))->toBeTrue();
 })->group('KB-DB-PG-02');
 
 it('runs knowledge_chunks migration up with vector column', function (): void {
-    $this->artisan('migrate');
+    $this->artisan('migrate:fresh');
 
     expect(Schema::hasTable('knowledge_chunks'))->toBeTrue();
 
@@ -59,7 +70,7 @@ it('verifies pgvector extension is available', function (): void {
 })->group('KB-DB-PG-04');
 
 it('verifies embedding column is vector(1536)', function (): void {
-    $this->artisan('migrate');
+    $this->artisan('migrate:fresh');
 
     $result = DB::select(
         "SELECT udt_name FROM information_schema.columns WHERE table_name = 'knowledge_chunks' AND column_name = 'embedding'"
@@ -70,7 +81,7 @@ it('verifies embedding column is vector(1536)', function (): void {
 })->group('KB-DB-PG-05');
 
 it('verifies HNSW index exists with vector_cosine_ops', function (): void {
-    $this->artisan('migrate');
+    $this->artisan('migrate:fresh');
 
     $result = DB::select(
         "SELECT indexname FROM pg_indexes WHERE tablename = 'knowledge_chunks' AND indexname = 'knowledge_chunks_embedding_idx'"
@@ -81,7 +92,7 @@ it('verifies HNSW index exists with vector_cosine_ops', function (): void {
 })->group('KB-DB-PG-06');
 
 it('verifies unique chunk index per document exists', function (): void {
-    $this->artisan('migrate');
+    $this->artisan('migrate:fresh');
 
     $result = DB::select(
         "SELECT indexname FROM pg_indexes WHERE tablename = 'knowledge_chunks' AND indexname = 'knowledge_chunks_document_chunk_index_unique'"
@@ -91,7 +102,7 @@ it('verifies unique chunk index per document exists', function (): void {
 })->group('KB-DB-PG-07');
 
 it('verifies partial unique file hash index exists', function (): void {
-    $this->artisan('migrate');
+    $this->artisan('migrate:fresh');
 
     $result = DB::select(
         "SELECT indexname FROM pg_indexes WHERE tablename = 'knowledge_documents' AND indexname = 'knowledge_documents_tenant_kb_hash_unique'"
@@ -101,9 +112,9 @@ it('verifies partial unique file hash index exists', function (): void {
 })->group('KB-DB-PG-08');
 
 it('cosine nearest neighbor query returns expected order', function (): void {
-    $this->artisan('migrate');
+    $this->artisan('migrate:fresh');
 
-    $tenantId = (string) Str::uuid();
+    $tenantId = createTestTenant();
 
     DB::table('knowledge_bases')->insert([
         'id' => (string) Str::uuid(),
@@ -131,9 +142,9 @@ it('cosine nearest neighbor query returns expected order', function (): void {
         'updated_at' => now(),
     ]);
 
-    $vecA = str_repeat('1,0,0,', 511).'1,0,0';
-    $vecB = str_repeat('0,1,0,', 511).'0,1,0';
-    $queryVec = str_repeat('1,0,0,', 511).'1,0,0';
+    $vecA = '['.str_repeat('1,0,0,', 511).'1,0,0]';
+    $vecB = '['.str_repeat('0,1,0,', 511).'0,1,0]';
+    $queryVec = '['.str_repeat('1,0,0,', 511).'1,0,0]';
 
     DB::table('knowledge_chunks')->insert([
         'id' => (string) Str::uuid(),
@@ -174,10 +185,10 @@ it('cosine nearest neighbor query returns expected order', function (): void {
 })->group('KB-DB-PG-09');
 
 it('prevents cross-tenant document insert via FK', function (): void {
-    $this->artisan('migrate');
+    $this->artisan('migrate:fresh');
 
-    $tenantA = (string) Str::uuid();
-    $tenantB = (string) Str::uuid();
+    $tenantA = createTestTenant('Tenant A');
+    $tenantB = createTestTenant('Tenant B');
 
     DB::table('knowledge_bases')->insert([
         'id' => (string) Str::uuid(),
@@ -207,10 +218,10 @@ it('prevents cross-tenant document insert via FK', function (): void {
 })->group('KB-DB-PG-10');
 
 it('prevents cross-tenant chunk insert via FK', function (): void {
-    $this->artisan('migrate');
+    $this->artisan('migrate:fresh');
 
-    $tenantA = (string) Str::uuid();
-    $tenantB = (string) Str::uuid();
+    $tenantA = createTestTenant('Tenant A');
+    $tenantB = createTestTenant('Tenant B');
 
     DB::table('knowledge_bases')->insert([
         'id' => (string) Str::uuid(),
@@ -244,7 +255,7 @@ it('prevents cross-tenant chunk insert via FK', function (): void {
         'tenant_id' => $tenantB,
         'document_id' => $docA,
         'content' => 'Cross tenant chunk',
-        'embedding' => str_repeat('0,0,1,', 511).'0,0,1',
+        'embedding' => '['.str_repeat('0,0,1,', 511).'0,0,1]',
         'token_count' => 10,
         'chunk_index' => 0,
         'created_at' => now(),
@@ -253,9 +264,9 @@ it('prevents cross-tenant chunk insert via FK', function (): void {
 })->group('KB-DB-PG-11');
 
 it('prevents duplicate file hash within same KB', function (): void {
-    $this->artisan('migrate');
+    $this->artisan('migrate:fresh');
 
-    $tenantId = (string) Str::uuid();
+    $tenantId = createTestTenant();
     $kbId = (string) Str::uuid();
 
     DB::table('knowledge_bases')->insert([
@@ -302,9 +313,9 @@ it('prevents duplicate file hash within same KB', function (): void {
 })->group('KB-DB-PG-12');
 
 it('allows same file hash in different KBs', function (): void {
-    $this->artisan('migrate');
+    $this->artisan('migrate:fresh');
 
-    $tenantId = (string) Str::uuid();
+    $tenantId = createTestTenant();
     $kbA = (string) Str::uuid();
     $kbB = (string) Str::uuid();
 
@@ -360,9 +371,9 @@ it('allows same file hash in different KBs', function (): void {
 })->group('KB-DB-PG-13');
 
 it('prevents duplicate chunk_index per document', function (): void {
-    $this->artisan('migrate');
+    $this->artisan('migrate:fresh');
 
-    $tenantId = (string) Str::uuid();
+    $tenantId = createTestTenant();
     $kbId = (string) Str::uuid();
 
     DB::table('knowledge_bases')->insert([
@@ -394,7 +405,7 @@ it('prevents duplicate chunk_index per document', function (): void {
         'tenant_id' => $tenantId,
         'document_id' => $docId,
         'content' => 'First chunk',
-        'embedding' => str_repeat('1,0,0,', 511).'1,0,0',
+        'embedding' => '['.str_repeat('1,0,0,', 511).'1,0,0]',
         'token_count' => 10,
         'chunk_index' => 0,
         'created_at' => now(),
@@ -408,7 +419,7 @@ it('prevents duplicate chunk_index per document', function (): void {
         'tenant_id' => $tenantId,
         'document_id' => $docId,
         'content' => 'Duplicate index chunk',
-        'embedding' => str_repeat('0,1,0,', 511).'0,1,0',
+        'embedding' => '['.str_repeat('0,1,0,', 511).'0,1,0]',
         'token_count' => 10,
         'chunk_index' => 0,
         'created_at' => now(),

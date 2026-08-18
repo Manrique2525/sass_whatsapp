@@ -315,6 +315,7 @@ knowledge_chunks
   chunk_index int
   metadata JSONB nullable                → page, section, headers (provenance)
   created_at / updated_at
+  FK compuesta (tenant_id, document_id) → knowledge_documents (PostgreSQL only)
   UNIQUE (document_id, chunk_index)
   HNSW index idx_knowledge_chunks_embedding ON knowledge_chunks USING hnsw (embedding vector_cosine_ops)
   WITH (m = 16, ef_construction = 64)

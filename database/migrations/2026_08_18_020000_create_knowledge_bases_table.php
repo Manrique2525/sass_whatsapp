@@ -21,7 +21,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('knowledge_bases', function (Blueprint $table): void {
+        $isPgsql = DB::connection()->getDriverName() === 'pgsql';
+
+        Schema::create('knowledge_bases', function (Blueprint $table) use ($isPgsql): void {
             $table->uuid('id')->primary();
             $table->uuid('tenant_id');
             $table->string('name', 255);
@@ -30,18 +32,30 @@ return new class extends Migration
             $table->softDeletes();
 
             $table->foreign('tenant_id')->references('id')->on('tenants')->cascadeOnDelete();
+
+            if ($isPgsql) {
+                $table->unique(['tenant_id', 'id']);
+            }
         });
 
-        DB::statement(
-            'CREATE UNIQUE INDEX knowledge_bases_tenant_name_unique ON knowledge_bases (tenant_id, name) WHERE deleted_at IS NULL'
-        );
+        if ($isPgsql) {
+            DB::statement(
+                'CREATE UNIQUE INDEX knowledge_bases_tenant_name_unique ON knowledge_bases (tenant_id, name) WHERE deleted_at IS NULL'
+            );
+        } else {
+            Schema::table('knowledge_bases', function (Blueprint $table): void {
+                $table->unique(['tenant_id', 'name']);
+            });
+        }
     }
 
     public function down(): void
     {
-        Schema::table('knowledge_bases', function (Blueprint $table): void {
-            $table->dropIndex('knowledge_bases_tenant_name_unique');
-        });
+        if (DB::connection()->getDriverName() === 'pgsql') {
+            Schema::table('knowledge_bases', function (Blueprint $table): void {
+                $table->dropIndex('knowledge_bases_tenant_name_unique');
+            });
+        }
 
         Schema::dropIfExists('knowledge_bases');
     }

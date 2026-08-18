@@ -47,12 +47,16 @@ return new class extends Migration
             $table->timestamps();
 
             $table->foreign('tenant_id')->references('id')->on('tenants')->cascadeOnDelete();
-            $table->foreign('document_id')->references('id')->on('knowledge_documents')->cascadeOnDelete();
 
             $table->index(['tenant_id', 'document_id'], 'knowledge_chunks_tenant_document_index');
         });
 
         if ($isPgsql) {
+            DB::statement(
+                'ALTER TABLE knowledge_chunks ADD CONSTRAINT knowledge_chunks_tenant_document_fk
+                 FOREIGN KEY (tenant_id, document_id) REFERENCES knowledge_documents(tenant_id, id) ON DELETE CASCADE'
+            );
+
             DB::statement(
                 'CREATE UNIQUE INDEX knowledge_chunks_document_chunk_index_unique ON knowledge_chunks (document_id, chunk_index)'
             );
@@ -68,6 +72,7 @@ return new class extends Migration
         if (DB::connection()->getDriverName() === 'pgsql') {
             DB::statement('DROP INDEX IF EXISTS knowledge_chunks_embedding_idx');
             DB::statement('DROP INDEX IF EXISTS knowledge_chunks_document_chunk_index_unique');
+            DB::statement('ALTER TABLE knowledge_chunks DROP CONSTRAINT IF EXISTS knowledge_chunks_tenant_document_fk');
         }
 
         Schema::dropIfExists('knowledge_chunks');

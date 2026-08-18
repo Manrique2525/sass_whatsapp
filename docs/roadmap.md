@@ -1244,7 +1244,7 @@ COMPLETADO — FASE 16 CERRADA
 - `database/factories/Domain/KnowledgeBase/Models/KnowledgeDocumentFactory.php` — ready/processing/failed states
 - `database/factories/Domain/KnowledgeBase/Models/KnowledgeChunkFactory.php` — conditional embedding (PG-only)
 - `tests/Unit/Domain/KnowledgeBase/KnowledgeBaseModelTest.php` — 19 tests SQLite (KB-DB-01..19)
-- `tests/Postgres/KnowledgeBase/KnowledgeBasePostgresTest.php` — 14 tests PG (KB-DB-PG-01..14, pendientes)
+- `tests/Postgres/KnowledgeBase/KnowledgeBasePostgresTest.php` — 14 tests PG (KB-DB-PG-01..14, 14/14 PASS)
 - `tests/Postgres/PgvectorTestCase.php` — base class para tests pgvector
 
 #### Puertas
@@ -1261,4 +1261,4 @@ COMPLETADO — FASE 16 CERRADA
 ADR-058 (Knowledge Base Data Model), ADR-059 (Embedding Abstraction - diseño)
 
 #### ESTADO
-EN PROGRESO — U1 COMPLETADA, pendiente commit + push
+COMPLETADA Y VERIFICADA EN POSTGRESQL REAL — commit base 9beecf0 + fix commit pendiente

@@ -19,13 +19,15 @@ use Illuminate\Support\Facades\Schema;
  * misma KB activa, pero permite re-subir tras un soft delete.
  *
  * FK compuesta (tenant_id, knowledge_base_id) garantiza a nivel DB que un
- * documento no pueda apuntar a una KB de otro tenant.
+ * documento no pueda apuntar a una KB de otro tenant (PostgreSQL only).
  */
 return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('knowledge_documents', function (Blueprint $table): void {
+        $isPgsql = DB::connection()->getDriverName() === 'pgsql';
+
+        Schema::create('knowledge_documents', function (Blueprint $table) use ($isPgsql): void {
             $table->uuid('id')->primary();
             $table->uuid('tenant_id');
             $table->uuid('knowledge_base_id');
@@ -44,22 +46,36 @@ return new class extends Migration
             $table->softDeletes();
 
             $table->foreign('tenant_id')->references('id')->on('tenants')->cascadeOnDelete();
-            $table->foreign('knowledge_base_id')->references('id')->on('knowledge_bases')->cascadeOnDelete();
+
+            if ($isPgsql) {
+                $table->unique(['tenant_id', 'id']);
+            }
 
             $table->index(['tenant_id', 'knowledge_base_id'], 'knowledge_documents_tenant_kb_index');
             $table->index(['tenant_id', 'status'], 'knowledge_documents_tenant_status_index');
         });
 
-        DB::statement(
-            'CREATE UNIQUE INDEX knowledge_documents_tenant_kb_hash_unique ON knowledge_documents (tenant_id, knowledge_base_id, file_hash) WHERE deleted_at IS NULL'
-        );
+        if ($isPgsql) {
+            DB::statement(
+                'ALTER TABLE knowledge_documents ADD CONSTRAINT knowledge_documents_tenant_kb_fk
+                 FOREIGN KEY (tenant_id, knowledge_base_id) REFERENCES knowledge_bases(tenant_id, id) ON DELETE CASCADE'
+            );
+
+            DB::statement(
+                'CREATE UNIQUE INDEX knowledge_documents_tenant_kb_hash_unique ON knowledge_documents (tenant_id, knowledge_base_id, file_hash) WHERE deleted_at IS NULL'
+            );
+        }
     }
 
     public function down(): void
     {
-        Schema::table('knowledge_documents', function (Blueprint $table): void {
-            $table->dropIndex('knowledge_documents_tenant_kb_hash_unique');
-        });
+        if (DB::connection()->getDriverName() === 'pgsql') {
+            Schema::table('knowledge_documents', function (Blueprint $table): void {
+                $table->dropIndex('knowledge_documents_tenant_kb_hash_unique');
+            });
+
+            DB::statement('ALTER TABLE knowledge_documents DROP CONSTRAINT IF EXISTS knowledge_documents_tenant_kb_fk');
+        }
 
         Schema::dropIfExists('knowledge_documents');
     }
