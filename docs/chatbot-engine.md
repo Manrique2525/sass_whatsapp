@@ -452,3 +452,73 @@ objetivo completo; las diferencias marcadas abajo). Referencias: ADR-034..039.
 - Idempotente por execution: la consulta de audit por `execution_id` evita doble handoff
   ante reintento. El `conversationLock` se conserva durante toda la operación (motor +
   handoff + outbound check) y se libera en `finally`.
+
+## 16. AI Usage Telemetry (FASE 16 U4)
+
+### 16.1 Propósito
+
+Registrar telemetría segura (sin PII) de cada llamada al provider AI para future billing,
+monitoring y debugging. Los datos se almacenan en `flow_execution_logs` (tabla existente,
+sin migración nueva).
+
+### 16.2 Safe schema
+
+Cada log `ai_completed` o `ai_failed` contiene un payload con el schema:
+
+```json
+{
+  "operation": "generate",
+  "provider": "openai",
+  "model": "gpt-4o-mini",
+  "input_tokens": 150,
+  "output_tokens": 80,
+  "total_tokens": 230,
+  "latency_ms": 1247,
+  "success": true,
+  "error_code": null,
+  "fallback_used": false,
+  "output_variable": "respuesta_ia"
+}
+```
+
+### 16.3 PII Guarantee
+
+El payload **nunca** contiene:
+- Prompt del usuario ni system_prompt
+- Contenido de la respuesta AI
+- Datos del contacto (nombre, email, teléfono)
+- Datos del negocio (descripción, categoría)
+- custom.secret ni valores sensibles
+- API keys o tokens de autenticación
+
+Verificado por tests que hacen `json_encode()` del payload y buscan ausencia de PII.
+
+### 16.4 Latencia
+
+- `hrtime(true)` (monotonic clock) inicia antes de `generateResponse()`.
+- Se calcula milisegundos enteros: `(hrtime(true) - $startNs) / 1_000_000`.
+- Disponible tanto en `ai_completed` como `ai_failed`.
+
+### 16.5 Tokens
+
+- `fromResponse()`: clamped a `max(0, value)` — negativos → 0.
+- `fromError()`: todos `null`.
+- Valores 0 son válidos (provider no retornó usage info).
+
+### 16.6 TelemetryPayload VO
+
+- `app/Domain/AI/ValueObjects/TelemetryPayload.php`
+- VO `final readonly` inmutable, constructor privado.
+- Fábricas: `fromResponse()`, `fromError()`.
+- `toArray()` serializa al safe schema.
+
+### 16.7 Integración
+
+- `AiNodeExecutor` usa TelemetryPayload en `logAiCompleted()` y `logAiFailed()`.
+- `logAiFailed()` añade additionally el campo `error` (mensaje, no-PII).
+- `logAiCompleted()` añade `output_variable` (campo necesario para idempotencia).
+
+### 16.8 Idempotencia
+
+- Un nodo AI produce **a lo sumo 1 log** por ejecución (ai_completed O ai_failed).
+- La re-ejecución idempotente (output + log ya presentes) no genera nuevo log de telemetría.

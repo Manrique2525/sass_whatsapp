@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 16 EN PROGRESO** (U1+U2+U3 completadas, U4+U5 pendientes).
+Estado general: **FASE 16 EN PROGRESO** (U1+U2+U3+U4 completadas, U5 pendiente).
 
 ## Fases
 
@@ -22,7 +22,7 @@ Estado general: **FASE 16 EN PROGRESO** (U1+U2+U3 completadas, U4+U5 pendientes)
 | 13 | Variables de conversación | COMPLETADA |
 | 14 | Triggers | COMPLETADA |
 | 15 | Transferencia a humano | COMPLETADA |
-| 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime) | EN PROGRESO (U1+U2 DONE, U3 pendiente) |
+| 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime + Telemetry) | EN PROGRESO (U1+U2+U3+U4 DONE, U5 pendiente) |
 | 17 | Base de conocimiento (RAG + pgvector) | PENDIENTE |
 | 18 | FAQ inteligente | PENDIENTE |
 | 19 | Leads | PENDIENTE |
@@ -1124,6 +1124,58 @@ Suite U3: **49 tests**. Suite frontend total: **244 tests**.
 #### ADRs
 
 ADR-056 (Flow Builder AI UX)
+
+#### ESTADO
+COMPLETADO
+
+---
+
+### FASE 16 — U4: AI Usage Telemetry
+
+#### Archivos modificados
+
+- `app/Domain/AI/ValueObjects/TelemetryPayload.php` — VO inmutable con safe schema
+- `app/Application/Flows/Services/Executors/AiNodeExecutor.php` — latencia, telemetry en logs
+
+#### Archivos nuevos
+
+- `tests/Unit/AI/TelemetryPayloadTest.php` — 8 tests VO
+- `tests/Unit/Flows/AiTelemetryTest.php` — 17 tests executor telemetry
+
+#### TelemetryPayload safe schema
+
+```
+{operation, provider, model, input_tokens, output_tokens,
+ total_tokens, latency_ms, success, error_code, fallback_used}
+```
+
+- **operation**: siempre `generate` (futuras operaciones: `embed`, `analyze`)
+- **latency_ms**: `hrtime(true)` monotonic clock, milisegundos enteros >= 0
+- **success**: `true` para `ai_completed`, `false` para `ai_failed`
+- **error_code**: `AIErrorCode` enum value cuando es AIException, `null` en éxito
+- **fallback_used**: `true` cuando se aplicó fallback_message
+- **PII guarantee**: prompt, content, contact, business, custom.secret NUNCA en payload
+
+#### Tests
+
+- **TelemetryPayloadTest** (AI-U01..U08): fromResponse/fromError, clamping tokens, toArray
+  keys, PII exclusion VO.
+- **AiTelemetryTest** (AI-U09..U25): latency_ms, success, provider/model/tokens,
+  output_variable, error_code, fallback_used, idempotencia (no duplicate logs),
+  empty response → ai_failed, PII never in payload, monotonic clock, bot_paused → no logs,
+  invalid output_variable → no logs, safe schema keys.
+- Suite FASE 16 U4: **25 tests / 120 assertions**.
+
+#### Puertas
+
+- php artisan test: 751/751 PASS (3014 assertions)
+- pint: PASS
+- phpstan: 0 errores
+- Security scan: clean
+
+#### ADRs
+
+ADR-057 (AI Usage Telemetry)
 
 #### ESTADO
 COMPLETADO

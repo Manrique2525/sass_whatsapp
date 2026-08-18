@@ -484,6 +484,16 @@ Pirámide de tests con prioridad en lo crítico:
   FLOW_CONFLICT unchanged, no model/provider/api_key in config.
 - Suite FASE 16 U3: **49 tests**. Suite frontend total: **244 tests**.
 
+### FASE 16 — AI Usage Telemetry (U4)
+- `TelemetryPayloadTest` (AI-U01..U08): VO fromResponse/fromError, negative token clamping,
+  zero token preservation, toArray safe schema keys, PII exclusion (success + error paths).
+- `AiTelemetryTest` (AI-U09..U25): latency_ms in ai_completed/ai_failed, success field,
+  provider/model/token counts, output_variable, error_code from AIException, fallback_used
+  true/false, error message, idempotency (no duplicate logs), empty response → ai_failed,
+  PII never in any payload, monotonic clock reasonableness, bot_paused → no logs,
+  invalid output_variable → no logs, safe schema keys only.
+- Suite FASE 16 U4: **25 tests / 120 assertions**. Suite total: **751 tests / 3014 assertions**.
+
 ### Auth
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 

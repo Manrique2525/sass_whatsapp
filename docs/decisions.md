@@ -1307,4 +1307,39 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Aislamiento tenant: el output de Tenant A jamás aparece en Tenant B (AI-MT-01..06).
   - Seguridad: API key nunca en logs/audit, prompt/response nunca completos en logs,
     output tratado como texto plano, inyección bloqueada (AI-S01..S10).
-  - `isWaitingType()` ahora solo incluye `[Question, Buttons]`. AI y Delay excluidos.
+   - `isWaitingType()` ahora solo incluye `[Question, Buttons]`. AI y Delay excluidos.
+
+## ADR-057: AI Usage Telemetry (FASE 16 U4)
+
+- **Fecha**: 2026-08-18
+- **Estado**: Implementado (FASE 16 UNIDAD 4)
+- **Contexto**: U1-U3 establecieron la infraestructura AI, el runtime del nodo y el editor visual.
+  Cada llamada al provider genera tokens facturables pero no hay telemetría estructurada en
+  `flow_execution_logs` más allá de los campos básicos de U2 (`provider`, `model`, tokens).
+  Se necesita: latencia, success/error, error_code, fallback_used — todo sin PII.
+- **Decisión**:
+  - **TelemetryPayload VO inmutable**: `app/Domain/AI/ValueObjects/TelemetryPayload.php`.
+    Dos fábricas estáticas: `fromResponse()` (éxito) y `fromError()` (fallo).
+    Safe schema estricto: `{operation, provider, model, input_tokens, output_tokens,
+    total_tokens, latency_ms, success, error_code, fallback_used}`.
+  - **Latencia con monotonic clock**: `hrtime(true)` mide nanosegundos alrededor de
+    `AIProviderInterface::generateResponse()`. Se convierte a milisegundos enteros (>= 0).
+  - **Tokens validados**: `max(0, $tokens)` en `fromResponse()`; `null` en `fromError()`.
+  - **Zero PII guarantee**: TelemetryPayload solo acepta campos numéricos/enum/string seguro.
+    Nunca contiene: prompt, system_prompt, response content, contact data, business data,
+    custom.secret. Verificado por tests AI-U07, AI-U08, AI-U21.
+  - **Extensión de logs existentes**: `ai_completed` y `ai_failed` se enriquecen con los
+    campos de TelemetryPayload sin crear eventos nuevos ni tablas nuevas.
+  - **Idempotencia preservada**: si `isAlreadyCompleted()` retorna true (output + log ai_completed
+    presentes), se reutiliza sin nueva llamada al provider y sin duplicar telemetría.
+  - **ai_failed enriquecido**: ahora incluye `error_code` (AIErrorCode enum value cuando es
+    AIException), `fallback_used` (reemplaza `fallback_applied`), `latency_ms`, `success: false`.
+  - **Sin nuevos endpoints**: telemetría es solo WRITE en flow_execution_logs. No hay lectura
+    agregada, dashboards, o tablas de billing en U4.
+- **Consecuencias**:
+  - TelemetryPayload: 8 tests VO (AI-U01..U08).
+  - Executor telemetry: 17 tests (AI-U09..U25) — latencia, success, error_code, fallback_used,
+    idempotencia, PII, schema keys.
+  - Suite FASE 16 U4: 25 tests / 120 assertions.
+  - Suite total: 751 tests / 3014 assertions.
+  - `docs/ai.md` §11 documenta el safe schema y la arquitectura de telemetry.

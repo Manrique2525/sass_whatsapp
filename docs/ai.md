@@ -220,3 +220,77 @@ return [
   validation, VariablePicker, roundtrip, handles, visual, read-only, save, FLOW_CONFLICT,
   security (no model/provider/api_key).
 - **Suite frontend total**: 244 tests.
+
+## 11. AI Usage Telemetry (FASE 16 U4)
+
+### TelemetryPayload VO
+
+- `app/Domain/AI/ValueObjects/TelemetryPayload.php`
+- VO `final readonly` inmutable. Constructor privado, solo fábricas estáticas.
+- `fromResponse(AIResponse, latencyMs, fallbackUsed)` — éxito.
+- `fromError(AIErrorCode?, latencyMs, fallbackUsed)` — fallo.
+- `toArray()` — serializa a array con safe schema estricto.
+
+### Safe schema
+
+```
+{operation, provider, model, input_tokens, output_tokens,
+ total_tokens, latency_ms, success, error_code, fallback_used}
+```
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `operation` | string | Siempre `generate` (futuras: `embed`, `analyze`) |
+| `provider` | string | Nombre del provider (`openai`, `fake`, o `''` en error) |
+| `model` | string | Modelo utilizado o `''` en error |
+| `input_tokens` | int\|null | Tokens de entrada; `null` en error |
+| `output_tokens` | int\|null | Tokens de salida; `null` en error |
+| `total_tokens` | int\|null | Total; `null` en error |
+| `latency_ms` | int | Milisegundos >= 0, medidos con `hrtime(true)` |
+| `success` | bool | `true` en `ai_completed`, `false` en `ai_failed` |
+| `error_code` | string\|null | `AIErrorCode::value` cuando es AIException |
+| `fallback_used` | bool | `true` si se aplicó fallback_message |
+
+### Latencia
+
+- `hrtime(true)` inicia antes de `AIProviderInterface::generateResponse()`.
+- Se calcula `(hrtime(true) - $startNs) / 1_000_000` → milisegundos enteros.
+- Monotonic clock: no afectado por NTP adjustments.
+
+### Tokens
+
+- `fromResponse()`: `max(0, $tokens)` — clamp a 0 si el provider retorna negativos.
+- `fromError()`: todos los tokens son `null`.
+- Valores 0 son válidos (provider no retornó usage).
+
+### PII Guarantee
+
+TelemetryPayload solo acepta campos seguros:
+- **NUNCA contiene**: prompt, system_prompt, response content, contact.name,
+  contact.email, contact.phone, business.name, business.description,
+  custom.secret, API keys, tokens de autenticación.
+- Verificado por tests AI-U07, AI-U08, AI-U21 que hacen `json_encode()` del payload
+  y verifican ausencia de PII.
+
+### Integración en AiNodeExecutor
+
+- `logAiCompleted()` usa `TelemetryPayload::fromResponse()` → payload seguro.
+- `logAiFailed()` usa `TelemetryPayload::fromError()` → payload seguro.
+- Ambos métodos añaden `output_variable` al payload (campo no-PII, necesario para idempotencia).
+- `ai_failed` payload incluye additionally `error` (mensaje de error, no-PII).
+
+### Idempotencia
+
+- Si `isAlreadyCompleted()` retorna true (output existe + log `ai_completed` registrado),
+  se reutiliza sin nueva llamada al provider y sin nuevo log de telemetría.
+- Un nodo AI produce a lo sumo 1 log `ai_completed` o 1 log `ai_failed` por ejecución.
+
+### Tests U4
+
+- **TelemetryPayloadTest** (AI-U01..U08): 8 tests VO — inmutabilidad, fromResponse/fromError,
+  clamping tokens, toArray keys, PII exclusion.
+- **AiTelemetryTest** (AI-U09..U25): 17 tests — latency_ms, success, provider/model/tokens,
+  output_variable, error_code, fallback_used, idempotencia, empty response, PII, monotonic
+  clock, bot_paused, invalid output_variable, safe schema keys.
+- **Suite FASE 16 U4**: 25 tests / 120 assertions.
+- **Suite total**: 751 tests / 3014 assertions.

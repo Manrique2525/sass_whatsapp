@@ -6,9 +6,9 @@ namespace App\Application\Flows\Services\Executors;
 
 use App\Application\Flows\Services\AiPromptBuilder;
 use App\Domain\AI\Contracts\AIProviderInterface;
+use App\Domain\AI\Enums\AIErrorCode;
 use App\Domain\AI\Exceptions\AIException;
-use App\Domain\AI\ValueObjects\AIRequest;
-use App\Domain\AI\ValueObjects\AIResponse;
+use App\Domain\AI\ValueObjects\TelemetryPayload;
 use App\Domain\Flows\Contracts\NodeExecutorInterface;
 use App\Domain\Flows\Enums\FlowNodeType;
 use App\Domain\Flows\Services\VariableGuard;
@@ -17,7 +17,7 @@ use App\Domain\Flows\ValueObjects\NodeExecutionResult;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Ejecutor del nodo `ai`: genera contenido con IA y lo guarda en custom.* (FASE 16 U2).
+ * Ejecutor del nodo `ai`: genera contenido con IA y lo guarda en custom.* (FASE 16 U2+U4).
  *
  * - GENERA contenido y lo guarda en `custom.{output_variable}`
  * - NO envía mensajes directamente al contacto
@@ -35,10 +35,11 @@ use Illuminate\Support\Facades\Log;
  * 7. Devolver NodeExecutionResult::continue()
  * 8. Aplicar fallback si provider falla
  * 9. NO enviar mensajes
+ * 10. Registrar telemetría segura (sin PII) vía TelemetryPayload (U4)
  *
  * Idempotencia: si el output_variable ya existe en custom y un log
  * ai_completed está registrado para este nodo, reutiliza el resultado
- * sin nueva llamada al provider.
+ * sin nueva llamada al provider (y sin duplicar telemetría).
  */
 final class AiNodeExecutor implements NodeExecutorInterface
 {
@@ -86,8 +87,11 @@ final class AiNodeExecutor implements NodeExecutorInterface
             $context->custom,
         );
 
+        $startNs = hrtime(true);
+
         try {
             $response = $this->provider->generateResponse($aiRequest);
+            $latencyMs = (int) ((hrtime(true) - $startNs) / 1_000_000);
             $output = $this->sanitizeOutput($response->content);
 
             if ($output === '') {
@@ -96,16 +100,27 @@ final class AiNodeExecutor implements NodeExecutorInterface
                     'node_id' => $context->node->id,
                 ]);
 
-                return $this->applyFallback($context, 'AI provider returned empty content.');
+                return $this->applyFallback(
+                    $context,
+                    'AI provider returned empty content.',
+                    $latencyMs,
+                );
             }
 
             $this->persistOutput($context, $outputVariable, $output);
 
-            $this->logAiCompleted($context, $aiRequest, $response, $outputVariable);
+            $telemetry = TelemetryPayload::fromResponse(
+                $response,
+                $latencyMs,
+            );
+
+            $this->logAiCompleted($context, $telemetry, $outputVariable);
 
             return NodeExecutionResult::continue();
 
         } catch (AIException $e) {
+            $latencyMs = (int) ((hrtime(true) - $startNs) / 1_000_000);
+
             Log::warning('AI provider error in flow node', [
                 'execution_id' => $context->execution->id,
                 'node_id' => $context->node->id,
@@ -113,16 +128,18 @@ final class AiNodeExecutor implements NodeExecutorInterface
                 'error_message' => $e->getMessage(),
             ]);
 
-            return $this->applyFallback($context, $e->getMessage());
+            return $this->applyFallback($context, $e->getMessage(), $latencyMs, $e->errorCode());
 
         } catch (\Throwable $e) {
+            $latencyMs = (int) ((hrtime(true) - $startNs) / 1_000_000);
+
             Log::error('Unexpected error in AI node', [
                 'execution_id' => $context->execution->id,
                 'node_id' => $context->node->id,
                 'error' => $e->getMessage(),
             ]);
 
-            return $this->applyFallback($context, $e->getMessage());
+            return $this->applyFallback($context, $e->getMessage(), $latencyMs);
         }
     }
 
@@ -197,27 +214,21 @@ final class AiNodeExecutor implements NodeExecutorInterface
     }
 
     /**
-     * Registra log ai_completed para idempotencia y debugging seguro.
+     * Registra log ai_completed con telemetría segura (sin PII).
      */
     private function logAiCompleted(
         NodeExecutionContext $context,
-        AIRequest $aiRequest,
-        AIResponse $response,
+        TelemetryPayload $telemetry,
         string $outputVariable,
     ): void {
+        $payload = $telemetry->toArray();
+        $payload['output_variable'] = $outputVariable;
+
         $context->execution->logs()->create([
             'tenant_id' => $context->tenant->id,
             'node_id' => $context->node->id,
             'event' => 'ai_completed',
-            'payload' => [
-                'provider' => $response->provider,
-                'model' => $response->model,
-                'input_tokens' => $response->inputTokens,
-                'output_tokens' => $response->outputTokens,
-                'total_tokens' => $response->totalTokens,
-                'output_variable' => $outputVariable,
-                'output_length' => mb_strlen($response->content),
-            ],
+            'payload' => $payload,
             'sequence' => $this->nextSequence($context),
         ]);
     }
@@ -237,6 +248,8 @@ final class AiNodeExecutor implements NodeExecutorInterface
     private function applyFallback(
         NodeExecutionContext $context,
         string $error,
+        int $latencyMs = 0,
+        ?AIErrorCode $errorCode = null,
     ): NodeExecutionResult {
         $config = is_array($context->node->config) ? $context->node->config : [];
         $outputVariable = VariableGuard::normalizeKey($config['output_variable'] ?? '');
@@ -251,18 +264,35 @@ final class AiNodeExecutor implements NodeExecutorInterface
             $this->persistOutput($context, $outputVariable, $fallbackMessage);
         }
 
+        $telemetry = TelemetryPayload::fromError(
+            $errorCode,
+            $latencyMs,
+            fallbackUsed: $fallbackMessage !== null,
+        );
+
+        $this->logAiFailed($context, $telemetry, $error);
+
+        return NodeExecutionResult::continue();
+    }
+
+    /**
+     * Registra log ai_failed con telemetría segura (sin PII).
+     */
+    private function logAiFailed(
+        NodeExecutionContext $context,
+        TelemetryPayload $telemetry,
+        string $error,
+    ): void {
+        $payload = $telemetry->toArray();
+        $payload['error'] = $error;
+
         $context->execution->logs()->create([
             'tenant_id' => $context->tenant->id,
             'node_id' => $context->node->id,
             'event' => 'ai_failed',
-            'payload' => [
-                'error' => $error,
-                'fallback_applied' => $fallbackMessage !== null,
-            ],
+            'payload' => $payload,
             'sequence' => $this->nextSequence($context),
         ]);
-
-        return NodeExecutionResult::continue();
     }
 
     /**
