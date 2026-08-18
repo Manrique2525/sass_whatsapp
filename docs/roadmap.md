@@ -23,7 +23,7 @@ Estado general: **FASE 16 COMPLETADA** (U1+U2+U3+U4+U5 completadas).
 | 14 | Triggers | COMPLETADA |
 | 15 | Transferencia a humano | COMPLETADA |
 | 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime + Telemetry + Security) | COMPLETADA |
-| 17 | Base de conocimiento (RAG + pgvector) | PENDIENTE |
+  | 17 | Base de conocimiento (RAG + pgvector) | EN PROGRESO (U1) |
 | 18 | FAQ inteligente | PENDIENTE |
 | 19 | Leads | PENDIENTE |
 | 20 | Tags | PENDIENTE |
@@ -1226,3 +1226,39 @@ ADR-056 (AI Prompt/Data Security Boundaries)
 
 #### ESTADO
 COMPLETADO — FASE 16 CERRADA
+
+---
+
+### FASE 17 — Base de conocimiento / RAG — UNIDAD 1: Knowledge Data Model + DDL
+
+#### Archivos creados
+
+- `database/migrations/2026_08_18_020000_create_knowledge_bases_table.php` — KB con soft deletes + unique parcial
+- `database/migrations/2026_08_18_020100_create_knowledge_documents_table.php` — documentos con FK compuesta + file hash
+- `database/migrations/2026_08_18_020200_create_knowledge_chunks_table.php` — chunks con vector(1536) PG-only + HNSW
+- `app/Domain/KnowledgeBase/Enums/KnowledgeDocumentStatus.php` — enum 4 estados + label() + isTerminal()
+- `app/Domain/KnowledgeBase/Models/KnowledgeBase.php` — final class, HasUuids, BelongsToTenant, SoftDeletes
+- `app/Domain/KnowledgeBase/Models/KnowledgeDocument.php` — final class, HasUuids, BelongsToTenant, SoftDeletes
+- `app/Domain/KnowledgeBase/Models/KnowledgeChunk.php` — final class, HasUuids, BelongsToTenant, NO SoftDeletes
+- `database/factories/Domain/KnowledgeBase/Models/KnowledgeBaseFactory.php`
+- `database/factories/Domain/KnowledgeBase/Models/KnowledgeDocumentFactory.php` — ready/processing/failed states
+- `database/factories/Domain/KnowledgeBase/Models/KnowledgeChunkFactory.php` — conditional embedding (PG-only)
+- `tests/Unit/Domain/KnowledgeBase/KnowledgeBaseModelTest.php` — 19 tests SQLite (KB-DB-01..19)
+- `tests/Postgres/KnowledgeBase/KnowledgeBasePostgresTest.php` — 14 tests PG (KB-DB-PG-01..14, pendientes)
+- `tests/Postgres/PgvectorTestCase.php` — base class para tests pgvector
+
+#### Puertas
+
+- php artisan test: 782/782 PASS (3134 assertions) — 763 FASE 16 + 19 nuevas
+- pint: PASS
+- phpstan: 0 errores
+- npm test: 244/244 PASS
+- vue-tsc: PASS
+- vite build: PASS
+
+#### ADRs
+
+ADR-058 (Knowledge Base Data Model), ADR-059 (Embedding Abstraction - diseño)
+
+#### ESTADO
+EN PROGRESO — U1 COMPLETADA, pendiente commit + push

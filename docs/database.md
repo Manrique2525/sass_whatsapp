@@ -270,15 +270,59 @@ flow_execution_logs
   índices (execution_id, sequence) y (execution_id, created_at)
 ```
 
-### `knowledge_chunks`
+### `knowledge_bases` / `knowledge_documents` / `knowledge_chunks` (FASE 17, ADR-058)
+
 ```
-id uuid PK
-tenant_id FK
-document_id FK → knowledge_documents
-content text
-embedding vector(1536) → índice IVFFlat o HNSW
-token_count int
+knowledge_bases
+  id uuid PK
+  tenant_id FK → tenants (cascadeOnDelete)
+  name varchar(255)
+  description text nullable
+  created_at / updated_at / deleted_at (soft delete)
+  UNIQUE parcial (tenant_id, name) WHERE deleted_at IS NULL
+  índices (tenant_id, created_at)
 ```
+
+```
+knowledge_documents
+  id uuid PK
+  tenant_id FK → tenants (cascadeOnDelete)
+  knowledge_base_id FK → knowledge_bases (cascadeOnDelete)
+  filename varchar(255)
+  storage_path varchar(1024)
+  file_size bigint
+  mime_type varchar(100)
+  file_hash varchar(64)                  → SHA-256 del contenido binario
+  status enum(uploaded, processing, ready, failed)
+  chunk_count int default 0
+  total_tokens int default 0
+  processed_at timestamp nullable
+  error_message text nullable
+  created_at / updated_at / deleted_at (soft delete)
+  FK compuesta (tenant_id, knowledge_base_id) → knowledge_bases
+  UNIQUE parcial (tenant_id, knowledge_base_id, file_hash) WHERE deleted_at IS NULL
+  índices (tenant_id, knowledge_base_id), (tenant_id, status)
+```
+
+```
+knowledge_chunks
+  id uuid PK
+  tenant_id FK → tenants (cascadeOnDelete)
+  document_id FK → knowledge_documents (cascadeOnDelete)
+  content text
+  embedding vector(1536)                 → índice HNSW (vector_cosine_ops, m=16, ef_construction=64)
+  token_count int
+  chunk_index int
+  metadata JSONB nullable                → page, section, headers (provenance)
+  created_at / updated_at
+  UNIQUE (document_id, chunk_index)
+  HNSW index idx_knowledge_chunks_embedding ON knowledge_chunks USING hnsw (embedding vector_cosine_ops)
+  WITH (m = 16, ef_construction = 64)
+```
+
+- Sin soft delete en chunks: datos derivados regenerables. CASCADE elimina al eliminar documento padre.
+- `vector(1536)` hardcodeado (contrato con text-embedding-3-small, ADR-058).
+- Migración condicional: vector + HNSW solo en PostgreSQL; tests SQLite omiten estas columnas.
 
 ### `usage_records`
 ```

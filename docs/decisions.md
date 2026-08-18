@@ -1377,5 +1377,67 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
 - **Consecuencias**:
   - Security matrix: 12 tests / 41 assertions (AI-SEC-F01..F12).
   - Suite FASE 16 U5: 13 tests / 44 assertions (12 matrix + 1 Pint fix).
-  - Suite total: 763 tests / 3055 assertions.
-  - FASE 16 cerrada formalmente.
+   - Suite total: 763 tests / 3055 assertions.
+   - FASE 16 cerrada formalmente.
+
+## ADR-058: Knowledge Base Data Model and Vector Storage (FASE 17 U1)
+
+- **Fecha**: 2026-08-18
+- **Estado**: ACEPTADO (FASE 17 UNIDAD 1)
+- **Contexto**: El motor de flujos FASE 16 genera respuestas de IA basadas exclusivamente en
+  el prompt del nodo AI. Para habilitar RAG (Retrieval-Augmented Generation), se necesita
+  almacenar documentos de conocimiento por tenant con embeddings vectoriales para búsqueda
+  semántica.
+- **Decisión**:
+  - **3 tablas**: `knowledge_bases`, `knowledge_documents`, `knowledge_chunks`.
+    - `knowledge_bases`: PK uuid, `tenant_id` FK cascadeOnDelete, `name`, `description`
+      text nullable, soft deletes. UNIQUE parcial `(tenant_id, name) WHERE deleted_at IS NULL`.
+    - `knowledge_documents`: PK uuid, `tenant_id` FK cascadeOnDelete, `knowledge_base_id` FK
+      cascadeOnDelete, `filename`, `storage_path`, `file_size`, `mime_type`, `file_hash`
+      varchar(64), `status` enum(uploaded/processing/ready/failed), `chunk_count` default 0,
+      `total_tokens` default 0, `processed_at` nullable, `error_message` text nullable,
+      timestamps, soft deletes. UNIQUE parcial `(tenant_id, knowledge_base_id, file_hash)
+      WHERE deleted_at IS NULL`.
+    - `knowledge_chunks`: PK uuid, `tenant_id` FK cascadeOnDelete, `document_id` FK
+      cascadeOnDelete, `content` text, `embedding` vector(1536) (PostgreSQL only,
+      conditional migration), `token_count`, `chunk_index`, `metadata` JSONB nullable,
+      timestamps. UNIQUE `(document_id, chunk_index)` (PostgreSQL only). HNSW index
+      on `embedding` with `vector_cosine_ops`, m=16, ef_construction=64.
+  - **Soft deletes**: KB y documents sí (conservar historial). Chunks no (datos derivados
+    regenerables — CASCADE elimina al eliminar documento padre).
+  - **FK compuesta**: `(tenant_id, knowledge_base_id)` en documents garantiza aislamiento
+    cross-tenant a nivel DB (un documento nunca puede apuntar a KB de otro tenant).
+  - **Vector dimension**: `vector(1536)` hardcodeado en migración (NO configurable). Contrato
+    con `text-embedding-3-small` de OpenAI. Las migraciones deben ser deterministas.
+  - **HNSW**: m=16, ef_construction=64. Mejor latencia que IVFFlat para tamaños medianos.
+    No requiere reconstrucción como IVFFlat.
+  - **EmbeddingProviderInterface**: interfaz separada de AIProviderInterface (SRP/YAGNI). El
+    proveedor de embeddings puede ser distinto del de chat. No se implementa en U1 — solo
+    la abstracción documental.
+  - **Condiciones**: chunk_index独一 por documento; content no puede ser vacío; file_hash
+    se calcula sobre el contenido binario (SHA-256).
+- **Consecuencias**:
+  - Multi-tenancy reforzado: FK compuesta + scope global + unique parcial = 3 capas de
+    aislamiento.
+  - Migración condicional (PostgreSQL only para vector/HNSW) permite tests unitarios SQLite
+    sin pgvector.
+  - Chunks sin soft delete simplifican el ciclo de vida: regeneración limpia al re-procesar.
+  - HNSW m=16, ef_construction=64 es un equilibrio entre calidad y memoria para <100K chunks
+    por tenant (escalable a millones con ajuste posterior).
+
+## ADR-059: Embedding Abstraction (FASE 17 U1 - Diseño)
+
+- **Fecha**: 2026-08-18
+- **Estado**: DISEÑADO (no implementado — pendiente U3)
+- **Contexto**: RAG requiere generar embeddings vectoriales para los chunks de texto. El
+  provider de IA (OpenAI chat) es conceptualmente distinto del provider de embeddings.
+- **Decisión**:
+  - Crear `EmbeddingProviderInterface` con `embedText(string $text): array` y
+    `embedBatch(array $texts): array`.
+  - `OpenAIEmbeddingProvider` implementa la interfaz usando `text-embedding-3-small` (1536 dims).
+  - Binding en `AppServiceProvider`: `EmbeddingProviderInterface` → `OpenAIEmbeddingProvider`.
+  - Dimensión 1536 hardcoded en la migración (consistente con ADR-058).
+- **Consecuencias**:
+  - Separación clara de responsabilidades (SRP): chat ≠ embedding.
+  - Testable con FakeEmbeddingProvider sin llamadas a OpenAI.
+  - Swap a otros providers (Cohere, open-source) trivial.
