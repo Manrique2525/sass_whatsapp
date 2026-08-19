@@ -8,9 +8,11 @@ namespace App\Domain\KnowledgeBase\Enums;
  * Estados del procesamiento de un documento knowledge (FASE 17).
  *
  * uploaded  → archivo subido a S3, pendiente de procesamiento
- * processing → job de procesamiento en curso (extracción + chunking + embedding)
- * ready     → chunks generados, documentoconsultable vía RAG
- * failed    → error durante el procesamiento (error_message explica el motivo)
+ * processing → job de procesamiento en curso (extracción + chunking)
+ * ready     → chunks generados y persistidos, documento queryable.
+ *             Embedding = NULL (U3 materializará embeddings para retrieval semántico).
+ *             ready = ingestion/chunking complete.
+ * failed    → error durante el procesamiento (error_message sanitizado explica el motivo)
  */
 enum KnowledgeDocumentStatus: string
 {

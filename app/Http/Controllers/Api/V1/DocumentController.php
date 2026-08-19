@@ -8,6 +8,7 @@ use App\Application\KnowledgeBase\Services\DocumentService;
 use App\Domain\KnowledgeBase\Exceptions\DocumentDuplicateException;
 use App\Domain\KnowledgeBase\Exceptions\DocumentInvalidFileException;
 use App\Domain\KnowledgeBase\Exceptions\DocumentNotFoundException;
+use App\Domain\KnowledgeBase\Exceptions\DocumentProcessingException;
 use App\Domain\KnowledgeBase\Exceptions\DocumentStorageFailedException;
 use App\Domain\KnowledgeBase\Exceptions\DocumentTooLargeException;
 use App\Domain\KnowledgeBase\Exceptions\DocumentUnsupportedTypeException;
@@ -151,6 +152,11 @@ final class DocumentController extends Controller
             throw new NotFoundHttpException('Knowledge base no encontrada.');
         } catch (DocumentNotFoundException) {
             throw new NotFoundHttpException('Documento no encontrado.');
+        } catch (DocumentProcessingException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'code' => DocumentProcessingException::ERROR_CODE,
+            ], 409);
         }
 
         return response()->json([

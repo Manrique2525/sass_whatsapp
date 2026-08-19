@@ -7,9 +7,11 @@ use App\Domain\KnowledgeBase\Models\KnowledgeDocument;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Models\User;
 use App\Infrastructure\Tenancy\TenantContext;
+use App\Jobs\ProcessKnowledgeDocument;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -94,6 +96,7 @@ function valid_txt_content(): string
 
 test('KB-U22-01: valid PDF upload returns 201 and persists', function (): void {
     Storage::fake(config('knowledge.upload.storage_disk'));
+    Queue::fake();
 
     $tenant = make_tenant_u22();
     $user = make_user_u22();
@@ -187,6 +190,7 @@ test('KB-U22-04: response does not expose internal storage fields', function ():
 
 test('KB-U22-05: document status is uploaded after successful upload', function (): void {
     Storage::fake(config('knowledge.upload.storage_disk'));
+    Queue::fake();
 
     $tenant = make_tenant_u22();
     $user = make_user_u22();
@@ -836,8 +840,9 @@ test('KB-U22-NO-01: upload does not create any chunks', function (): void {
     $this->assertDatabaseCount('knowledge_chunks', 0);
 });
 
-test('KB-U22-NO-02: upload does not dispatch any processing job', function (): void {
+test('KB-U22-NO-02: upload dispatches ProcessKnowledgeDocument after commit', function (): void {
     Storage::fake(config('knowledge.upload.storage_disk'));
+    Queue::fake();
 
     $tenant = make_tenant_u22();
     $user = make_user_u22();
@@ -848,10 +853,15 @@ test('KB-U22-NO-02: upload does not dispatch any processing job', function (): v
         ->postJson(kb_doc_url_u22($tenant, $kb->id), [
             'file' => UploadedFile::fake()->createWithContent('noqueue.pdf', valid_pdf_content()),
         ])->assertStatus(201);
+
+    Queue::assertPushed(ProcessKnowledgeDocument::class, function ($job) use ($tenant) {
+        return $job->tenantId === $tenant->id;
+    });
 });
 
-test('KB-U22-NO-03: document status remains uploaded (not processing/ready)', function (): void {
+test('KB-U22-NO-03: document status remains uploaded when job is queued (not executed)', function (): void {
     Storage::fake(config('knowledge.upload.storage_disk'));
+    Queue::fake();
 
     $tenant = make_tenant_u22();
     $user = make_user_u22();

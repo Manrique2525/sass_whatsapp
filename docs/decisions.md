@@ -1565,3 +1565,35 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Factory extensible: agregar nuevo extractor = 1 clase + 1 línea en factory.
   - PDF parsing con dependencia externa (`smalot/pdfparser`). Actualizada en composer.json.
   - Parser type hint: `Document` (no `PDF`) — smalot v2 usa `Document` como retorno.
+
+## ADR-064 · Document Processing State Machine + Idempotency
+
+- **Fecha**: 2026-08-19
+- **Estado**: ACEPTADO
+- **Contexto**: U2.2 completa upload de documentos; U2.3 completa extracción + chunking.
+  U2.4 orquesta el pipeline de procesamiento de forma asíncrona. El procesamiento debe
+  ser idempotente (un documento solo se procesa una vez), seguro ante concurrencia
+  (múltiples workers no duplican chunks), y tolerant a fallos (errores no contaminan
+  datos de otros tenants ni exponen información interna).
+- **Decisión**:
+  - **State machine**: uploaded → processing → ready/failed. `ready` = ingestion/chunking
+    complete (embedding NULL, U3 lo materializa). `failed` es terminal.
+  - **CAS (Compare-And-Swap)**: transiciones atómicas con `WHERE status = <expected>`.
+    Múltiples capas: DB-level CAS (uploaded→processing), Cache lock (runtime), 
+    ShouldBeUnique (queue-level).
+  - **Capas de protección contra duplicación**:
+    1. `ShouldBeUnique` por tenant+document (queue): `uniqueId()` = `knowledge-document:{tenantId}:{documentId}`, `uniqueFor()` = 300s.
+    2. `Cache::lock` por tenant+document (runtime): lock key `lock:tenant:{id}:knowledge-document:{docId}:processing`.
+    3. CAS uploaded→processing (DB): solo el primer `beginProcessing` exitoso avanza.
+    4. CAS processing→ready/failed (DB): solo el que procesa exitosamente marca ready.
+  - **Pipeline**: `KnowledgeDocumentProcessingService` orquesta: validate → read source → extract → normalize → chunk → persist → mark ready/failed.
+  - **Error sanitization**: `error_message` expone solo códigos genéricos (`missing_source`, `extraction_failed`, etc.). Nunca paths, stack traces, ni info de infraestructura.
+  - **Delete guard**: `DocumentProcessingException` (409 `DOCUMENT_PROCESSING`) al intentar eliminar un documento en estado `processing`.
+  - **Failed() safety net**: El método `failed()` del job marca el documento como `failed` si aún está en `processing` (recurso de último recurso).
+  - **Queue config**: `knowledge.processing.tries` = 3, `knowledge.processing.backoff` = [30, 60] segundos.
+- **Consecuencias**:
+  - 40 tests U2.3 (PROC-01..10, PROC-FAIL-01..10, PROC-MT-01..06, PROC-CON-01..05, QUEUE-01..07, DELETE-01..02).
+  - Invariante: un documento solo se procesa una vez (4 capas de protección).
+  - Invariante: chunks de tenant A jamás se contaminan con datos de tenant B.
+  - Invariante: errores sanitizados (sin paths/stack traces en `error_message`).
+  - Invariante: `ready` = ingestion/chunking complete, embedding NULL.

@@ -9,6 +9,7 @@ use App\Application\Users\Services\AuthorizationService;
 use App\Domain\KnowledgeBase\Enums\KnowledgeDocumentStatus;
 use App\Domain\KnowledgeBase\Exceptions\DocumentDuplicateException;
 use App\Domain\KnowledgeBase\Exceptions\DocumentNotFoundException;
+use App\Domain\KnowledgeBase\Exceptions\DocumentProcessingException;
 use App\Domain\KnowledgeBase\Exceptions\DocumentStorageFailedException;
 use App\Domain\KnowledgeBase\Exceptions\KnowledgeBaseNotFoundException;
 use App\Domain\KnowledgeBase\Models\KnowledgeBase;
@@ -16,6 +17,7 @@ use App\Domain\KnowledgeBase\Models\KnowledgeDocument;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Enums\TenantPermission;
 use App\Domain\Users\Models\User;
+use App\Jobs\ProcessKnowledgeDocument;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -140,6 +142,11 @@ final class DocumentService
             subjectId: $document->id,
         );
 
+        ProcessKnowledgeDocument::dispatch(
+            tenantId: $tenant->id,
+            documentId: $document->id,
+        )->onQueue('knowledge');
+
         return $document;
     }
 
@@ -150,6 +157,10 @@ final class DocumentService
         $this->findKnowledgeBaseForTenant($tenant, $knowledgeBaseId);
 
         $document = $this->findDocumentForTenant($tenant, $documentId);
+
+        if ($document->status === KnowledgeDocumentStatus::Processing) {
+            throw new DocumentProcessingException;
+        }
 
         $document->delete();
 

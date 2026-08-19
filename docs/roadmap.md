@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 EN PROGRESO** (U1 completa, U2.1 completa, U2.2 completa, U2.3 completa).
+Estado general: **FASE 17 EN PROGRESO** (U1+U2.1+U2.2+U2.3+U2.4 completas).
 
 ## Fases
 
@@ -23,7 +23,7 @@ Estado general: **FASE 17 EN PROGRESO** (U1 completa, U2.1 completa, U2.2 comple
 | 14 | Triggers | COMPLETADA |
 | 15 | Transferencia a humano | COMPLETADA |
 | 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime + Telemetry + Security) | COMPLETADA |
-  | 17 | Base de conocimiento (RAG + pgvector) | EN PROGRESO (U1+U2.1+U2.2+U2.3) |
+  | 17 | Base de conocimiento (RAG + pgvector) | EN PROGRESO (U1+U2.1+U2.2+U2.3+U2.4) |
 | 18 | FAQ inteligente | PENDIENTE |
 | 19 | Leads | PENDIENTE |
 | 20 | Tags | PENDIENTE |
@@ -1465,7 +1465,59 @@ COMPLETADO — pendiente commit. NO PUSH.
 
 #### ADRs
 
-ADR-063: Text Extraction Architecture (pendiente — decide durante commit)
+ADR-063: Text Extraction Architecture
+
+#### ESTADO
+COMPLETADO — pendiente commit. NO PUSH.
+
+---
+
+### FASE 17 — UNIDAD 2.4: Document Processing Orchestration
+
+**Objetivo**: Orquestar el pipeline de procesamiento de documentos (extract → normalize → chunk → persist) de forma asíncrona, idempotente y segura ante concurrencia.
+
+#### Archivos creados
+
+- `app/Jobs/ProcessKnowledgeDocument.php` — TenantAwareJob + ShouldBeUnique + Cache::lock + CAS
+- `app/Application/KnowledgeBase/Services/KnowledgeDocumentProcessingService.php` — State machine + pipeline orchestration
+- `app/Domain/KnowledgeBase/Exceptions/DocumentProcessingException.php` — 409 delete-during-processing
+- `tests/Feature/KnowledgeBase/ProcessKnowledgeDocumentTest.php` — 40 tests (PROC-01..10, PROC-FAIL-01..10, PROC-MT-01..06, PROC-CON-01..05, QUEUE-01..07, DELETE-01..02)
+
+#### Archivos modificados
+
+- `app/Application/KnowledgeBase/Services/DocumentService.php` — +dispatch ProcessKnowledgeDocument after commit, +delete guard for processing state
+- `app/Http/Controllers/Api/V1/DocumentController.php` — +DocumentProcessingException handler in destroy()
+- `app/Domain/KnowledgeBase/Enums/KnowledgeDocumentStatus.php` — PHPDoc update: ready = ingestion/chunking complete
+- `config/knowledge.php` — +processing.tries, processing.backoff
+- `tests/Feature/KnowledgeBase/DocumentUploadTest.php` — Queue::fake() en tests de upload (KB-U22-01, KB-U22-05, KB-U22-NO-02, KB-U22-NO-03)
+
+#### Funcionalidad
+
+- **State machine**: uploaded → processing → ready/failed. 4 capas de protección anti-duplicación: ShouldBeUnique, Cache::lock, CAS DB, CAS ready.
+- **Pipeline**: validate → read source → extract → normalize → chunk → persist → mark ready/failed.
+- **Error sanitization**: error_message expone solo códigos genéricos, nunca paths/stack traces.
+- **Delete guard**: 409 DOCUMENT_PROCESSING si se intenta borrar un documento en estado processing.
+- **failed() safety net**: marca documento como failed si aún está en processing (recurso último recurso).
+- **Queue config**: tries=3, backoff=[30,60]s.
+
+#### Tests
+
+- 40 tests U2.4, todos green. 84 tests pre-U2.2 también pasan con Queue::fake() add.
+- Regression total: 966 tests PASS (1 skipped — PostgreSQL).
+
+#### Puertas
+
+- php artisan test: 966/966 PASS (1 skipped)
+- phpstan: 0 errores
+- pint: PASS
+- npm test: 244/244 PASS
+- vue-tsc: PASS
+- vite build: PASS
+- composer audit: clean
+
+#### ADRs
+
+ADR-064 (Document Processing State Machine + Idempotency)
 
 #### ESTADO
 COMPLETADO — pendiente commit. NO PUSH.

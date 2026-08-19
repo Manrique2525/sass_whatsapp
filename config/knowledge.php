@@ -66,4 +66,12 @@ return [
 
     ],
 
+    'processing' => [
+
+        'tries' => 3,
+
+        'backoff' => [30, 60], // seconds between retries
+
+    ],
+
 ];
