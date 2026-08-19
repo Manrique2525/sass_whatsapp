@@ -1510,3 +1510,27 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - FormRequest solo valida `required|file|max:10MB`. Toda validación de seguridad en service.
   - Tests usan `Storage::fake()` (minio disk). No requieren MinIO real.
   - POST `/api/v1/tenants/{tenant}/knowledge-bases/{kb}/documents` agregado a routes.
+
+## ADR-062: Embedding Nullability — P0 Corrective Fix (FASE 17 P0)
+
+- **Fecha**: 2026-08-19
+- **Estado**: ACEPTADO
+- **Contexto**: La migración U1 (`2026_08_18_020200`) definió `knowledge_chunks.embedding` como
+  `vector(1536)` NOT NULL. U2.3 crea chunks con `embedding=NULL` (extracción + chunking antes de
+  embeddings). U3 materializará embeddings. En PostgreSQL real, INSERT con `embedding=NULL` falla
+  con violación de NOT NULL constraint.
+- **Decisión**:
+  - Crear migración correctiva (`2026_08_19_161000_make_knowledge_chunks_embedding_nullable`)
+    que ejecuta `ALTER TABLE knowledge_chunks ALTER COLUMN embedding DROP NOT NULL` en PostgreSQL.
+  - SQLite: no-op (columna embedding no existe en SQLite).
+  - DOWN: revierte a NOT NULL, pero FALLA si existen filas con `embedding=NULL` (protección de
+    datos). Mensaje claro: "Populate all embeddings before running this rollback."
+  - NULL significa: "chunk creado, embedding pendiente/no generado". NO vector placeholder `[0,0,...]`.
+  - NO se modifica la migración histórica U1.
+- **Consecuencias**:
+  - U2.3 puede persistir chunks sin embeddings → pipeline extraction → chunking → persistence.
+  - U3 (embeddings) actualizará chunks existentes con `embedding IS NULL`.
+  - `ChunkPersistenceService` inserta `embedding=NULL` (pre-embedding stage).
+  - HNSW index preservado. vector(1536) preservado. Solo cambia nullability.
+  - 7 tests PG: EMB-NULL-PG-01..07 (nullable, insert NULL, insert valid, HNSW, cosine_ops,
+    UP/DOWN/UP, DOWN safety).

@@ -310,7 +310,7 @@ knowledge_chunks
   tenant_id FK → tenants (cascadeOnDelete)
   document_id FK → knowledge_documents (cascadeOnDelete)
   content text
-  embedding vector(1536)                 → índice HNSW (vector_cosine_ops, m=16, ef_construction=64)
+  embedding vector(1536) NULLABLE           → NULL = embedding pendiente (U3 lo materializará)
   token_count int
   chunk_index int
   metadata JSONB nullable                → page, section, headers (provenance)
@@ -323,6 +323,7 @@ knowledge_chunks
 
 - Sin soft delete en chunks: datos derivados regenerables. CASCADE elimina al eliminar documento padre.
 - `vector(1536)` hardcodeado (contrato con text-embedding-3-small, ADR-058).
+- `embedding` NULLABLE hasta U3 (ADR-062). NULL = embedding pendiente/no generado.
 - Migración condicional: vector + HNSW solo en PostgreSQL; tests SQLite omiten estas columnas.
 
 ### `usage_records`
