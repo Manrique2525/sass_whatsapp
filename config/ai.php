@@ -60,4 +60,40 @@ return [
 
     'fallback_message' => env('AI_FALLBACK_MESSAGE'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Embedding Provider (FASE 17 U3.1)
+    |--------------------------------------------------------------------------
+    |
+    | Configuración del proveedor de embeddings vectoriales para búsqueda
+    | semántica (RAG). Separado del proveedor de chat por SRP/ISP.
+    |
+    */
+
+    'embedding' => [
+
+        'default' => env('AI_EMBEDDING_PROVIDER', 'openai'),
+
+        'providers' => [
+
+            'openai' => [
+
+                'api_key' => env('OPENAI_API_KEY', ''),
+
+                'model' => env('AI_EMBEDDING_MODEL', 'text-embedding-3-small'),
+
+                'dimensions' => (int) env('AI_EMBEDDING_DIMENSIONS', 1536),
+
+                'max_batch_size' => (int) env('AI_EMBEDDING_MAX_BATCH', 50),
+
+                'timeout' => (int) env('AI_EMBEDDING_TIMEOUT', 30),
+
+                'max_retries' => (int) env('AI_EMBEDDING_MAX_RETRIES', 2),
+
+            ],
+
+        ],
+
+    ],
+
 ];

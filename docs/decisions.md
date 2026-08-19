@@ -1597,3 +1597,36 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Invariante: chunks de tenant A jamás se contaminan con datos de tenant B.
   - Invariante: errores sanitizados (sin paths/stack traces en `error_message`).
   - Invariante: `ready` = ingestion/chunking complete, embedding NULL.
+
+## ADR-065 · Separate Embedding Provider Contract
+
+- **Fecha**: 2026-08-19
+- **Estado**: ACEPTADO
+- **Contexto**: U3.1 necesita generar embeddings vectoriales para búsqueda semántica.
+  La infraestructura AI de FASE 16 (`AIProviderInterface`) solo soporta chat completions.
+  Embeddings son un dominio fundamentalmente distinto: input es batch de textos,
+  output es batch de vectores float, el endpoint API es diferente, los costos son
+  diferentes, y la dimensionalidad es un contrato crítico con la DB.
+- **Decisión**:
+  - **Interfaz separada**: `EmbeddingProviderInterface` con `embed(EmbeddingRequest): EmbeddingResponse`.
+    No se agrega método a `AIProviderInterface` (SRP + ISP).
+  - **Dimension contract**: `vector(1536)` hardcodeado en config. Fail closed ante
+    `EmbeddingDimensionMismatchException`. No truncar, pad, ni convertir.
+  - **Response cardinality**: N inputs → exactamente N embeddings. Validación de
+    `index` field: sequential, no duplicates, no gaps. Sort by index.
+  - **Float validation**: Cada elemento del vector debe ser numérico finito.
+    NaN/INF/strings rechazados.
+  - **Error taxonomy separada**: `EmbeddingErrorCode` enum con 7 casos
+    (auth, rate, invalid_request, invalid_response, dimension_mismatch, provider, timeout).
+  - **OpenAI provider**: `OpenAIEmbeddingProvider` con Http facade, consistente
+    con `OpenAIProvider` existente. Endpoint `/v1/embeddings`.
+  - **Batch guard**: `max_batch_size` configurable (default 50). Provider rechaza
+    batches que excedan el límite.
+  - **No real network**: Tests con `Http::fake()` y `FakeEmbeddingProvider`.
+    API key nunca en exceptions, logs, ni response.
+  - **Config**: Sección `embedding` en `config/ai.php`. Reutiliza `OPENAI_API_KEY`.
+- **Consecuencias**:
+  - 43 tests U3.1 (EMB-P01..P36, EMB-F01..F07). PHPStan 0 errors. Pint clean.
+  - `AIProviderInterface` permanece intacta (no break change).
+  - FakeEmbeddingProvider determinístico para tests de U3.2+.
+  - Provider stateless respecto al tenant.

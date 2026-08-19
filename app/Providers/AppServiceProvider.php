@@ -17,8 +17,10 @@ use App\Application\Flows\Services\Executors\TagNodeExecutor;
 use App\Application\Flows\Services\Executors\WebhookNodeExecutor;
 use App\Application\Flows\Services\NodeExecutorRegistry;
 use App\Domain\AI\Contracts\AIProviderInterface;
+use App\Domain\AI\Contracts\EmbeddingProviderInterface;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\WhatsApp\Contracts\WhatsAppProviderInterface;
+use App\Infrastructure\AI\OpenAIEmbeddingProvider;
 use App\Infrastructure\AI\OpenAIProvider;
 use App\Infrastructure\WhatsApp\MetaWhatsAppProvider;
 use App\Policies\TenantPolicy;
@@ -54,6 +56,19 @@ class AppServiceProvider extends ServiceProvider
                 baseUrl: (string) config('ai.providers.openai.base_url'),
                 timeout: (int) config('ai.providers.openai.timeout'),
                 maxRetries: (int) config('ai.providers.openai.max_retries'),
+            );
+        });
+
+        $this->app->bind(EmbeddingProviderInterface::class, function (): OpenAIEmbeddingProvider {
+            $config = config('ai.embedding.providers.openai');
+
+            return new OpenAIEmbeddingProvider(
+                apiKey: (string) ($config['api_key'] ?? ''),
+                model: (string) ($config['model'] ?? 'text-embedding-3-small'),
+                dimensions: (int) ($config['dimensions'] ?? 1536),
+                maxBatchSize: (int) ($config['max_batch_size'] ?? 50),
+                timeout: (int) ($config['timeout'] ?? 30),
+                maxRetries: (int) ($config['max_retries'] ?? 2),
             );
         });
 

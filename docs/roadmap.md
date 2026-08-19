@@ -1520,4 +1520,84 @@ COMPLETADO — pendiente commit. NO PUSH.
 ADR-064 (Document Processing State Machine + Idempotency)
 
 #### ESTADO
+COMPLETADO — commit 881cc6c. NO PUSH.
+
+---
+
+### FASE 17 — UNIDAD 3.1: Embedding Provider Infrastructure
+
+**Objetivo**: Establecer el contrato y la infraestructura para la generación de embeddings vectoriales, separada del dominio de chat (AIProviderInterface), sin materialización ni búsqueda semántica.
+
+#### Archivos creados
+
+- `app/Domain/AI/Contracts/EmbeddingProviderInterface.php` — contrato `embed(EmbeddingRequest): EmbeddingResponse`
+- `app/Domain/AI/ValueObjects/EmbeddingRequest.php` — VO: batch de textos + modelo override
+- `app/Domain/AI/ValueObjects/EmbeddingResponse.php` — VO: embeddings + provider + model + totalInputTokens
+- `app/Domain/AI/Enums/EmbeddingErrorCode.php` — enum 7 códigos (Auth, RateLimit, InvalidRequest, InvalidResponse, DimensionMismatch, Provider, Timeout)
+- `app/Domain/AI/Exceptions/EmbeddingException.php` — excepción abstracta base con `errorCode()` + `status()`
+- `app/Domain/AI/Exceptions/EmbeddingAuthFailedException.php` — HTTP 401
+- `app/Domain/AI/Exceptions/EmbeddingRateLimitException.php` — HTTP 429
+- `app/Domain/AI/Exceptions/EmbeddingDimensionMismatchException.php` — HTTP 422, fail closed
+- `app/Domain/AI/Exceptions/EmbeddingProviderException.php` — HTTP 5xx, retryable configurable
+- `app/Infrastructure/AI/OpenAIEmbeddingProvider.php` — implementación Http facade, `/v1/embeddings`
+- `tests/Fakes/FakeEmbeddingProvider.php` — determinístico, call counting, exception injection, wrong dimension simulation
+- `tests/Unit/AI/OpenAIEmbeddingProviderTest.php` — 43 tests (EMB-P01..P36, EMB-F01..F07)
+
+#### Archivos modificados
+
+- `config/ai.php` — sección `embedding` (providers.openai: model, dimensions, max_batch_size, timeout, max_retries)
+- `app/Providers/AppServiceProvider.php` — binding `EmbeddingProviderInterface` → `OpenAIEmbeddingProvider`
+- `.env.example` — variables `EMBEDDING_MODEL`, `EMBEDDING_DIMENSIONS`, `EMBEDDING_MAX_BATCH_SIZE`
+
+#### Arquitectura
+
+- **Interfaz separada**: `EmbeddingProviderInterface` distinta de `AIProviderInterface` (SRP/ISP). Chat y embedding son dominios distintos.
+- **Dimension contract**: 1536 hardcodeado en config. Fail closed ante `EmbeddingDimensionMismatchException`. No truncar, pad, ni convertir.
+- **Response cardinality**: N inputs → exactamente N embeddings. Validación de `index` sequential, no duplicates, no gaps. Sort by index.
+- **Float validation**: Cada elemento del vector debe ser numérico finito. NaN/INF/strings rechazados.
+- **Error taxonomy separada**: `EmbeddingErrorCode` enum con 7 casos.
+- **Http facade**: consistente con `OpenAIProvider`. Sin paquete openai-php/client.
+- **Batch guard**: `max_batch_size` configurable (default 50).
+- **Config**: Sección `embedding` en `config/ai.php`. Reutiliza `OPENAI_API_KEY`.
+
+#### Tests
+
+43 tests U3.1, todos green:
+
+- **EMB-P01..P05**: VOs (request/response immutable, validación empty/whitespace)
+- **EMB-P06..P07**: Interface se resuelve desde contenedor
+- **EMB-P08..P09**: API key vacía → auth exception, sin HTTP
+- **EMB-P10..P12**: Vector 1536 correcto, dimension mismatch rechazado, batch de 50
+- **EMB-P13**: Batch excede max_batch_size → EmbeddingProviderException
+- **EMB-P14..P18**: Float validation (finito OK, NaN/INF/string rechazados)
+- **EMB-P19..P21**: Index validation (out-of-order, missing, duplicate)
+- **EMB-P22..P25**: HTTP errors (401→auth, 429→rate, 500→provider, timeout→retryable)
+- **EMB-P26..P29**: Response parsing (malformed JSON, missing data, wrong count, non-numeric)
+- **EMB-P30..P32**: Model config (override, default, token usage)
+- **EMB-P33..P34**: OpenAI weight normalization (zero/missing/ok)
+- **EMB-P35..P36**: HTTP safety (fake prevents real, empty key no HTTP)
+- **EMB-F01..F07**: FakeEmbeddingProvider (deterministic, counting, injection, wrong dimension, reset, unit vectors, callback)
+
+#### SEGURIDAD
+
+- API key nunca en response, logs, exceptions ni frontend
+- Tests con Http::fake (sin llamadas reales)
+- Provider stateless re: tenant (sin TenantContext)
+- Dimension mismatch → fail closed (nunca truncar/pad)
+
+#### Puertas
+
+- php artisan test: 1009/1009 PASS (1 skipped — PostgreSQL)
+- pint: PASS
+- phpstan: 0 errores
+- npm test: 244/244 PASS
+- vue-tsc: PASS
+- vite build: PASS
+- composer audit: clean
+
+#### ADRs
+
+ADR-065 (Separate Embedding Provider Contract)
+
+#### ESTADO
 COMPLETADO — pendiente commit. NO PUSH.
