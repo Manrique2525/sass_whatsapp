@@ -100,6 +100,7 @@ describe('AI-V04 — AINodeConfig validation renders correct defaults', () => {
             system_prompt: '',
             output_variable: '',
             fallback_message: '',
+            knowledge_base_id: null,
         });
     });
 
@@ -281,8 +282,8 @@ describe('AI-V11 — roundtrip adapter preserves AI config', () => {
 // ── AI-V12: DEFAULT_NODE_CONFIG correct ─────────────────────────────
 
 describe('AI-V12 — DEFAULT_NODE_CONFIG.ai correct', () => {
-    it('has exactly 4 keys', () => {
-        expect(Object.keys(DEFAULT_NODE_CONFIG.ai)).toHaveLength(4);
+    it('has exactly 5 keys', () => {
+        expect(Object.keys(DEFAULT_NODE_CONFIG.ai)).toHaveLength(5);
     });
 
     it('prompt is empty string', () => {

@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 EN PROGRESO** (U1+U2.1+U2.2+U2.3+U2.4+U3.1+U3.2+U3.3+U3.4).
+Estado general: **FASE 17 EN PROGRESO** (U1+U2.1+U2.2+U2.3+U2.4+U3.1+U3.2+U3.3+U3.4+U3.5).
 
 ## Fases
 
@@ -23,7 +23,7 @@ Estado general: **FASE 17 EN PROGRESO** (U1+U2.1+U2.2+U2.3+U2.4+U3.1+U3.2+U3.3+U
 | 14 | Triggers | COMPLETADA |
 | 15 | Transferencia a humano | COMPLETADA |
 | 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime + Telemetry + Security) | COMPLETADA |
-  | 17 | Base de conocimiento (RAG + pgvector) | EN PROGRESO (U1+U2.1+U2.2+U2.3+U2.4+U3.1+U3.2+U3.3+U3.4) |
+  | 17 | Base de conocimiento (RAG + pgvector) | EN PROGRESO (U1+U2.1+U2.2+U2.3+U2.4+U3.1+U3.2+U3.3+U3.4+U3.5) |
 | 18 | FAQ inteligente | PENDIENTE |
 | 19 | Leads | PENDIENTE |
 | 20 | Tags | PENDIENTE |
@@ -1805,6 +1805,90 @@ COMPLETADO — commit dbfe11c. NO PUSH.
 #### ADRs
 
 ADR-068 (RAG Context Injection into AI Node)
+
+#### ESTADO
+COMPLETADO — commit 289ac6e.
+
+---
+
+### U3.5 — Knowledge Base Selector en AI Node (Frontend)
+
+**Objetivo**: Agregar un selector de bases de conocimiento al configurador de nodos AI, permitiendo al usuario vincular una KB existente al nodo. El adapter roundtrip preserva el `knowledge_base_id` en el JSONB config. Sin DDL nueva.
+
+#### Archivos creados
+
+- `resources/js/features/knowledge/knowledgeTypes.ts` — interfaz `KnowledgeBase` + `KnowledgeBasesListResponse` + `KnowledgeBasesMeta`
+- `resources/js/features/knowledge/knowledgeApi.ts` — `fetchKnowledgeBases()` llama a `GET /api/v1/{tenant}/knowledge-bases`
+- `resources/js/features/knowledge/useKnowledgeBases.ts` — composable reactivo: items, loading, error, load(), byId(), hasKBs
+- `resources/js/features/flows/ragNodeConfig.test.ts` — 36 tests (RAG-V01..V20, unit + component)
+
+#### Archivos modificados
+
+- `resources/js/features/flows/components/panels/config/AiNodeConfig.vue` — reescritura completa: KB selector con estados loading/empty/error/missing/deleted, read-only support
+- `resources/js/features/flows/flowEditorTypes.ts` — DEFAULT_NODE_CONFIG.ai incluye `knowledge_base_id: null`
+- `resources/js/features/flows/flowUtils.ts` — nodeConfigSummary AI case muestra sufijo "KB activada" cuando knowledge_base_id está set
+- `resources/js/features/flows/aiFlowBuilder.test.ts` — AI-V04 + AI-V12 actualizados para el 5to campo
+
+#### Arquitectura
+
+- **KnowledgeBase interface**: id, name, description, created_at, updated_at (sin storage_path, file_hash, embeddings, chunks)
+- **API client**: `fetchKnowledgeBases(tenantId, params)` → `GET /api/v1/{tenant}/knowledge-bases` con paginación
+- **Composable `useKnowledgeBases`**: lazy-load + cache por tenant. Loading, error, items, byId(), hasKBs
+- **AiNodeConfig KB selector**: select nativo en tope del componente, antes del prompt
+- **Adapter roundtrip**: `apiNodeToEditor` → `editorNodeToApi` pasan config como-is. knowledge_base_id preservado automáticamente
+- **Backward compatibility**: flows viejos sin knowledge_base_id → undefined → tratado como null
+- **nodeConfigSummary**: suffijo " KB activada" cuando knowledge_base_id está presente
+
+#### Estados del selector
+
+- **Loading**: disabled + "Cargando bases..."
+- **Empty**: "Sin base de conocimiento"
+- **Error**: non-destructive, preserva selection existente
+- **Missing/deleted KB**: "Base de conocimiento no disponible" (amber)
+- **Read-only**: disabled
+
+#### Tests
+
+36 tests frontend (RAG-V01..V20):
+- RAG-V01: DEFAULT_NODE_CONFIG incluye knowledge_base_id
+- RAG-V02: Adapter roundtrip preserva UUID
+- RAG-V03: Flow validation acepta null/undefined/UUID
+- RAG-V04: nodeConfigSummary muestra "KB activada"
+- RAG-V05: AiNodeConfig renderiza selector + emite update
+- RAG-V06: Clear selection → null
+- RAG-V07: Existing KB seleccionado correctamente
+- RAG-V08: Read-only deshabilita selector
+- RAG-V09: Loading state
+- RAG-V10: Empty state
+- RAG-V11: API error preserva selección existente
+- RAG-V12: Deleted/missing KB amber warning
+- RAG-V13: AI node sin KB remains valid
+- RAG-V14: Sin semantic settings UI
+- RAG-V15: graphToDraft preserva UUID
+- RAG-V16: Sin storage fields expuestos
+- RAG-V17: Full roundtrip AI node con KB
+- RAG-V18: localGraphIssues con AI node + KB
+- RAG-V19: Optimistic lock unchanged
+- RAG-V20: Preserva campos existentes on KB change
+
++ 2 tests actualizados en aiFlowBuilder.test.ts (AI-V04, AI-V12)
+
+#### SEGURIDAD
+
+- Sin DDL nueva — knowledge_base_id en JSONB config
+- Sin storage_path ni file_hash expuestos al frontend
+- Sin semantic settings (top_k, threshold, embedding_model) — defaults del backend
+- Read-only mode deshabilita selector
+- API KB requiere `knowledge.view` permission
+- Error handling no destructivo — preserva selección existente
+
+#### Puertas
+
+- npm run typecheck: PASS
+- npm run build: PASS
+- npm run test: 280 tests PASS
+- pint: PASS
+- phpstan: 0 errores
 
 #### ESTADO
 COMPLETADO — pendiente commit. NO PUSH.

@@ -137,7 +137,7 @@ export const DEFAULT_NODE_CONFIG: Record<FlowNodeType, Record<string, unknown>> 
     delay: { seconds: 5 },
     tag: { tags: [''] },
     webhook: { url: '', method: 'POST' },
-    ai: { prompt: '', system_prompt: '', output_variable: '', fallback_message: '' },
+    ai: { prompt: '', system_prompt: '', output_variable: '', fallback_message: '', knowledge_base_id: null },
     human: { handoff_message: '' },
     end: {},
 };

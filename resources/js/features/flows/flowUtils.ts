@@ -105,7 +105,8 @@ export function nodeConfigSummary(type: FlowNodeType, config: Record<string, unk
             const p = typeof config.prompt === 'string' ? config.prompt : '';
             const v = typeof config.output_variable === 'string' ? config.output_variable : '';
             const preview = p.length > 40 ? p.slice(0, 40) + '…' : p;
-            return [preview, v !== '' ? `→ ${v}` : ''].filter(Boolean).join(' ');
+            const kb = typeof config.knowledge_base_id === 'string' && config.knowledge_base_id !== '' ? ' · KB activada' : '';
+            return [preview, v !== '' ? `→ ${v}` : ''].filter(Boolean).join(' ') + kb;
         }
         case 'human':
             return '';
