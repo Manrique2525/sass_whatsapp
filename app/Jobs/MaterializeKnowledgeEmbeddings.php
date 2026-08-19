@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Application\Audit\Services\AuditLogger;
-use App\Application\KnowledgeBase\Services\KnowledgeDocumentProcessingService;
+use App\Application\KnowledgeBase\Services\EmbeddingMaterializationService;
+use App\Domain\AI\Exceptions\EmbeddingAuthFailedException;
+use App\Domain\AI\Exceptions\EmbeddingDimensionMismatchException;
+use App\Domain\AI\Exceptions\EmbeddingProviderException;
+use App\Domain\AI\Exceptions\EmbeddingRateLimitException;
 use App\Domain\KnowledgeBase\Enums\KnowledgeDocumentStatus;
 use App\Domain\KnowledgeBase\Models\KnowledgeDocument;
 use App\Domain\Tenants\Models\Tenant;
@@ -22,18 +26,17 @@ use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
- * Procesamiento asíncrono de un documento knowledge (FASE 17 U2.4).
+ * Materialización asíncrona de embeddings vectoriales (FASE 17 U3.2).
  *
- * Orquesta: extract → normalize → chunk → persist → ready.
- * NO crea embeddings (U3 lo hará).
+ * Solo procesa chunks con embedding IS NULL de documentos en estado Ready.
+ * Idempotencia: re-ejecución solo procesa chunks pendientes.
  *
  * Capas de protección contra duplicación:
  * 1. ShouldBeUnique por tenant+document (cola).
  * 2. Cache::lock por tenant+document (runtime).
- * 3. CAS uploaded→processing (DB).
- * 4. CAS processing→ready/failed (DB).
+ * 3. CAS WHERE embedding IS NULL (DB).
  */
-final class ProcessKnowledgeDocument implements ShouldBeUnique, ShouldQueue
+final class MaterializeKnowledgeEmbeddings implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;
     use InteractsWithQueue;
@@ -41,7 +44,7 @@ final class ProcessKnowledgeDocument implements ShouldBeUnique, ShouldQueue
     use SerializesModels;
     use TenantAwareJob;
 
-    public int $timeout = 120;
+    public int $timeout = 180;
 
     public function __construct(
         string $tenantId,
@@ -53,17 +56,17 @@ final class ProcessKnowledgeDocument implements ShouldBeUnique, ShouldQueue
 
     public function uniqueId(): string
     {
-        return "knowledge-document:{$this->tenantId}:{$this->documentId}";
+        return "embeddings:{$this->tenantId}:{$this->documentId}";
     }
 
     public function uniqueFor(): int
     {
-        return 300;
+        return 600;
     }
 
     public function tries(): int
     {
-        return (int) config('knowledge.processing.tries', 3);
+        return (int) config('knowledge.materialization.tries', 3);
     }
 
     /**
@@ -71,7 +74,7 @@ final class ProcessKnowledgeDocument implements ShouldBeUnique, ShouldQueue
      */
     public function backoff(): array
     {
-        return config('knowledge.processing.backoff', [30, 60]);
+        return config('knowledge.materialization.backoff', [30, 60, 120]);
     }
 
     protected function executeInTenantContext(): void
@@ -83,7 +86,7 @@ final class ProcessKnowledgeDocument implements ShouldBeUnique, ShouldQueue
         }
 
         $lock = Cache::lock(
-            "lock:tenant:{$this->tenantId}:knowledge-document:{$this->documentId}:processing",
+            "lock:tenant:{$this->tenantId}:embeddings:{$this->documentId}:processing",
             $this->timeout + 30,
         );
 
@@ -96,35 +99,37 @@ final class ProcessKnowledgeDocument implements ShouldBeUnique, ShouldQueue
         }
 
         try {
-            $this->processLocked();
+            $this->materializeLocked();
         } finally {
             $lock->release();
         }
     }
 
-    private function processLocked(): void
+    private function materializeLocked(): void
     {
-        /** @var KnowledgeDocumentProcessingService $service */
-        $service = app(KnowledgeDocumentProcessingService::class);
+        $document = KnowledgeDocument::query()
+            ->withoutTenantScope()
+            ->where('tenant_id', $this->tenantId)
+            ->whereKey($this->documentId)
+            ->first();
 
-        $document = $service->beginProcessing($this->tenantId, $this->documentId);
-
-        if ($document === null) {
+        if ($document === null || $document->deleted_at !== null) {
             return;
         }
 
-        $service->processDocument($document);
-
-        $document->refresh();
-
-        if ($document->status === KnowledgeDocumentStatus::Ready && $document->chunk_count > 0) {
-            MaterializeKnowledgeEmbeddings::dispatch($this->tenantId, $this->documentId);
+        if ($document->status !== KnowledgeDocumentStatus::Ready) {
+            return;
         }
+
+        /** @var EmbeddingMaterializationService $service */
+        $service = app(EmbeddingMaterializationService::class);
+
+        $service->materialize($document);
     }
 
     public function failed(?Throwable $exception): void
     {
-        DB::connection()->transaction(function (): void {
+        DB::connection()->transaction(function () use ($exception): void {
             $document = KnowledgeDocument::query()
                 ->withoutTenantScope()
                 ->where('tenant_id', $this->tenantId)
@@ -135,32 +140,38 @@ final class ProcessKnowledgeDocument implements ShouldBeUnique, ShouldQueue
                 return;
             }
 
-            if ($document->status !== KnowledgeDocumentStatus::Processing) {
+            if ($document->status !== KnowledgeDocumentStatus::Ready) {
                 return;
             }
 
-            KnowledgeDocument::query()
-                ->withoutTenantScope()
-                ->where('id', $document->id)
-                ->where('tenant_id', $this->tenantId)
-                ->where('status', KnowledgeDocumentStatus::Processing)
-                ->update([
-                    'status' => KnowledgeDocumentStatus::Failed,
-                    'error_message' => 'Document processing failed.',
-                    'updated_at' => now(),
-                ]);
+            $errorCode = $this->classifyError($exception);
 
             app(AuditLogger::class)->record(
-                action: 'knowledge_document.failed',
+                action: 'knowledge_embeddings.failed',
                 data: [
                     'document_id' => $document->id,
                     'knowledge_base_id' => $document->knowledge_base_id,
-                    'error_code' => 'queue_exhausted',
+                    'error_code' => $errorCode,
                 ],
                 subjectType: KnowledgeDocument::class,
                 subjectId: $document->id,
                 tenantId: $this->tenantId,
             );
         });
+    }
+
+    private function classifyError(?Throwable $exception): string
+    {
+        if ($exception === null) {
+            return 'unknown';
+        }
+
+        return match (true) {
+            $exception instanceof EmbeddingAuthFailedException => 'auth_failed',
+            $exception instanceof EmbeddingRateLimitException => 'rate_limited',
+            $exception instanceof EmbeddingDimensionMismatchException => 'dimension_mismatch',
+            $exception instanceof EmbeddingProviderException => 'provider_error',
+            default => 'queue_exhausted',
+        };
     }
 }

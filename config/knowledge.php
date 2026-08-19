@@ -74,4 +74,12 @@ return [
 
     ],
 
+    'materialization' => [
+
+        'tries' => 3,
+
+        'backoff' => [30, 60, 120], // seconds between retries
+
+    ],
+
 ];

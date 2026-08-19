@@ -1630,3 +1630,56 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - `AIProviderInterface` permanece intacta (no break change).
   - FakeEmbeddingProvider determinístico para tests de U3.2+.
   - Provider stateless respecto al tenant.
+
+## ADR-066 · Embedding Materialization Pipeline
+
+- **Fecha**: 2026-08-19
+- **Estado**: ACEPTADO
+- **Contexto**: U3.2 materializa embeddings vectoriales para chunks de documentos
+  knowledge. Los chunks están en estado `ready` (ingestion/chunking complete)
+  con `embedding IS NULL`. Se necesita orquestar batch processing, persistencia
+  segura con pgvector, idempotencia, retries, y tenant isolation.
+- **Decisión**:
+  - **Separate job**: `MaterializeKnowledgeEmbeddings` despachado desde
+    `ProcessKnowledgeDocument` después de transición exitosa a `ready` con
+    chunks > 0. Job independiente de la pipeline de procesamiento.
+  - **Ready semantics**: `ready` = ingestion/chunking complete. NO significa
+    embeddings complete. El estado de embedding se infiere:
+    `embedding IS NULL` → pending, todos NOT NULL → materialized.
+    No se agrega status nuevo.
+  - **VectorSerializer**: VO que serializa `list<mixed>` a formato pgvector
+    text `[0.1,0.2,...]`. Validación defense-in-depth: finite, count = 1536.
+    Separado del provider para desacoplar serialización de llamada API.
+  - **Persistencia**: `DB::update()` con `?::vector` parameterized binding.
+    Input estrictamente validado por VectorSerializer. Nunca `DB::raw()` con
+    interpolación.
+  - **CAS (Compare-And-Swap)**: `WHERE embedding IS NULL` previene
+    sobrescritura. Si update afecta 0 filas → otro worker ya materializó →
+    no error.
+  - **Batch DB transaction**: Embeddings se persisten en transacción por batch.
+    Si DB falla → rollback completo. Retry re-encuentra chunks con NULL.
+  - **Crash window**: Si provider responde pero worker muere antes de DB
+    commit → retry rellama provider. Aceptar pequeño doble costo. No
+    intentar distributed transaction con OpenAI.
+  - **Lock Redis**: `lock:tenant:{id}:embeddings:{docId}:processing`.
+    Patrón consistente con U2.4. Release en `finally`.
+  - **ShouldBeUnique**: `embeddings:{tenantId}:{documentId}`, uniqueFor 600s.
+    Tres capas: unique + lock + CAS.
+  - **Retries**: tries=3, backoff=[30,60,120]. Rate limit, timeout, 5xx →
+    retryable. Auth, invalid request, dimension mismatch → non-retryable.
+  - **failed()**: NO cambia document.status (embedding es etapa separada).
+    Documento permanece `ready`. Registra audit `knowledge_embeddings.failed`
+    con error_code seguro.
+  - **Delete guard**: Revalida documento activo (no deleted) antes de cada
+    batch. Si deleted → STOP.
+  - **Zero chunks**: Ready document con 0 chunks → no provider call, no error.
+  - **Audit seguro**: `knowledge_embeddings.materialized` / `.failed` con
+    document_id, knowledge_base_id, provider, model, chunks_processed,
+    batches, input_tokens, duration_ms, success, error_code. Nunca
+    chunk content, vectors, API key.
+- **Consecuencias**:
+  - 16 tests SQLite (EMB-MAT-01..12, EMB-JOB-01..10, EMB-MT-01..06).
+  - 10 tests PostgreSQL (EMB-PG-01..10) en suite separada.
+  - DDL = NONE. Config `knowledge.materialization` añadida.
+  - Procesamiento de chunks y embeddings son etapas completamente separadas.
+  - No se toca el pipeline de extracción/chunking (U2.4 intacto).

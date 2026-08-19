@@ -1600,4 +1600,86 @@ COMPLETADO — commit 881cc6c. NO PUSH.
 ADR-065 (Separate Embedding Provider Contract)
 
 #### ESTADO
+COMPLETADO — commit a6d9dfa. NO PUSH.
+
+---
+
+### FASE 17 — UNIDAD 3.2: Embedding Materialization Job
+
+**Objetivo**: Materializar embeddings vectoriales para chunks knowledge con batch processing, persistencia segura con pgvector, idempotencia, retries/backoff y tenant isolation.
+
+#### Archivos creados
+
+- `app/Domain/KnowledgeBase/ValueObjects/VectorSerializer.php` — serialización + validación defense-in-depth a formato pgvector text
+- `app/Application/KnowledgeBase/Services/EmbeddingMaterializationService.php` — orquestación: pending chunks → batching → provider → validate → CAS persist
+- `app/Jobs/MaterializeKnowledgeEmbeddings.php` — TenantAwareJob + ShouldBeUnique + lock + retries
+- `tests/Feature/KnowledgeBase/MaterializeKnowledgeEmbeddingsTest.php` — 16 tests (EMB-MAT-01..12, EMB-JOB-01..10, EMB-MT-01..06)
+- `tests/Postgres/KnowledgeBase/EmbeddingMaterializationPostgresTest.php` — 10 tests PG (EMB-PG-01..10)
+
+#### Archivos modificados
+
+- `app/Jobs/ProcessKnowledgeDocument.php` — dispatch `MaterializeKnowledgeEmbeddings` after markReady + chunk_count > 0
+- `config/knowledge.php` — sección `materialization` (tries: 3, backoff: [30, 60, 120])
+
+#### Arquitectura
+
+- **Separate job**: `MaterializeKnowledgeEmbeddings` despachado desde `ProcessKnowledgeDocument` después de transición exitosa a `ready`. No se toca pipeline de extracción/chunking.
+- **Ready semantics**: `ready` = ingestion/chunking complete. NO = embeddings complete. Estado inferido: `embedding IS NULL` → pending.
+- **VectorSerializer**: VO defense-in-depth. Serializa a `[0.1,0.2,...]`. Validación: finite + count = 1536.
+- **Persistencia**: `DB::update()` con `?::vector` parameterized binding. Nunca `DB::raw()` con interpolación.
+- **CAS**: `WHERE embedding IS NULL` previene sobrescritura. 0 filas = otro worker ya materializó.
+- **Batch DB transaction**: Todo o nada por batch. Rollback si DB falla.
+- **Lock Redis**: `lock:tenant:{id}:embeddings:{docId}:processing`. Release en finally.
+- **ShouldBeUnique**: `embeddings:{tenantId}:{documentId}`, uniqueFor 600s. Tres capas: unique + lock + CAS.
+- **Retries**: tries=3, backoff=[30,60,120]. Rate limit/timeout/5xx → retryable.
+- **failed()**: NO cambia document.status. Documento permanece `ready`. Audit seguro.
+- **Delete guard**: Revalida documento activo antes de cada batch.
+- **Zero chunks**: No provider call, no error.
+- **Audit**: `knowledge_embeddings.materialized` / `.failed` con metadata segura.
+
+#### Tests SQLite
+
+16 tests:
+- **EMB-MAT-01..12**: pending materialized, already embedded skipped, batch size, splitting, order preserved, wrong dimension no persist, provider failure no partial persist, zero chunks no provider, deleted document stops, total tokens, audit safe, no embedding column early return.
+- **EMB-JOB-01..10**: TenantAwareJob, ShouldBeUnique, retries config, afterCommit, timeout, dispatch after ready, failed processing no dispatch, failed() audit, rate limit classification, deleted document ignored.
+- **EMB-MT-01..06**: tenant context, cross-tenant silently, uniqueId isolation, tenant_id from constructor, VectorSerializer dimension validation, non-finite validation.
+
+#### Tests PostgreSQL (suite separada)
+
+10 tests:
+- **EMB-PG-01**: persist vector(1536) — real pgvector write
+- **EMB-PG-02**: wrong dimension reject — no persist
+- **EMB-PG-03**: embedding NULL selected — correct query
+- **EMB-PG-04**: CAS whereNull — idempotencia
+- **EMB-PG-05**: transaction rollback batch — no partial persist
+- **EMB-PG-06**: multi-batch persist — 5 chunks en 3 batches
+- **EMB-PG-07**: HNSW index preserved
+- **EMB-PG-08**: vector_cosine_ops preserved
+- **EMB-PG-09**: tenant isolation — A materializa A, B untouched
+- **EMB-PG-10**: deleted document exclusion
+
+#### SEGURIDAD
+
+- Parameterized SQL con `?::vector` binding — no interpolación
+- CAS previene sobrescritura
+- Tenant isolation: query lleva tenant_id + document_id
+- Delete guard: revalida documento activo antes de cada batch
+- Audit seguro: sin content, vectors, API key
+- failed() no muta document status
+
+#### Puertas
+
+- php artisan test: 1025/1025 PASS (13 skipped — 1 PG + 12 SQLite embedding)
+- pint: PASS
+- phpstan: 0 errores
+- npm test: 244/244 PASS
+- vue-tsc: PASS
+- vite build: PASS
+- composer audit: clean
+
+#### ADRs
+
+ADR-066 (Embedding Materialization Pipeline)
+
+#### ESTADO
 COMPLETADO — pendiente commit. NO PUSH.
