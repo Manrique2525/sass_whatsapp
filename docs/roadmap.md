@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 COMPLETADA**. FASE 18 EN PROGRESO (U1).
+Estado general: **FASE 17 COMPLETADA**. FASE 18 EN PROGRESO (U2).
 
 ## Fases
 
@@ -24,7 +24,7 @@ Estado general: **FASE 17 COMPLETADA**. FASE 18 EN PROGRESO (U1).
 | 15 | Transferencia a humano | COMPLETADA |
 | 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime + Telemetry + Security) | COMPLETADA |
   | 17 | Base de conocimiento (RAG + pgvector) | COMPLETADA |
-| 18 | FAQ inteligente | EN PROGRESO (U1) |
+| 18 | FAQ inteligente | EN PROGRESO (U2) |
 | 19 | Leads | PENDIENTE |
 | 20 | Tags | PENDIENTE |
 | 21 | Analytics | PENDIENTE |
@@ -1892,3 +1892,41 @@ COMPLETADO — commit 289ac6e.
 
 #### ESTADO
 COMPLETADO — pendiente commit. NO PUSH.
+
+---
+
+## FASE 18 — FAQ Inteligente (EN PROGRESO — U2)
+
+### U1 — Data Model + Normalization
+- **Estado**: COMPLETADA
+- **Commit**: f978a7c
+- FaqStatus enum (active/inactive)
+- FaqQuestionNormalizer (trim, NFC, lowercase, edge punctuation, whitespace)
+- Faq model (BelongsToTenant, HasUuids, SoftDeletes, HasFactory)
+- Migration with partial unique index (tenant_id, normalized_question)
+- FaqFactory with active/inactive states
+- 12 normalizer tests (FAQ-NORM-01..12)
+- 17 model tests (FAQ-DB-01..17)
+- 10 PostgreSQL constraint tests (FAQ-PG-01..10)
+- ADR-069
+
+### U2 — Question Normalization + FAQ Matcher
+- **Estado**: COMPLETADA (NO COMMITED)
+- FaqMatch VO (faqId, answer, matchType, priority)
+- FaqMatcherServiceInterface (Application/Faq/Contracts/)
+- FaqMatcherService (Application/Faq/Services/)
+- 20 matcher tests (FAQ-MATCH-01..20)
+- 5 multi-tenancy tests (FAQ-MT-U2-01..05)
+- ADR-070
+
+### U3 — CRUD API + Permissions
+- **Estado**: NO INICIADA
+
+### U4 — FlowEngine Runtime Integration
+- **Estado**: NO INICIADA
+
+### U5 — Frontend
+- **Estado**: NO INICIADA
+
+### U6 — Hardening + Audit + Close
+- **Estado**: NO INICIADA

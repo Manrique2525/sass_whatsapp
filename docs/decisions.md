@@ -1789,3 +1789,44 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - FaqQuestionNormalizer reutilizable por matcher (U2) y API (U3).
   - Tests: 12 normalizer + 17 model (SQLite) + 10 PostgreSQL = 39 tests nuevos.
   - Boundary claro: FAQ ≠ Knowledge Base ≠ AI/RAG.
+
+## ADR-070 · FAQ Matching Semantics (FASE 18 U2)
+
+- **Fecha**: 2026-08-19
+- **Estado**: ACEPTADO
+- **Contexto**: U1 estableció la tabla `faqs` con `normalized_question` y el normalizador
+  `FaqQuestionNormalizer`. U2 necesita el servicio de matching que resuelve una pregunta
+  entrante contra las FAQs almacenadas para un tenant. El matching debe ser determinista,
+  tenant-scoped y read-only.
+- **Decisión**:
+  - **Matching exacto normalizado**: se normaliza el input con `FaqQuestionNormalizer` (misma
+    función que U1) y se busca `WHERE normalized_question = ?`. Sin LIKE, ILIKE, Levenshtein,
+    trigram, embedding ni semantic search.
+  - **Reutilización del normalizer**: `FaqMatcherService` inyecta `FaqQuestionNormalizer` de U1.
+    Sin duplicación de lógica de normalización.
+  - **FaqMatch VO inmutable**: `final readonly` con `faqId`, `answer`, `matchType`,
+    `priority`. Sin tenant_id, raw question, normalized question, PII, Eloquent model,
+    ni hit_count (U1 decidió explícitamente YAGNI).
+  - **matchType = 'exact_normalized'**: único tipo en MVP. Extensible para fuzzy/semantic
+    futuro sin break change.
+  - **Tenant isolation defense-in-depth**: query filtra `tenant_id` explícito además del
+    scope global. `FaqMatcherService` recibe `Tenant` como parámetro (no depende de
+    TenantContext implícito).
+  - **Status filter**: solo `FaqStatus::Active`. Inactive no matchea.
+  - **Soft delete filter**: `deleted_at IS NULL` implícito (Eloquent default). Sin
+    `withTrashed()`.
+  - **Deterministic ordering**: `priority DESC, created_at ASC, id ASC`. Protege
+    extensiones futuras sin depender de orden físico.
+  - **Read-only guarantee**: sin DB writes, sin `hit_count` increment, sin timestamps
+    update, sin audit, sin telemetry.
+  - **Interface**: `FaqMatcherServiceInterface` en `Application/Faq/Contracts/`.
+    Justificada por U4 (FlowEngine tests necesitarán fake matcher). Consistente con
+    `KnowledgeSearchServiceInterface` de FASE 17.
+  - **Empty input**: si `normalize()` retorna `''`, retorna `null` sin query DB.
+  - **Sin cache**: query indexada por `(tenant_id, status, normalized_question)` es
+    suficiente. Sin Redis, sin optimization prematura.
+- **Consecuencias**:
+  - DDL: NONE (tabla `faqs` ya existe de U1).
+  - Tests: 20 matcher (FAQ-MATCH-01..20) + 5 multi-tenancy (FAQ-MT-U2-01..05).
+  - `FaqMatcherServiceInterface` listo para `FakeFaqMatcherService` en U4.
+  - FlowEngine, MessageService, API, frontend: NO modificados en U2.
