@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 COMPLETADA**.
+Estado general: **FASE 17 COMPLETADA**. FASE 18 EN PROGRESO (U1).
 
 ## Fases
 
@@ -24,7 +24,7 @@ Estado general: **FASE 17 COMPLETADA**.
 | 15 | Transferencia a humano | COMPLETADA |
 | 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime + Telemetry + Security) | COMPLETADA |
   | 17 | Base de conocimiento (RAG + pgvector) | COMPLETADA |
-| 18 | FAQ inteligente | PENDIENTE |
+| 18 | FAQ inteligente | EN PROGRESO (U1) |
 | 19 | Leads | PENDIENTE |
 | 20 | Tags | PENDIENTE |
 | 21 | Analytics | PENDIENTE |

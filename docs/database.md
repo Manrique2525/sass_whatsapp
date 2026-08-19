@@ -326,6 +326,28 @@ knowledge_chunks
 - `embedding` NULLABLE hasta U3 (ADR-062). NULL = embedding pendiente/no generado.
 - Migración condicional: vector + HNSW solo en PostgreSQL; tests SQLite omiten estas columnas.
 
+### `faqs` (FASE 18, ADR-069)
+
+```
+faqs
+  id uuid PK
+  tenant_id FK → tenants (cascadeOnDelete)
+  question varchar(500)          → texto curado del tenant
+  normalized_question varchar(500) → representación canónica (FaqQuestionNormalizer)
+  answer text                    → respuesta textual determinista
+  status varchar(20) default 'active' → active | inactive
+  priority int default 0         → mayor = primero en matching futuro
+  created_at / updated_at / deleted_at (soft delete)
+```
+
+- **FK compuesta**: `(tenant_id, id)` UNIQUE (PostgreSQL).
+- **Unique parcial**: `UNIQUE(tenant_id, normalized_question) WHERE deleted_at IS NULL` (PostgreSQL);
+  `UNIQUE(tenant_id, normalized_question)` en SQLite.
+- **Índice**: `(tenant_id, status)` para queries de matching.
+- **Sin hit_count**: métricas pertenecen a telemetría, no a la tabla de dominio.
+- **Normalization**: FaqQuestionNormalizer — trim, Unicode NFC, lowercase, edge punctuation removal,
+  whitespace collapse. Preserva acentos, ñ, emoji. Sin accent folding.
+
 ### `usage_records`
 ```
 id uuid PK

@@ -1759,3 +1759,33 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - FakeKnowledgeSearchService para testing controlado sin PostgreSQL.
   - KnowledgeSearchService implementa KnowledgeSearchServiceInterface (additive, no break).
   - DDL = NONE. Config = NONE (search config ya existe de U3.3).
+
+## ADR-069 · FAQ Data Model + Deterministic Normalization (FASE 18 U1)
+
+- **Fecha**: 2026-08-19
+- **Estado**: ACEPTADO
+- **Contexto**: FASE 18 necesita un dominio FAQ para preguntas frecuentes curadas por el
+  tenant con respuestas textuales deterministas. FAQ es independiente de Knowledge Base
+  (FASE 17): no usa embeddings, no fuzzy matching, no AI, no semantic search. FAQ resuelve
+  con matching exacto normalizado de bajo costo y latencia <1ms.
+- **Decisión**:
+  - **Tabla única `faqs`**: question (texto curado), normalized_question (representación
+    canónica para matching + unicidad), answer (respuesta textual), status (active/inactive),
+    priority (entero, mayor = primero). Sin hit_count (YAGNI, métricas en telemetría).
+  - **Tenant ownership**: `tenant_id` FK directa + `BelongsToTenant` trait + scope global.
+    FAQ A jamás lee FAQ B.
+  - **Unique constraint**: `UNIQUE(tenant_id, normalized_question) WHERE deleted_at IS NULL`
+    (PostgreSQL partial index). SQLite: unique index estándar (sin predicate). Soft-deleted
+    FAQ permite recrear la misma pregunta.
+  - **Normalization contract** (FaqQuestionNormalizer): trim → Unicode NFC → lowercase Unicode
+    → remove edge punctuation (¿?!¡.,:;) → collapse whitespace. Preserva INTENCIONALMENTE
+    acentos (á ≠ a), ñ, emoji. NO accent folding, NO stopwords.
+  - **FaqStatus**: enum `active`/`inactive`. Sin draft/published. FAQ se crea y se activa.
+  - **Soft deletes**: conservar historial para ejecuciones de flujos que referencien FAQ.
+  - **Sin embeddings**: FAQ MVP es determinista. Si en futuro se necesita fuzzy/semantic, se
+    agrega incrementalmente.
+- **Consecuencias**:
+  - DDL: tabla `faqs` con FK, partial unique index, soft deletes.
+  - FaqQuestionNormalizer reutilizable por matcher (U2) y API (U3).
+  - Tests: 12 normalizer + 17 model (SQLite) + 10 PostgreSQL = 39 tests nuevos.
+  - Boundary claro: FAQ ≠ Knowledge Base ≠ AI/RAG.
