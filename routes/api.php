@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\V1\ChatbotController;
 use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\ConversationController;
 use App\Http\Controllers\Api\V1\DocumentController;
+use App\Http\Controllers\Api\V1\FaqController;
 use App\Http\Controllers\Api\V1\FlowController;
 use App\Http\Controllers\Api\V1\FlowExecutionController;
 use App\Http\Controllers\Api\V1\InvitationController;
@@ -154,6 +155,13 @@ Route::prefix('v1')->group(function (): void {
                 Route::post('{tenant}/knowledge-bases/{knowledgeBase}/documents', [DocumentController::class, 'store']);
                 Route::get('{tenant}/knowledge-bases/{knowledgeBase}/documents/{document}', [DocumentController::class, 'show']);
                 Route::delete('{tenant}/knowledge-bases/{knowledgeBase}/documents/{document}', [DocumentController::class, 'destroy']);
+
+                // FASE 18 U3 — FAQs del tenant.
+                Route::get('{tenant}/faqs', [FaqController::class, 'index']);
+                Route::post('{tenant}/faqs', [FaqController::class, 'store']);
+                Route::get('{tenant}/faqs/{faq}', [FaqController::class, 'show']);
+                Route::patch('{tenant}/faqs/{faq}', [FaqController::class, 'update']);
+                Route::delete('{tenant}/faqs/{faq}', [FaqController::class, 'destroy']);
             });
         });
     });

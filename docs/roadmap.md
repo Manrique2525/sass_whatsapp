@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 COMPLETADA**. FASE 18 EN PROGRESO (U2).
+Estado general: **FASE 17 COMPLETADA**. FASE 18 EN PROGRESO (U3).
 
 ## Fases
 
@@ -24,7 +24,7 @@ Estado general: **FASE 17 COMPLETADA**. FASE 18 EN PROGRESO (U2).
 | 15 | Transferencia a humano | COMPLETADA |
 | 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime + Telemetry + Security) | COMPLETADA |
   | 17 | Base de conocimiento (RAG + pgvector) | COMPLETADA |
-| 18 | FAQ inteligente | EN PROGRESO (U2) |
+| 18 | FAQ inteligente | EN PROGRESO (U3) |
 | 19 | Leads | PENDIENTE |
 | 20 | Tags | PENDIENTE |
 | 21 | Analytics | PENDIENTE |
@@ -1895,7 +1895,7 @@ COMPLETADO — pendiente commit. NO PUSH.
 
 ---
 
-## FASE 18 — FAQ Inteligente (EN PROGRESO — U2)
+## FASE 18 — FAQ Inteligente (EN PROGRESO — U3)
 
 ### U1 — Data Model + Normalization
 - **Estado**: COMPLETADA
@@ -1911,7 +1911,8 @@ COMPLETADO — pendiente commit. NO PUSH.
 - ADR-069
 
 ### U2 — Question Normalization + FAQ Matcher
-- **Estado**: COMPLETADA (NO COMMITED)
+- **Estado**: COMPLETADA
+- **Commit**: 72b0bcb
 - FaqMatch VO (faqId, answer, matchType, priority)
 - FaqMatcherServiceInterface (Application/Faq/Contracts/)
 - FaqMatcherService (Application/Faq/Services/)
@@ -1920,7 +1921,20 @@ COMPLETADO — pendiente commit. NO PUSH.
 - ADR-070
 
 ### U3 — CRUD API + Permissions
-- **Estado**: NO INICIADA
+- **Estado**: COMPLETADA (PENDIENTE COMMIT)
+- TenantPermission: +ViewFaqs, +ManageFaqs (19 permisos total)
+- FaqService (Application layer): CRUD + authorization + normalization + audit
+- FaqController (Http): thin, delegates to service
+- FaqNotFoundException (404), FaqDuplicateException (409), FaqInvalidQuestionException (422)
+- Routes: GET/POST api/v1/tenants/{tenant}/faqs, GET/PATCH/DELETE .../faqs/{faq}
+- Requests: FaqIndexRequest, StoreFaqRequest, UpdateFaqRequest
+- FaqResource (hides tenant_id, normalized_question, deleted_at)
+- Audit: faq.created, faq.updated, faq.deleted (safe payload)
+- 20 API tests (FAQ-API-01..20)
+- 6 permission tests (FAQ-PERM-01..06)
+- 10 multi-tenancy tests (FAQ-MT-U3-01..10)
+- 10 security tests (FAQ-SEC-U3-01..10)
+- 1170 passed, 13 skipped, 0 PHPStan errors, Pint clean
 
 ### U4 — FlowEngine Runtime Integration
 - **Estado**: NO INICIADA
