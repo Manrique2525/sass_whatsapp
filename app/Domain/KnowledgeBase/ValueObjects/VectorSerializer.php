@@ -29,7 +29,9 @@ final class VectorSerializer
     {
         self::validate($vector);
 
-        return '['.implode(',', $vector).']';
+        $serialized = array_map(fn (mixed $v): string => (string) (float) $v, $vector);
+
+        return '['.implode(',', $serialized).']';
     }
 
     /**

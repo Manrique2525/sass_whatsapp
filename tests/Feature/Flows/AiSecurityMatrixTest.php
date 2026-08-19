@@ -586,5 +586,6 @@ test('AI-SEC-F12: AI exceptions produce sanitized error in logs, no stack traces
     expect($payload['success'])->toBeFalse()
         ->and($payload['error'])->not->toContain('#0 ')
         ->and($payload['error'])->not->toContain('#1 ')
-        ->and($payload['error'])->not->toContain('Stack trace');
+        ->and($payload['error'])->not->toContain('Stack trace')
+        ->and($payload['error'])->toBeString();
 });

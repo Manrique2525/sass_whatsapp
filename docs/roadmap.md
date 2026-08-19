@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 EN PROGRESO** (U1+U2.1+U2.2+U2.3+U2.4+U3.1+U3.2+U3.3+U3.4+U3.5).
+Estado general: **FASE 17 COMPLETADA**.
 
 ## Fases
 
@@ -23,7 +23,7 @@ Estado general: **FASE 17 EN PROGRESO** (U1+U2.1+U2.2+U2.3+U2.4+U3.1+U3.2+U3.3+U
 | 14 | Triggers | COMPLETADA |
 | 15 | Transferencia a humano | COMPLETADA |
 | 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime + Telemetry + Security) | COMPLETADA |
-  | 17 | Base de conocimiento (RAG + pgvector) | EN PROGRESO (U1+U2.1+U2.2+U2.3+U2.4+U3.1+U3.2+U3.3+U3.4+U3.5) |
+  | 17 | Base de conocimiento (RAG + pgvector) | COMPLETADA |
 | 18 | FAQ inteligente | PENDIENTE |
 | 19 | Leads | PENDIENTE |
 | 20 | Tags | PENDIENTE |

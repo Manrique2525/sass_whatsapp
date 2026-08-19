@@ -16,6 +16,8 @@ use App\Application\Flows\Services\Executors\QuestionNodeExecutor;
 use App\Application\Flows\Services\Executors\TagNodeExecutor;
 use App\Application\Flows\Services\Executors\WebhookNodeExecutor;
 use App\Application\Flows\Services\NodeExecutorRegistry;
+use App\Application\KnowledgeBase\Contracts\KnowledgeSearchServiceInterface;
+use App\Application\KnowledgeBase\Services\KnowledgeSearchService;
 use App\Domain\AI\Contracts\AIProviderInterface;
 use App\Domain\AI\Contracts\EmbeddingProviderInterface;
 use App\Domain\Tenants\Models\Tenant;
@@ -58,6 +60,8 @@ class AppServiceProvider extends ServiceProvider
                 maxRetries: (int) config('ai.providers.openai.max_retries'),
             );
         });
+
+        $this->app->bind(KnowledgeSearchServiceInterface::class, KnowledgeSearchService::class);
 
         $this->app->bind(EmbeddingProviderInterface::class, function (): OpenAIEmbeddingProvider {
             $config = config('ai.embedding.providers.openai');

@@ -307,7 +307,7 @@ test('AI-U17: ai_failed log fallback_used false when no fallback configured', fu
 // ---------------------------------------------------------------------------
 // AI-U18: ai_failed log contains error message
 // ---------------------------------------------------------------------------
-test('AI-U18: ai_failed log contains error message', function (): void {
+test('AI-U18: ai_failed log contains sanitized error code', function (): void {
     $fake = new FakeAIProvider;
     $fake->withException(new ConnectionException('Connection refused'));
     $executor = make_telemetry_executor($fake);
@@ -321,7 +321,7 @@ test('AI-U18: ai_failed log contains error message', function (): void {
 
     $payload = get_latest_log($context, 'ai_failed');
 
-    expect($payload['error'])->toBe('Connection refused');
+    expect($payload['error'])->toBeString()->not->toContain('Connection refused');
 });
 
 // ---------------------------------------------------------------------------

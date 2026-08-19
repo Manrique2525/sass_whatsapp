@@ -161,7 +161,9 @@ final class DocumentUploadValidator
 
         $numEntries = $zip->numFiles;
 
-        if ($numEntries < 1 || $numEntries > 500) {
+        $maxEntries = (int) config('knowledge.extraction.docx_max_zip_entries', 500);
+
+        if ($numEntries < 1 || $numEntries > $maxEntries) {
             $zip->close();
             throw new DocumentInvalidFileException('DOCX tiene un número inesperado de entradas');
         }
@@ -176,7 +178,7 @@ final class DocumentUploadValidator
                 continue;
             }
 
-            if (str_starts_with($name, '../') || str_contains($name, '..')) {
+            if (str_starts_with($name, '../') || str_starts_with($name, '..\\') || $name === '..' || str_contains($name, '/../') || str_contains($name, '\\..\\')) {
                 $zip->close();
                 throw new DocumentInvalidFileException('DOCX contiene rutas peligrosas');
             }
@@ -216,11 +218,7 @@ final class DocumentUploadValidator
         }
 
         if (! mb_check_encoding($sample, 'UTF-8')) {
-            $cleaned = @mb_convert_encoding($sample, 'UTF-8', 'UTF-8');
-
-            if (! mb_check_encoding($cleaned, 'UTF-8')) {
-                throw new DocumentInvalidFileException('archivo no es UTF-8 válido');
-            }
+            throw new DocumentInvalidFileException('archivo no es UTF-8 válido');
         }
     }
 

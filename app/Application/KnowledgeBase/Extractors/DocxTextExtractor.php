@@ -109,7 +109,7 @@ final class DocxTextExtractor implements DocumentTextExtractorInterface
                 continue;
             }
 
-            if (str_starts_with($name, '../') || str_contains($name, '..')) {
+            if (str_starts_with($name, '../') || str_starts_with($name, '..\\') || $name === '..' || str_contains($name, '/../') || str_contains($name, '\\..\\')) {
                 $zip->close();
                 throw new DocumentExtractionFailedException('DOCX contiene rutas peligrosas');
             }
@@ -242,9 +242,9 @@ final class DocxTextExtractor implements DocumentTextExtractorInterface
             );
         }
 
-        if (preg_match('/SYSTEM/i', $xml) === 1) {
+        if (preg_match('/<!DOCTYPE[^>]*SYSTEM/i', $xml) === 1) {
             throw new DocumentExtractionFailedException(
-                'DOCX contiene referencia SYSTEM no permitida'
+                'DOCX contiene referencia DOCTYPE SYSTEM no permitida'
             );
         }
     }

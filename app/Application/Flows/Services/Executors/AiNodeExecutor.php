@@ -385,7 +385,7 @@ final class AiNodeExecutor implements NodeExecutorInterface
         string $error,
     ): void {
         $payload = $telemetry->toArray();
-        $payload['error'] = $error;
+        $payload['error'] = $this->sanitizeErrorCode($error);
 
         $context->execution->logs()->create([
             'tenant_id' => $context->tenant->id,
@@ -394,6 +394,27 @@ final class AiNodeExecutor implements NodeExecutorInterface
             'payload' => $payload,
             'sequence' => $this->nextSequence($context),
         ]);
+    }
+
+    private function sanitizeErrorCode(string $error): string
+    {
+        if (str_contains($error, 'rate_limit')) {
+            return 'rate_limit';
+        }
+
+        if (str_contains($error, 'timeout') || str_contains($error, 'cURL')) {
+            return 'provider_timeout';
+        }
+
+        if (str_contains($error, 'invalid_api_key') || str_contains($error, '401')) {
+            return 'auth_failed';
+        }
+
+        if (str_contains($error, 'dimension')) {
+            return 'dimension_mismatch';
+        }
+
+        return 'provider_error';
     }
 
     /**
