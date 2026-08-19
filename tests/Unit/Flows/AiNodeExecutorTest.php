@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Application\Flows\Services\AiPromptBuilder;
 use App\Application\Flows\Services\Executors\AiNodeExecutor;
+use App\Application\KnowledgeBase\Services\KnowledgeSearchService;
+use App\Domain\AI\Contracts\EmbeddingProviderInterface;
 use App\Domain\AI\Exceptions\AIAuthFailedException;
 use App\Domain\AI\Exceptions\AIRateLimitException;
 use App\Domain\AI\ValueObjects\AIRequest;
@@ -22,6 +24,7 @@ use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Tests\Fakes\FakeAIProvider;
+use Tests\Fakes\FakeEmbeddingProvider;
 
 uses(RefreshDatabase::class);
 
@@ -123,9 +126,13 @@ function make_executor(?FakeAIProvider $fake = null): AiNodeExecutor
 {
     $fake ??= new FakeAIProvider;
 
+    $embeddingFake = new FakeEmbeddingProvider;
+    app()->instance(EmbeddingProviderInterface::class, $embeddingFake);
+
     return new AiNodeExecutor(
         provider: $fake,
         promptBuilder: new AiPromptBuilder(new VariableResolver),
+        searchService: new KnowledgeSearchService($embeddingFake),
     );
 }
 

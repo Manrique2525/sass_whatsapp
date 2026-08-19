@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Application\Flows\Services\AiPromptBuilder;
 use App\Application\Flows\Services\Executors\AiNodeExecutor;
+use App\Application\KnowledgeBase\Services\KnowledgeSearchService;
+use App\Domain\AI\Contracts\EmbeddingProviderInterface;
 use App\Domain\Audit\Models\AuditLog;
 use App\Domain\Contacts\Models\Contact;
 use App\Domain\Conversations\Models\Conversation;
@@ -17,6 +19,7 @@ use App\Domain\Tenants\Models\Tenant;
 use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Fakes\FakeAIProvider;
+use Tests\Fakes\FakeEmbeddingProvider;
 
 uses(RefreshDatabase::class);
 
@@ -119,9 +122,13 @@ function make_sec_executor(?FakeAIProvider $fake = null): AiNodeExecutor
 {
     $fake ??= new FakeAIProvider;
 
+    $embeddingFake = new FakeEmbeddingProvider;
+    app()->instance(EmbeddingProviderInterface::class, $embeddingFake);
+
     return new AiNodeExecutor(
         provider: $fake,
         promptBuilder: new AiPromptBuilder(new VariableResolver),
+        searchService: new KnowledgeSearchService($embeddingFake),
     );
 }
 

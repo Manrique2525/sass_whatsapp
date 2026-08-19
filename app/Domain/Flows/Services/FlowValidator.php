@@ -516,6 +516,7 @@ final class FlowValidator
      * output_variable: required, VariableGuard-valid
      * system_prompt: nullable string, max length
      * fallback_message: nullable string, max length
+     * knowledge_base_id: nullable string, UUID format (FASE 17 U3.4)
      *
      * @param  array<string, mixed>  $config
      * @param  list<string>  $errors
@@ -555,6 +556,16 @@ final class FlowValidator
                 $errors[] = "El nodo \"{$name}\" (IA) tiene un 'fallback_message' inválido.";
             } elseif (strlen($fallbackMessage) > self::MAX_TEXT_LENGTH) {
                 $errors[] = "El nodo \"{$name}\" (IA) excede la longitud máxima de fallback_message.";
+            }
+        }
+
+        $knowledgeBaseId = $config['knowledge_base_id'] ?? null;
+
+        if ($knowledgeBaseId !== null) {
+            if (! is_string($knowledgeBaseId)) {
+                $errors[] = "El nodo \"{$name}\" (IA) tiene un 'knowledge_base_id' inválido.";
+            } elseif (! $this->isValidUuid($knowledgeBaseId)) {
+                $errors[] = "El nodo \"{$name}\" (IA) tiene un 'knowledge_base_id' con formato UUID inválido.";
             }
         }
     }
@@ -761,5 +772,10 @@ final class FlowValidator
     private function isNonEmptyString(mixed $value): bool
     {
         return is_string($value) && trim($value) !== '';
+    }
+
+    private function isValidUuid(string $value): bool
+    {
+        return preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $value) === 1;
     }
 }

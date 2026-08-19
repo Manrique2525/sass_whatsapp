@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Application\Flows\Services\Executors;
 
 use App\Application\Flows\Services\AiPromptBuilder;
+use App\Application\KnowledgeBase\Contracts\KnowledgeSearchServiceInterface;
 use App\Domain\AI\Contracts\AIProviderInterface;
 use App\Domain\AI\Enums\AIErrorCode;
 use App\Domain\AI\Exceptions\AIException;
@@ -14,6 +15,7 @@ use App\Domain\Flows\Enums\FlowNodeType;
 use App\Domain\Flows\Services\VariableGuard;
 use App\Domain\Flows\ValueObjects\NodeExecutionContext;
 use App\Domain\Flows\ValueObjects\NodeExecutionResult;
+use App\Domain\KnowledgeBase\ValueObjects\KnowledgeContext;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -23,29 +25,36 @@ use Illuminate\Support\Facades\Log;
  * - NO envía mensajes directamente al contacto
  * - NO implementa auto_send en U2
  * - NO llama OpenAIProvider directamente por tipo concreto
- * - Dependencia única: AIProviderInterface (contract del dominio)
+ * - Dependencia primaria: AIProviderInterface (contract del dominio)
+ * - Dependencia RAG: KnowledgeSearchService (FASE 17 U3.4)
  *
  * Semántica:
  * 1. Validar config runtime defensivamente
- * 2. Construir contexto AI tenant-safe
- * 3. Resolver prompt con VariableResolver
- * 4. Llamar AIProviderInterface
- * 5. Sanitizar/validar output
- * 6. Guardar output en execution.variables.custom
- * 7. Devolver NodeExecutionResult::continue()
- * 8. Aplicar fallback si provider falla
- * 9. NO enviar mensajes
- * 10. Registrar telemetría segura (sin PII) vía TelemetryPayload (U4)
+ * 2. Resolver knowledge context si knowledge_base_id configurado (RAG)
+ * 3. Construir contexto AI tenant-safe
+ * 4. Resolver prompt con VariableResolver
+ * 5. Llamar AIProviderInterface
+ * 6. Sanitizar/validar output
+ * 7. Guardar output en execution.variables.custom
+ * 8. Devolver NodeExecutionResult::continue()
+ * 9. Aplicar fallback si provider falla
+ * 10. NO enviar mensajes
+ * 11. Registrar telemetría segura (sin PII) vía TelemetryPayload (U4)
  *
  * Idempotencia: si el output_variable ya existe en custom y un log
  * ai_completed está registrado para este nodo, reutiliza el resultado
  * sin nueva llamada al provider (y sin duplicar telemetría).
+ *
+ * RAG (FASE 17 U3.4): si el nodo tiene knowledge_base_id configurado,
+ * recupera chunks semánticos y los inyecta como contexto no confiable
+ * en el prompt. Si la búsqueda falla, continúa sin RAG.
  */
 final class AiNodeExecutor implements NodeExecutorInterface
 {
     public function __construct(
         private readonly AIProviderInterface $provider,
         private readonly AiPromptBuilder $promptBuilder,
+        private readonly KnowledgeSearchServiceInterface $searchService,
     ) {}
 
     public function supports(): FlowNodeType
@@ -79,12 +88,15 @@ final class AiNodeExecutor implements NodeExecutorInterface
             return NodeExecutionResult::continue();
         }
 
+        $knowledgeContext = $this->resolveKnowledgeContext($config, $context);
+
         $aiRequest = $this->promptBuilder->build(
             $config,
             $context->contact,
             $context->business,
             $context->conversation,
             $context->custom,
+            $knowledgeContext,
         );
 
         $startNs = hrtime(true);
@@ -114,7 +126,7 @@ final class AiNodeExecutor implements NodeExecutorInterface
                 $latencyMs,
             );
 
-            $this->logAiCompleted($context, $telemetry, $outputVariable);
+            $this->logAiCompleted($context, $telemetry, $outputVariable, $knowledgeContext);
 
             return NodeExecutionResult::continue();
 
@@ -163,6 +175,91 @@ final class AiNodeExecutor implements NodeExecutorInterface
         }
 
         return $normalized;
+    }
+
+    /**
+     * Resuelve el contexto de conocimiento RAG si knowledge_base_id está configurado (FASE 17 U3.4).
+     *
+     * Si la búsqueda falla por error interno: retorna null (continue without RAG).
+     * Nunca lanza excepción — RAG es enriquecimiento opcional.
+     *
+     * @param  array<string, mixed>  $config
+     */
+    private function resolveKnowledgeContext(
+        array $config,
+        NodeExecutionContext $context,
+    ): ?KnowledgeContext {
+        $knowledgeBaseId = $config['knowledge_base_id'] ?? null;
+
+        if (! is_string($knowledgeBaseId) || $knowledgeBaseId === '') {
+            return null;
+        }
+
+        $query = $this->resolveSearchQuery($config, $context);
+
+        if ($query === '') {
+            return null;
+        }
+
+        try {
+            $result = $this->searchService->search(
+                tenantId: $context->tenant->id,
+                knowledgeBaseId: $knowledgeBaseId,
+                query: $query,
+            );
+
+            if ($result->isEmpty()) {
+                Log::info('RAG search returned empty results', [
+                    'execution_id' => $context->execution->id,
+                    'node_id' => $context->node->id,
+                    'knowledge_base_id' => $knowledgeBaseId,
+                ]);
+
+                return null;
+            }
+
+            return new KnowledgeContext(
+                chunks: $result->chunks,
+                totalCount: $result->totalCount,
+                searchDurationMs: $result->searchDurationMs,
+            );
+
+        } catch (\Throwable $e) {
+            Log::warning('RAG search failed, continuing without knowledge context', [
+                'execution_id' => $context->execution->id,
+                'node_id' => $context->node->id,
+                'knowledge_base_id' => $knowledgeBaseId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Resuelve la query de búsqueda semántica: usa el prompt USER resuelto por VariableResolver.
+     *
+     * @param  array<string, mixed>  $config
+     */
+    private function resolveSearchQuery(
+        array $config,
+        NodeExecutionContext $context,
+    ): string {
+        $resolvedPrompt = $this->promptBuilder->resolvePromptOnly(
+            (string) ($config['prompt'] ?? ''),
+            $context->contact,
+            $context->business,
+            $context->conversation,
+            $context->custom,
+        );
+
+        $trimmed = trim($resolvedPrompt);
+
+        if ($trimmed === '') {
+            return '';
+        }
+
+        return mb_substr($trimmed, 0, 2000);
     }
 
     /**
@@ -220,9 +317,13 @@ final class AiNodeExecutor implements NodeExecutorInterface
         NodeExecutionContext $context,
         TelemetryPayload $telemetry,
         string $outputVariable,
+        ?KnowledgeContext $knowledgeContext = null,
     ): void {
         $payload = $telemetry->toArray();
         $payload['output_variable'] = $outputVariable;
+        $ragUsed = $knowledgeContext !== null && ! $knowledgeContext->isEmpty();
+        $payload['rag_used'] = $ragUsed;
+        $payload['retrieved_chunks_count'] = $ragUsed ? $knowledgeContext->totalCount : 0;
 
         $context->execution->logs()->create([
             'tenant_id' => $context->tenant->id,

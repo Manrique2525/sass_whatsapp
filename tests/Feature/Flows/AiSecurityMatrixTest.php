@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Application\Flows\Services\AiPromptBuilder;
 use App\Application\Flows\Services\Executors\AiNodeExecutor;
+use App\Application\KnowledgeBase\Contracts\KnowledgeSearchServiceInterface;
 use App\Domain\AI\Contracts\AIProviderInterface;
 use App\Domain\Audit\Models\AuditLog;
 use App\Domain\Contacts\Models\Contact;
@@ -21,6 +22,7 @@ use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Tests\Fakes\FakeAIProvider;
+use Tests\Fakes\FakeKnowledgeSearchService;
 
 uses(RefreshDatabase::class);
 
@@ -113,6 +115,7 @@ function sec_executor(?FakeAIProvider $fake = null): AiNodeExecutor
     return new AiNodeExecutor(
         provider: $fake,
         promptBuilder: new AiPromptBuilder(new VariableResolver),
+        searchService: new FakeKnowledgeSearchService,
     );
 }
 
@@ -463,15 +466,17 @@ test('AI-SEC-F09: bot_paused prevents provider invocation completely', function 
 // ---------------------------------------------------------------------------
 // AI-SEC-F10: Provider is AIProviderInterface, not concrete OpenAI
 // ---------------------------------------------------------------------------
-test('AI-SEC-F10: AiNodeExecutor depends only on AIProviderInterface, not OpenAIProvider', function (): void {
+test('AI-SEC-F10: AiNodeExecutor depends only on AIProviderInterface and KnowledgeSearchServiceInterface', function (): void {
     $reflection = new ReflectionClass(AiNodeExecutor::class);
     $constructor = $reflection->getConstructor();
     $parameters = $constructor->getParameters();
 
     $providerParam = $parameters[0];
+    $searchServiceParam = $parameters[2];
 
     expect($providerParam->getType()->getName())->toBe(AIProviderInterface::class)
-        ->and($providerParam->getType()->getName())->not->toBe('App\Infrastructure\AI\OpenAIProvider');
+        ->and($providerParam->getType()->getName())->not->toBe('App\Infrastructure\AI\OpenAIProvider')
+        ->and($searchServiceParam->getType()->getName())->toBe(KnowledgeSearchServiceInterface::class);
 });
 
 // ---------------------------------------------------------------------------

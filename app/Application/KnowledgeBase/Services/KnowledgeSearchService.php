@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Application\KnowledgeBase\Services;
 
+use App\Application\KnowledgeBase\Contracts\KnowledgeSearchServiceInterface;
 use App\Domain\AI\Contracts\EmbeddingProviderInterface;
 use App\Domain\AI\ValueObjects\EmbeddingRequest;
 use App\Domain\KnowledgeBase\Models\KnowledgeBase;
@@ -21,7 +22,7 @@ use InvalidArgumentException;
  * NO construye prompts. NO toca FlowEngine ni AiNodeExecutor.
  * NO crea endpoints HTTP. Consumido internamente por U3.4+.
  */
-final class KnowledgeSearchService
+final class KnowledgeSearchService implements KnowledgeSearchServiceInterface
 {
     public function __construct(
         private EmbeddingProviderInterface $embeddingProvider,

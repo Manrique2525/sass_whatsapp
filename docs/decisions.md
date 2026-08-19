@@ -1718,3 +1718,44 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
     en suite separada.
   - DDL = NONE. Config `knowledge.search` añadida.
   - No expone HTTP. Consumido por U3.4+ internamente.
+
+## ADR-068 · RAG Context Injection into AI Node (FASE 17 U3.4)
+
+- **Fecha**: 2026-08-19
+- **Estado**: ACEPTADO
+- **Contexto**: U3.3 provee búsqueda semántica (`KnowledgeSearchService`). U3.4 integra
+  los resultados como contexto no confiable en el prompt del nodo AI. El contexto RAG
+  debe tratarse como **datos de terceros**: nunca contaminar el system prompt, nunca
+  exponer scores/vectors, nunca fallar la ejecución AI si la búsqueda falla.
+- **Decisión**:
+  - **KnowledgeSearchServiceInterface**: interfaz minimalista `search()` extraída del
+    servicio concreto. Permite inyección de dependencias y testing con fakes sin
+    depender de la clase `final`.
+  - **KnowledgeContext VO**: inmutable, transporta chunks + totalCount + searchDurationMs.
+    `KnowledgeContext::empty()` factory. Sin embeddings vectors, sin API keys.
+  - **Execution flow**: bot_paused → idempotency check → **resolve knowledge context**
+    → build prompt → call AI → persist → log. RAG search ocurre DESPUÉS de idempotency
+    (evita searches innecesarios en replay).
+  - **Search failure policy**: continue without RAG (fail-open). Si KnowledgeSearchService
+    lanza excepción → log warning → null context → AI ejecuta sin contexto RAG.
+    Razón: RAG es enriquecimiento opcional, no debe bloquear funcionalidad core.
+  - **Search query**: prompt USER resuelto por VariableResolver, truncado a 2000 chars.
+    Variables `{{custom.*}}` se resuelven antes de la búsqueda semántica.
+  - **Untrusted delimiter**: `--- KNOWLEDGE CONTEXT (UNTRUSTED DATA) ---` /
+    `--- END KNOWLEDGE CONTEXT ---`. Chunks son texto plano, nunca se inyecta en
+    system_prompt. Separación clara entre datos confiables (system) y no confiables.
+  - **Prompt truncation**: MAX_PROMPT_LENGTH = 8000 chars. Knowledge context se incluye
+    en el conteo total. No corta chunks a mitad.
+  - **Telemetry**: `logAiCompleted()` incluye `rag_used` (bool) y
+    `retrieved_chunks_count` (int). Nunca incluye chunk content, scores, vectors,
+    ni searchDurationMs.
+  - **FlowValidator**: `knowledge_base_id` validado como nullable string, formato UUID.
+    Validación structural, no de existencia.
+  - **No DDL**: `knowledge_base_id` vive en `flow_nodes.config` JSONB. No FK.
+  - **No frontend**: U3.5 agregará selector de KB en AiNodeConfig.
+- **Consecuencias**:
+  - 31 tests nuevos: 15 feature (RAG-AI-01..15) + 8 unit (RAG-PROMPT-01..08) + 8 security (RAG-SEC-01..08).
+  - Tests existentes actualizados (AI-SEC-F10, AI-U25, make_executor helpers en 5 archivos).
+  - FakeKnowledgeSearchService para testing controlado sin PostgreSQL.
+  - KnowledgeSearchService implementa KnowledgeSearchServiceInterface (additive, no break).
+  - DDL = NONE. Config = NONE (search config ya existe de U3.3).

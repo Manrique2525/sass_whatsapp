@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 EN PROGRESO** (U1+U2.1+U2.2+U2.3+U2.4+U3.1+U3.2+U3.3).
+Estado general: **FASE 17 EN PROGRESO** (U1+U2.1+U2.2+U2.3+U2.4+U3.1+U3.2+U3.3+U3.4).
 
 ## Fases
 
@@ -23,7 +23,7 @@ Estado general: **FASE 17 EN PROGRESO** (U1+U2.1+U2.2+U2.3+U2.4+U3.1+U3.2+U3.3).
 | 14 | Triggers | COMPLETADA |
 | 15 | Transferencia a humano | COMPLETADA |
 | 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime + Telemetry + Security) | COMPLETADA |
-  | 17 | Base de conocimiento (RAG + pgvector) | EN PROGRESO (U1+U2.1+U2.2+U2.3+U2.4+U3.1+U3.2+U3.3) |
+  | 17 | Base de conocimiento (RAG + pgvector) | EN PROGRESO (U1+U2.1+U2.2+U2.3+U2.4+U3.1+U3.2+U3.3+U3.4) |
 | 18 | FAQ inteligente | PENDIENTE |
 | 19 | Leads | PENDIENTE |
 | 20 | Tags | PENDIENTE |
@@ -1738,6 +1738,73 @@ COMPLETADO — commit 274b93a. NO PUSH.
 #### ADRs
 
 ADR-067 (Semantic Search Service)
+
+#### ESTADO
+COMPLETADO — commit dbfe11c. NO PUSH.
+
+---
+
+### FASE 17 — UNIDAD 3.4: AI Node RAG Context Injection
+
+**Objetivo**: Integrar resultados de búsqueda semántica (U3.3) como contexto no confiable en el prompt del nodo AI, permitiendo que los chatbots respondan con conocimiento de la base de documentos del tenant.
+
+#### Archivos creados
+
+- `app/Domain/KnowledgeBase/ValueObjects/KnowledgeContext.php` — VO inmutable: chunks, totalCount, searchDurationMs + `KnowledgeContext::empty()` factory
+- `app/Application/KnowledgeBase/Contracts/KnowledgeSearchServiceInterface.php` — interfaz minimalista para DI y testing
+- `tests/Fakes/FakeKnowledgeSearchService.php` — fake configurable para testing sin PostgreSQL
+- `tests/Feature/Flows/RagContextInjectionTest.php` — 15 tests (RAG-AI-01..15)
+- `tests/Feature/Flows/RagSecurityTest.php` — 8 tests (RAG-SEC-01..08)
+- `tests/Unit/Flows/AiPromptBuilderKnowledgeTest.php` — 8 tests (RAG-PROMPT-01..08)
+
+#### Archivos modificados
+
+- `app/Application/Flows/Services/Executors/AiNodeExecutor.php` — +KnowledgeSearchServiceInterface DI, +resolveKnowledgeContext(), +resolveSearchQuery(), RAG telemetry in logAiCompleted()
+- `app/Application/Flows/Services/AiPromptBuilder.php` — +knowledgeContext param en build(), +buildKnowledgeContextBlock(), +formatChunk(), +resolvePromptOnly()
+- `app/Application/KnowledgeBase/Services/KnowledgeSearchService.php` — implementa KnowledgeSearchServiceInterface (additive)
+- `app/Domain/Flows/Services/FlowValidator.php` — +knowledge_base_id nullable UUID validation, +isValidUuid()
+- `tests/Unit/Flows/AiNodeExecutorTest.php` — updated make_executor() for 3-param constructor
+- `tests/Unit/Flows/AiTelemetryTest.php` — updated make_telemetry_executor(), AI-U25 expected keys
+- `tests/Feature/Flows/AiTenantIsolationTest.php` — updated make_mt_executor()
+- `tests/Feature/Flows/AiSecurityTest.php` — updated make_sec_executor()
+- `tests/Feature/Flows/AiSecurityMatrixTest.php` — updated sec_executor(), AI-SEC-F10 index [2]
+
+#### Arquitectura
+
+- **KnowledgeSearchServiceInterface**: contract minimalista extraído del servicio concreto. Permite DI y testing con fakes sin depender de clase `final`.
+- **KnowledgeContext VO**: inmutable, transporta chunks + totalCount + searchDurationMs. Nunca contiene vectors ni API keys.
+- **Execution flow**: bot_paused → idempotency → resolve knowledge → build prompt → AI → persist → log. RAG search DESPUÉS de idempotency.
+- **Search failure policy**: fail-open. Excepción → log warning → null context → AI sin RAG.
+- **Search query**: prompt resuelto por VariableResolver, truncado a 2000 chars.
+- **Untrusted delimiter**: `--- KNOWLEDGE CONTEXT (UNTRUSTED DATA) ---`. Chunks son datos, nunca en system_prompt.
+- **Telemetry**: `rag_used` (bool) + `retrieved_chunks_count` (int). Nunca chunk content, scores, vectors.
+- **FlowValidator**: `knowledge_base_id` nullable UUID validation. No FK, JSONB config.
+
+#### Tests
+
+31 tests nuevos:
+- **RAG-AI-01..15** (feature): sin KB unchanged, con KB llama search, chunks en prompt, orden preservado, empty retrieval, deleted/invalid KB, cross-tenant, bot_paused, idempotency, fallback, variables resolved, max context, no scores, output variable.
+- **RAG-PROMPT-01..08** (unit): no context, block placement, untrusted delimiter, multiple chunks, unicode, malicious as text, system not contaminated, empty context.
+- **RAG-SEC-01..08** (security): malicious chunk as text, no system override, no API key in system, no webhook token, no storage path, no vector, no audit secrets, no cross-tenant.
+
+#### SEGURIDAD
+
+- Chunks treated as untrusted data (ADR-068)
+- Knowledge context never enters system prompt
+- Similarity scores/vectors never exposed
+- No new DDL — knowledge_base_id in JSONB config
+- Telemetry includes only rag_used + chunk count
+
+#### Puertas
+
+- phpunit: 91 tests PASS (222 assertions) — all AI + RAG tests
+- pint: PASS
+- phpstan: 0 errores
+- composer audit: clean
+
+#### ADRs
+
+ADR-068 (RAG Context Injection into AI Node)
 
 #### ESTADO
 COMPLETADO — pendiente commit. NO PUSH.

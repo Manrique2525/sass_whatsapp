@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Application\Flows\Services\AiPromptBuilder;
 use App\Application\Flows\Services\Executors\AiNodeExecutor;
+use App\Application\KnowledgeBase\Services\KnowledgeSearchService;
+use App\Domain\AI\Contracts\EmbeddingProviderInterface;
 use App\Domain\AI\Exceptions\AIAuthFailedException;
 use App\Domain\AI\Exceptions\AIRateLimitException;
 use App\Domain\Contacts\Models\Contact;
@@ -20,6 +22,7 @@ use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Tests\Fakes\FakeAIProvider;
+use Tests\Fakes\FakeEmbeddingProvider;
 
 uses(RefreshDatabase::class);
 
@@ -110,9 +113,13 @@ function make_telemetry_executor(?FakeAIProvider $fake = null): AiNodeExecutor
 {
     $fake ??= new FakeAIProvider;
 
+    $embeddingFake = new FakeEmbeddingProvider;
+    app()->instance(EmbeddingProviderInterface::class, $embeddingFake);
+
     return new AiNodeExecutor(
         provider: $fake,
         promptBuilder: new AiPromptBuilder(new VariableResolver),
+        searchService: new KnowledgeSearchService($embeddingFake),
     );
 }
 
@@ -476,7 +483,7 @@ test('AI-U25: ai_completed payload has exactly the safe schema keys plus output_
     $expectedKeys = [
         'operation', 'provider', 'model', 'input_tokens', 'output_tokens',
         'total_tokens', 'latency_ms', 'success', 'error_code', 'fallback_used',
-        'output_variable',
+        'output_variable', 'rag_used', 'retrieved_chunks_count',
     ];
 
     expect($keys)->toBe($expectedKeys);

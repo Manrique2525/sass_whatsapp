@@ -9,6 +9,8 @@ use App\Domain\Business\Models\BusinessProfile;
 use App\Domain\Contacts\Models\Contact;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Flows\Services\VariableResolver;
+use App\Domain\KnowledgeBase\ValueObjects\KnowledgeContext;
+use App\Domain\KnowledgeBase\ValueObjects\RetrievedChunk;
 
 /**
  * Construye el prompt para el nodo AI separando conceptualmente
@@ -17,10 +19,14 @@ use App\Domain\Flows\Services\VariableResolver;
  * Separación de responsabilidades:
  * - SYSTEM: instrucciones de plataforma + configuración del negocio
  * - CONTEXT: datos del contacto, negocio y custom vars
+ * - KNOWLEDGE: contexto RAG no confiable (FASE 17 U3.4, ADR-068)
  * - USER: prompt del nodo resuelto con VariableResolver
  *
  * Nunca mezcla datos del contacto dentro de system instructions
  * sin delimitación clara.
+ *
+ * El contexto de conocimiento (RAG) se trata como DATOS NO CONFIABLES.
+ * Nunca se inyecta en system_prompt. Los chunks son texto plano del usuario.
  */
 final class AiPromptBuilder
 {
@@ -53,6 +59,7 @@ EOT;
         BusinessProfile $business,
         Conversation $conversation,
         array $custom,
+        ?KnowledgeContext $knowledgeContext = null,
     ): AIRequest {
         $systemPrompt = $this->buildSystemPrompt(
             $nodeConfig['system_prompt'] ?? null,
@@ -68,9 +75,18 @@ EOT;
 
         $contextBlock = $this->buildContextBlock($contact, $business, $custom);
 
-        $userMessage = $contextBlock !== ''
-            ? $contextBlock."\n\n---\n\n".$resolvedPrompt
-            : $resolvedPrompt;
+        $knowledgeBlock = $this->buildKnowledgeContextBlock($knowledgeContext);
+
+        $parts = [];
+        if ($contextBlock !== '') {
+            $parts[] = $contextBlock;
+        }
+        if ($knowledgeBlock !== '') {
+            $parts[] = $knowledgeBlock;
+        }
+        $parts[] = $resolvedPrompt;
+
+        $userMessage = implode("\n\n---\n\n", $parts);
 
         $userMessage = $this->truncate($userMessage, self::MAX_PROMPT_LENGTH);
 
@@ -147,5 +163,58 @@ EOT;
         }
 
         return mb_substr($text, 0, $maxLength).'...';
+    }
+
+    /**
+     * Resuelve el prompt del nodo con VariableResolver sin construir el AIRequest completo (FASE 17 U3.4).
+     *
+     * Usado por AiNodeExecutor para obtener la query de búsqueda semántica.
+     *
+     * @param  array<string, mixed>  $custom
+     */
+    public function resolvePromptOnly(
+        string $promptTemplate,
+        Contact $contact,
+        BusinessProfile $business,
+        Conversation $conversation,
+        array $custom,
+    ): string {
+        return $this->resolver->resolve(
+            $promptTemplate,
+            $contact,
+            $business,
+            $conversation,
+            $custom,
+        );
+    }
+
+    /**
+     * Construye el bloque de contexto de conocimiento RAG (FASE 17 U3.4).
+     *
+     * Los chunks se tratan como DATOS NO CONFIABLES.
+     * Delimitador explícito para que el modelo los distinga de instrucciones.
+     *
+     * @return string Bloque formateado o '' si no hay contexto.
+     */
+    private function buildKnowledgeContextBlock(?KnowledgeContext $knowledgeContext): string
+    {
+        if ($knowledgeContext === null || $knowledgeContext->isEmpty()) {
+            return '';
+        }
+
+        $lines = ['--- KNOWLEDGE CONTEXT (UNTRUSTED DATA) ---'];
+
+        foreach ($knowledgeContext->chunks as $chunk) {
+            $lines[] = $this->formatChunk($chunk);
+        }
+
+        $lines[] = '--- END KNOWLEDGE CONTEXT ---';
+
+        return implode("\n\n", $lines);
+    }
+
+    private function formatChunk(RetrievedChunk $chunk): string
+    {
+        return $chunk->content;
     }
 }
