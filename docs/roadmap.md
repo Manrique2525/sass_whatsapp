@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 EN PROGRESO** (U1 completa, U2.1 completa).
+Estado general: **FASE 17 EN PROGRESO** (U1 completa, U2.1 completa, U2.2 completa, U2.3 completa).
 
 ## Fases
 
@@ -23,7 +23,7 @@ Estado general: **FASE 17 EN PROGRESO** (U1 completa, U2.1 completa).
 | 14 | Triggers | COMPLETADA |
 | 15 | Transferencia a humano | COMPLETADA |
 | 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime + Telemetry + Security) | COMPLETADA |
-  | 17 | Base de conocimiento (RAG + pgvector) | EN PROGRESO (U1+U2.1) |
+  | 17 | Base de conocimiento (RAG + pgvector) | EN PROGRESO (U1+U2.1+U2.2+U2.3) |
 | 18 | FAQ inteligente | PENDIENTE |
 | 19 | Leads | PENDIENTE |
 | 20 | Tags | PENDIENTE |
@@ -1404,6 +1404,68 @@ Soft-deleted docs permiten re-upload.
 #### ADRs
 
 ADR-061 (Private Knowledge Document Storage)
+
+#### ESTADO
+COMPLETADO — pendiente commit. NO PUSH.
+
+### FASE 17 — UNIDAD 2.3: Safe Text Extraction + Normalization + Chunking + PDF
+
+#### Archivos creados
+
+- `app/Application/KnowledgeBase/Extractors/PlainTextExtractor.php` — Extractor de texto plano UTF-8
+- `app/Application/KnowledgeBase/Extractors/DocxTextExtractor.php` — Extractor DOCX vía XML parsing
+- `app/Application/KnowledgeBase/Extractors/PdfTextExtractor.php` — Extractor PDF vía smalot/pdfparser
+- `app/Application/KnowledgeBase/Extractors/DocumentTextExtractorFactory.php` — Factory por MIME type
+- `app/Application/KnowledgeBase/Services/TextNormalizer.php` — Normalización UTF-8, CRLF, whitespace
+- `app/Application/KnowledgeBase/Services/DocumentChunker.php` — Chunking por párrafos con overlap
+- `app/Application/KnowledgeBase/Services/ChunkPersistenceService.php` — Persistencia de chunks
+- `app/Domain/KnowledgeBase/ValueObjects/ExtractedText.php` — Value Object: text + characterCount + metadata
+- `app/Domain/KnowledgeBase/ValueObjects/DocumentTextExtractorInterface.php` — Interfaz de extractors
+- `app/Domain/KnowledgeBase/Exceptions/DocumentExtractionFailedException.php` — Excepción de extracción
+- `app/Domain/KnowledgeBase/Exceptions/DocumentTextTooLargeException.php` — Texto excede límite
+- `tests/Unit/KnowledgeBase/PlainTextExtractorTest.php` — 10 tests (EXT-TXT-01..10)
+- `tests/Unit/KnowledgeBase/DocxTextExtractorTest.php` — 12 tests (EXT-DOCX-01..12)
+- `tests/Unit/KnowledgeBase/PdfTextExtractorTest.php` — 12 tests (EXT-PDF-01..12)
+- `tests/Unit/KnowledgeBase/TextNormalizerTest.php` — 11 tests (NORM-01..11)
+- `tests/Unit/KnowledgeBase/DocumentChunkerTest.php` — 15 tests (CHUNK-01..15)
+- `tests/Feature/KnowledgeBase/ChunkPersistenceTest.php` — 7 tests
+- `tests/Feature/KnowledgeBase/ExtractionPipelineTest.php` — 4 tests
+
+#### Archivos modificados
+
+- `config/knowledge.php` — extraction + chunking configuration
+- `composer.json` — +smalot/pdfparser:^2.12
+- `composer.lock` — smalot/pdfparser v2.12.0
+
+#### Funcionalidad
+
+- **PlainTextExtractor**: UTF-8 validation/sanitize, BOM strip, null byte reject, binary reject
+- **DocxTextExtractor**: ZIP bomb protection (500 entries, 50MB uncompressed, 100:1 ratio), XML entity injection protection, Zip Slip protection
+- **PdfTextExtractor**: smalot/pdfparser para extracción de texto plano, error handling seguro (no leak internal exceptions)
+- **DocumentTextExtractorFactory**: Resolución por MIME type, extensible
+- **TextNormalizer**: CRLF→LF, null bytes strip, control chars strip, Unicode NFC, whitespace collapse, trim, size validation
+- **DocumentChunker**: Split por párrafos → oraciones → caracteres, overlap configurable, merge de chunks pequeños, max chunks limit
+- **ChunkPersistenceService**: Replace atómico de chunks, tenant_id server-side, metadata handling
+
+#### Tests
+
+- 84 unit tests (10 TXT + 12 DOCX + 12 PDF + 11 NORM + 15 CHUNK + 24 factory/edge)
+- 11 feature tests (7 ChunkPersistence + 4 ExtractionPipeline)
+- Total U2.3: 95 tests, todos green
+- Regression total FASE 17: 144 passed (1 skipped — PostgreSQL)
+
+#### Puertas
+
+- php artisan test: 144/144 PASS (1 skipped)
+- phpstan: 0 errores (303 files)
+- pint: PASS
+- npm test: pendiente
+- vue-tsc: pendiente
+- vite build: pendiente
+
+#### ADRs
+
+ADR-063: Text Extraction Architecture (pendiente — decide durante commit)
 
 #### ESTADO
 COMPLETADO — pendiente commit. NO PUSH.

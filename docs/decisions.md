@@ -1532,5 +1532,36 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - U3 (embeddings) actualizará chunks existentes con `embedding IS NULL`.
   - `ChunkPersistenceService` inserta `embedding=NULL` (pre-embedding stage).
   - HNSW index preservado. vector(1536) preservado. Solo cambia nullability.
-  - 7 tests PG: EMB-NULL-PG-01..07 (nullable, insert NULL, insert valid, HNSW, cosine_ops,
-    UP/DOWN/UP, DOWN safety).
+   - 7 tests PG: EMB-NULL-PG-01..07 (nullable, insert NULL, insert valid, HNSW, cosine_ops,
+     UP/DOWN/UP, DOWN safety).
+
+## ADR-063: Text Extraction Architecture (FASE 17 U2.3)
+
+- **Fecha**: 2026-08-19
+- **Estado**: ACEPTADO
+- **Contexto**: U2.2 completó upload de documentos (PDF, DOCX, TXT) con validación de seguridad.
+  U2.3 debe extraer texto plano de documentos subidos para chunking posterior y persistencia.
+- **Decisión**:
+  - **Factory pattern**: `DocumentTextExtractorFactory` resuelve extractor por MIME type.
+    Extensible para futuros formatos (HTML, XLSX, etc.).
+  - **PlainTextExtractor**: Validación UTF-8 via `preg_match` (no `mb_check_encoding` que es
+    platform-dependent). BOM strip. Null byte reject. Binary reject. Sanitize inválidos
+    en vez de fallar (mejor-output-than-no-output).
+  - **DocxTextExtractor**: XML parsing directo de `word/document.xml`. Triple defensa:
+    ZIP bomb (500 entries, 50MB uncompressed, 100:1 ratio), XML entity injection,
+    Zip Slip paths.
+  - **PdfTextExtractor**: `smalot/pdfparser v2.12.0` via temp file. No expone excepciones
+    internas del parser. Pre-check de `max_extracted_text_size` en raw content para evitar
+    crashes del parser con strings enormes (regex limit).
+  - **TextNormalizer**: Pipeline CRLF→LF, null strip, control chars strip, Unicode NFC,
+    whitespace collapse, trim. Validación de tamaño post-normalización.
+  - **DocumentChunker**: Split párrafos → oraciones → caracteres. Overlap configurable.
+    Merge de chunks pequeños. Max chunks limit.
+  - **ChunkPersistenceService**: Replace atómico de chunks por documento. Tenant_id server-side.
+  - **Value Objects**: `ExtractedText` (text + characterCount + metadata), `DocumentChunk`
+    (content + chunkIndex + tokenCount).
+- **Consecuencias**:
+  - 95 tests U2.3 (84 unit + 11 feature). PHPStan 0 errors. Pint clean.
+  - Factory extensible: agregar nuevo extractor = 1 clase + 1 línea en factory.
+  - PDF parsing con dependencia externa (`smalot/pdfparser`). Actualizada en composer.json.
+  - Parser type hint: `Document` (no `PDF`) — smalot v2 usa `Document` como retorno.

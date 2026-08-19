@@ -31,6 +31,9 @@ final class DocumentUploadValidator
         'docx' => ['PK', 0],
     ];
 
+    /**
+     * @param  array{max_file_size: int, allowed_extensions: list<string>, allowed_mime_types: list<string>}  $config
+     */
     public function validate(UploadedFile $file, array $config): void
     {
         $this->validateFileSize($file, $config['max_file_size']);
@@ -75,6 +78,9 @@ final class DocumentUploadValidator
         }
     }
 
+    /**
+     * @param  list<string>  $allowed
+     */
     private function validateExtension(UploadedFile $file, array $allowed): void
     {
         $ext = strtolower($file->getClientOriginalExtension());
@@ -84,6 +90,9 @@ final class DocumentUploadValidator
         }
     }
 
+    /**
+     * @param  list<string>  $allowed
+     */
     private function validateMimeType(UploadedFile $file, array $allowed): void
     {
         $serverMime = $this->detectServerMime($file);
@@ -206,12 +215,10 @@ final class DocumentUploadValidator
             throw new DocumentInvalidFileException('archivo binario detectado como texto');
         }
 
-        $decoded = mb_convert_encoding($sample, 'UTF-8', 'UTF-8');
+        if (! mb_check_encoding($sample, 'UTF-8')) {
+            $cleaned = @mb_convert_encoding($sample, 'UTF-8', 'UTF-8');
 
-        if ($decoded === false || $decoded !== $sample) {
-            $cleaned = @iconv('UTF-8', 'UTF-8//IGNORE', $sample);
-
-            if ($cleaned === false || $cleaned !== $sample) {
+            if (! mb_check_encoding($cleaned, 'UTF-8')) {
                 throw new DocumentInvalidFileException('archivo no es UTF-8 válido');
             }
         }

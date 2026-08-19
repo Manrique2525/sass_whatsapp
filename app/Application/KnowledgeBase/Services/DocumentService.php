@@ -6,6 +6,7 @@ namespace App\Application\KnowledgeBase\Services;
 
 use App\Application\Audit\Services\AuditLogger;
 use App\Application\Users\Services\AuthorizationService;
+use App\Domain\KnowledgeBase\Enums\KnowledgeDocumentStatus;
 use App\Domain\KnowledgeBase\Exceptions\DocumentDuplicateException;
 use App\Domain\KnowledgeBase\Exceptions\DocumentNotFoundException;
 use App\Domain\KnowledgeBase\Exceptions\DocumentStorageFailedException;
@@ -92,8 +93,6 @@ final class DocumentService
         $storagePath = $this->buildStoragePath($tenant->id, $knowledgeBase->id, $documentId, $extension);
         $disk = $config['storage_disk'];
 
-        $storageWritten = false;
-
         try {
             $path = $file->storeAs(
                 dirname($storagePath),
@@ -104,8 +103,6 @@ final class DocumentService
             if ($path === false) {
                 throw new DocumentStorageFailedException('Storage retornó falso.');
             }
-
-            $storageWritten = true;
 
             $document = $this->createDocumentRow(
                 tenantId: $tenant->id,
@@ -119,17 +116,13 @@ final class DocumentService
                 fileHash: $fileHash,
             );
         } catch (PDOException|QueryException) {
-            if ($storageWritten) {
-                Storage::disk($disk)->delete($storagePath);
-            }
+            Storage::disk($disk)->delete($storagePath);
 
             throw new DocumentStorageFailedException('Error al persistir el registro.');
         } catch (DocumentStorageFailedException $e) {
             throw $e;
-        } catch (\Exception $e) {
-            if ($storageWritten) {
-                Storage::disk($disk)->delete($storagePath);
-            }
+        } catch (\Exception) {
+            Storage::disk($disk)->delete($storagePath);
 
             throw new DocumentStorageFailedException;
         }
@@ -247,7 +240,7 @@ final class DocumentService
             $document->mime_type = $mimeType;
             $document->file_size = $fileSize;
             $document->file_hash = $fileHash;
-            $document->status = 'uploaded';
+            $document->status = KnowledgeDocumentStatus::Uploaded;
             $document->chunk_count = 0;
             $document->save();
 
