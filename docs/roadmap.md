@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 EN PROGRESO** (U1+U2.1+U2.2+U2.3+U2.4 completas).
+Estado general: **FASE 17 EN PROGRESO** (U1+U2.1+U2.2+U2.3+U2.4+U3.1+U3.2+U3.3).
 
 ## Fases
 
@@ -23,7 +23,7 @@ Estado general: **FASE 17 EN PROGRESO** (U1+U2.1+U2.2+U2.3+U2.4 completas).
 | 14 | Triggers | COMPLETADA |
 | 15 | Transferencia a humano | COMPLETADA |
 | 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime + Telemetry + Security) | COMPLETADA |
-  | 17 | Base de conocimiento (RAG + pgvector) | EN PROGRESO (U1+U2.1+U2.2+U2.3+U2.4) |
+  | 17 | Base de conocimiento (RAG + pgvector) | EN PROGRESO (U1+U2.1+U2.2+U2.3+U2.4+U3.1+U3.2+U3.3) |
 | 18 | FAQ inteligente | PENDIENTE |
 | 19 | Leads | PENDIENTE |
 | 20 | Tags | PENDIENTE |
@@ -1680,6 +1680,64 @@ COMPLETADO — commit a6d9dfa. NO PUSH.
 #### ADRs
 
 ADR-066 (Embedding Materialization Pipeline)
+
+#### ESTADO
+COMPLETADO — commit 274b93a. NO PUSH.
+
+---
+
+### FASE 17 — UNIDAD 3.3: Semantic Search Foundation
+
+**Objetivo**: Búsqueda semántica tenant-scoped sobre knowledge_chunks con pgvector cosine search, threshold filtering, top-K, context limit y value objects inmutables.
+
+#### Archivos creados
+
+- `app/Domain/KnowledgeBase/ValueObjects/RetrievedChunk.php` — VO inmutable: chunkId, documentId, content, score, metadata
+- `app/Domain/KnowledgeBase/ValueObjects/KnowledgeSearchResult.php` — VO inmutable: query, chunks, totalCount, topK, threshold, searchDurationMs
+- `app/Application/KnowledgeBase/Services/KnowledgeSearchService.php` — caso de uso: validate → embed → cosine SQL → threshold → top-K → context limit
+- `tests/Feature/KnowledgeBase/KnowledgeSearchServiceTest.php` — 14 tests SQLite (validation, config, safety, metadata)
+- `tests/Postgres/KnowledgeBase/KnowledgeSearchPostgresTest.php` — 17 tests PG (cosine ranking, threshold, tenant isolation, context limit)
+
+#### Archivos modificados
+
+- `config/knowledge.php` — sección `search` (default_top_k: 5, hard_max_top_k: 20, default_threshold: null, max_query_length: 2000, max_context_chars: 15000)
+
+#### Arquitectura
+
+- **KnowledgeSearchService**: pipeline unique `search(tenantId, kbId, query, topK?, threshold?)`.
+  Validate → resolve KB → embed query → pgvector SQL → threshold → top-K → context limit → KnowledgeSearchResult.
+- **Value Objects inmutables**: RetrievedChunk y KnowledgeSearchResult. Ambos readonly, named params.
+- **pgvector cosine SQL parametrizada**: `1 - (embedding <=> ?::vector)` con binding parameterized.
+- **Threshold**: filtro post-query. null = sin filtro. 0.0..1.0 inclusive.
+- **Context limit**: max_context_chars (default 15000). No corta chunks a mitad.
+- **SQLite compatibility**: guard `config('database.default') !== 'pgsql'` retorna empty result sin llamar provider.
+- **Tenant isolation**: KB resolution lleva tenant_id explícito + withoutTenantScope().
+
+#### Tests SQLite
+
+14 tests: validation (empty, whitespace, oversized query, topK range, threshold range), safety (SQL injection query/tenantId), behavior (non-existent KB, embedding not called, config defaults, metadata, context limit).
+
+#### Tests PostgreSQL (suite separada)
+
+17 tests: RAG-PG-01..10 (cosine ranking, threshold, context limit, topK, empty chunks, deleted doc) + RAG-MT-01..07 (tenant isolation, cross-tenant safety).
+
+#### SEGURIDAD
+
+- Parameterized SQL con `?::vector` binding
+- Tenant isolation: tenant_id + knowledge_base_id en query
+- withoutTenantScope() bypass para servicios con tenantId explícito
+- SQL injection testing incluido
+
+#### Puertas
+
+- php artisan test: 1039/1039 PASS (13 skipped)
+- pint: PASS
+- phpstan: 0 errores
+- composer audit: clean
+
+#### ADRs
+
+ADR-067 (Semantic Search Service)
 
 #### ESTADO
 COMPLETADO — pendiente commit. NO PUSH.

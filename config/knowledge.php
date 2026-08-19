@@ -82,4 +82,18 @@ return [
 
     ],
 
+    'search' => [
+
+        'default_top_k' => 5,
+
+        'hard_max_top_k' => 20,
+
+        'default_threshold' => null, // null = no filtering, only top-K
+
+        'max_query_length' => 2000, // chars
+
+        'max_context_chars' => 15000, // aggregate content limit
+
+    ],
+
 ];

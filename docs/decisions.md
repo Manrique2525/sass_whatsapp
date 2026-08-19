@@ -1683,3 +1683,38 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - DDL = NONE. Config `knowledge.materialization` añadida.
   - Procesamiento de chunks y embeddings son etapas completamente separadas.
   - No se toca el pipeline de extracción/chunking (U2.4 intacto).
+
+## ADR-067 · Semantic Search Service (FASE 17 U3.3)
+
+- **Fecha**: 2026-08-19
+- **Estado**: ACEPTADO
+- **Contexto**: U3.2 materializa embeddings para chunks knowledge. Se necesita
+  búsqueda semántica tenant-scoped: query del usuario → embedding → pgvector
+  cosine search → top-K resultados con threshold. Consumido internamente por
+  U3.4 (AI Node RAG context injection). No expone HTTP ni toca FlowEngine.
+- **Decisión**:
+  - **KnowledgeSearchService**: caso de uso único `search(tenantId, kbId, query, topK?, threshold?)`.
+    Pipeline: validate → resolve KB → embed query → pgvector SQL → threshold filter
+    → top-K → context limit → KnowledgeSearchResult.
+  - **Value Objects inmutables**: `RetrievedChunk` (chunkId, documentId, content, score,
+    metadata) y `KnowledgeSearchResult` (query, chunks, totalCount, topK, threshold,
+    searchDurationMs). Ambos readonly, constructor named params.
+  - **pgvector cosine SQL parametrizada**: `1 - (embedding <=> ?::vector)` con binding
+    parameterized. Nunca `DB::raw()` con interpolación de query vector. ORDER BY
+    cosine ASC LIMIT hardLimit+1 (extra para threshold comparison).
+  - **Threshold**: filtro post-query. `null` = sin filtro. `0.0..1.0` inclusive.
+  - **Context limit**: `max_context_chars` (default 15000). No corta chunks a mitad.
+    Detiene inclusión cuando siguiente chunk excede max_chars.
+  - **SQLite compatibility**: guard `config('database.default') !== 'pgsql'` retorna
+    empty KnowledgeSearchResult sin llamar embedding provider ni tocar DB.
+    Mismo patrón que EmbeddingMaterializationService (U3.2).
+  - **Tenant isolation**: KB resolution lleva `tenant_id` explícito + `withoutTenantScope()`
+    (bypass TenantScope global que agrega `WHERE 1 = 0` sin TenantContext).
+  - **Config**: `knowledge.search` (default_top_k: 5, hard_max_top_k: 20,
+    default_threshold: null, max_query_length: 2000, max_context_chars: 15000).
+- **Consecuencias**:
+  - 14 tests SQLite (validation, config, SQL injection safety, empty result, metadata).
+  - 17 tests PostgreSQL (cosine ranking, threshold, tenant isolation, context limit)
+    en suite separada.
+  - DDL = NONE. Config `knowledge.search` añadida.
+  - No expone HTTP. Consumido por U3.4+ internamente.
