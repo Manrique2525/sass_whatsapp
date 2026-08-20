@@ -7,14 +7,15 @@ namespace App\Domain\Contacts\Models;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Tenants\Traits\BelongsToTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Etiqueta de contacto (FASE 7, preparado para FASE 20).
+ * Etiqueta de contacto (FASE 7, FASE 20 U1).
  *
- * No hay API/UI en esta fase: la tabla y el modelo existen para que el CRM
- * pueda etiquetar contactos sin migraciones retroactivas.
+ * La tabla `tags` y `contact_tag` existen desde FASE 7. FASE 20 U1 agrega
+ * TagService como writer centralizado y TagFactory para testing.
  *
  * @property string $id
  * @property string $tenant_id
@@ -23,6 +24,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 final class Tag extends Model
 {
     use BelongsToTenant;
+    use HasFactory;
     use HasUuids;
 
     protected $fillable = [

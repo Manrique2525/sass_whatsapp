@@ -5,21 +5,23 @@ declare(strict_types=1);
 namespace App\Application\Flows\Services\Executors;
 
 use App\Application\Audit\Services\AuditLogger;
+use App\Application\Contacts\Services\TagService;
 use App\Domain\Contacts\Models\Contact;
-use App\Domain\Contacts\Models\Tag;
 use App\Domain\Flows\Contracts\NodeExecutorInterface;
 use App\Domain\Flows\Enums\FlowNodeType;
 use App\Domain\Flows\ValueObjects\NodeExecutionContext;
 use App\Domain\Flows\ValueObjects\NodeExecutionResult;
 
 /**
- * Ejecutor del nodo `tag`: asigna etiquetas (get-or-create por tenant) al
- * contacto de la conversación. Escribe en las tablas de FASE 7 (`tags` y
- * `contact_tag`); no hay UI de tags hasta FASE 20.
+ * Ejecutor del nodo `tag`: asigna etiquetas al contacto de la conversación.
+ *
+ * Delega TODA la mutación de tags a TagService (FASE 20 U1).
+ * No accede directamente a Tag::query() ni a $contact->tags().
  */
 final class TagNodeExecutor implements NodeExecutorInterface
 {
     public function __construct(
+        private readonly TagService $tagService,
         private readonly AuditLogger $auditLogger,
     ) {}
 
@@ -42,14 +44,11 @@ final class TagNodeExecutor implements NodeExecutorInterface
 
         /** @var Contact $contact */
         $contact = $context->contact;
-        $tagIds = [];
 
         foreach ($names as $name) {
-            $tag = Tag::query()->firstOrCreate(['name' => $name]);
-            $tagIds[] = $tag->id;
+            $tag = $this->tagService->findOrCreateByName($context->tenant, $name);
+            $this->tagService->assignToContact($contact, $tag);
         }
-
-        $contact->tags()->syncWithoutDetaching($tagIds);
 
         $this->auditLogger->record(
             action: 'flow.tag_applied',
