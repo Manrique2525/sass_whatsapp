@@ -503,6 +503,28 @@ Pirámide de tests con prioridad en lo crítico:
   (was `RuntimeException`).
 - Suite FASE 16 U5: **13 tests / 44 assertions**. Suite total: **763 tests / 3055 assertions**.
 
+### FASE 19 — Leads
+
+#### U1 — Data Model + Normalization (backend)
+- `LeadStatusTest` (LEAD-STATUS-01..06): 5 cases, values, labels, fromValue, tryFrom, serialize.
+- `LeadPhoneNormalizerTest` (LEAD-PHONE-01..10): strip spaces/dashes/parens, + prefix, empty, idempotency.
+- `LeadEmailNormalizerTest` (LEAD-EMAIL-01..08): trim, lowercase, plus-addressing, accented, idempotency.
+- `LeadModelTest` (LEAD-DB-01..17): factory, UUID, tenant, casts, soft delete, nullable fields, fillable.
+- `LeadPostgresTest` (LEAD-PG-01..12): partial indexes, uniqueness on PG (PENDING — Docker).
+- Suite U1: **42 tests**.
+
+#### U2 — Application Service + API + Permissions (backend)
+- `LeadApiTest` (LEAD-API-01..25): CRUD, normalization, pagination, search, filters, transitions, dedup, resource.
+- `LeadMultiTenancyTest` (LEAD-MT-01..10): cross-tenant 403/404, independent data, scope isolation.
+- `LeadPermissionTest` (LEAD-PERM-01..06): owner/agent/non-member/auth checks.
+- `LeadStatusTransitionTest` (LEAD-TRANS-01..13): full transition matrix.
+- Suite U2: **54 tests**. Total Lead backend: **96 tests / 206 assertions**.
+
+#### U3 — Lead Management Interface (frontend)
+- `leadUtils.test.ts` (LEAD-V01..V13, V17..V19): statusLabel, sourceLabel, buildLeadQuery, buildLeadPayload, allowedLeadTransitions, statusColor, extractErrorMessage.
+- `leadApi.test.ts` (LEAD-V14..V18, V19): fetchLeads, createLead, updateLead, deleteLead, tenant URL construction, filter serialization.
+- Suite U3: **36 tests**. Total Vitest: **338/338**.
+
 ### Auth
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 

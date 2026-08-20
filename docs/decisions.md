@@ -1957,4 +1957,28 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Total lead tests: 96 (42 U1 + 54 U2). FAQ regression: 161/161. Vitest: 302/302.
   - LeadService requires: AuthorizationService, AuditLogger, LeadPhoneNormalizer,
     LeadEmailNormalizer (4 dependencies via constructor injection).
-  - PHPStan 0 errors after fixing Eloquent cast type inference via getAttribute().
+   - PHPStan 0 errors after fixing Eloquent cast type inference via getAttribute().
+
+## ADR-074: Lead Management Interface — Frontend (FASE 19 U3)
+
+- **Estado**: Aceptado · FASE 19 U3
+- **Contexto**: U2 implementó la API REST completa para leads (CRUD, transiciones, permisos).
+  Se necesita una interfaz de usuario en Settings para que owners/admins gestionen leads
+  y agents solo puedan visualizarlos.
+- **Decisión**: Sigue el patrón CRUD de Settings/Faq.vue (inline table + modal, sin componentes
+  compartidos). Módulo feature en `resources/js/features/leads/` con types, API, utils.
+  - **LeadSettingsController**: Inertia render simple, devuelve prop lead vacío.
+  - **Routes**: `/settings/leads` en web.php con middleware auth+verified.
+  - **AppLayout nav**: link "Leads" en barra de navegación de settings.
+  - **Feature module**: leadTypes.ts (tipos), leadApi.ts (CRUD fetch), leadUtils.ts (query builder,
+    labels, colores, transiciones permitidas, whitelist de payload).
+  - **Leads.vue**: tabla paginada, filtros (search/status/source), modal crear/editar,
+    transiciones de estado via dropdown, confirmación de eliminación, UI basada en permisos.
+  - **allowedLeadTransitions**: new→[contacted], contacted→[qualified,won,lost],
+    qualified→[won,lost], lost→[new], won→[] (consistente con backend U2).
+  - **Seguridad**: sin v-html con datos de usuario, whitelist de campos en payload,
+    sin tenant_id en forms, permisos verificados en backend.
+- **Consecuencias**:
+  - 36 tests frontend: 28 leadUtils + 8 leadApi.
+  - Total Vitest: 338/338. Typecheck: 0 errors. Vite build: clean.
+  - Patrón de presentación reutilizable para futuros módulos CRUD de settings.

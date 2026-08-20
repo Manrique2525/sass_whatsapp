@@ -91,6 +91,7 @@ const logout = (): void => {
                     <Link href="/settings/conversations" class="text-zinc-600 hover:text-zinc-900">Conversaciones</Link>
                     <Link href="/settings/flows" class="text-zinc-600 hover:text-zinc-900">Flujos</Link>
                     <Link href="/settings/faq" class="text-zinc-600 hover:text-zinc-900">FAQs</Link>
+                    <Link href="/settings/leads" class="text-zinc-600 hover:text-zinc-900">Leads</Link>
                 </div>
             </nav>
         </header>

@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA.
+Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA. FASE 19 EN PROGRESO.
 
 ## Fases
 
@@ -25,7 +25,7 @@ Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA.
 | 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime + Telemetry + Security) | COMPLETADA |
   | 17 | Base de conocimiento (RAG + pgvector) | COMPLETADA |
 | 18 | FAQ inteligente | COMPLETADA |
-| 19 | Leads | EN PROGRESO (U1 completada) |
+| 19 | Leads | EN PROGRESO (U2 completada, U3 completada) |
 | 20 | Tags | PENDIENTE |
 | 21 | Analytics | PENDIENTE |
 | 22 | Notificaciones | PENDIENTE |
@@ -2011,7 +2011,7 @@ COMPLETADO — pendiente commit. NO PUSH.
 
 ### U2 — Application Service + API + Permissions
 - **Estado**: COMPLETADA
-- **Commit**: (pending)
+- **Commit**: de2d9df
 - LeadStatus.canTransitionTo() — lifecycle enforcement (new→contacted→qualified→won/lost, lost→new)
 - LeadService — index (search/status/source/pagination), show, create, update, delete
   - Server-side normalization (LeadPhoneNormalizer, LeadEmailNormalizer)
@@ -2026,15 +2026,35 @@ COMPLETADO — pendiente commit. NO PUSH.
 - 54 new tests: 25 API (LEAD-API-01..25) + 13 transitions (LEAD-TRANS-01..13) + 6 permissions (LEAD-PERM-01..06) + 10 MT (LEAD-MT-01..10)
 - ADR-073
 
+### U3 — Lead Management Interface (Frontend)
+- **Estado**: COMPLETADA
+- **Commit**: (pending)
+- LeadSettingsController — Inertia render, returns empty lead prop
+- Route: `/settings/leads` in web.php
+- AppLayout nav: "Leads" link added to settings nav bar
+- Lead feature module:
+  - `leadTypes.ts` — Lead, LeadMeta, LeadListResponse, LeadFilters, LeadPayload, LeadStatus, LeadSource
+  - `leadApi.ts` — fetchLeads, createLead, updateLead, deleteLead (tenant-scoped URLs)
+  - `leadUtils.ts` — buildLeadQuery, statusLabel, sourceLabel, statusColor, allowedLeadTransitions, buildLeadPayload, buildLeadEditPayload, extractErrorMessage
+- Leads.vue — full CRUD page:
+  - Filters: search by name/phone/email, status select, source select
+  - Table: name, phone, email, status badge, source, actions (edit/delete), pagination
+  - Create/Edit modal: name, phone, email, source, notes, status select (edit only)
+  - Status transitions: dropdown shows only allowed transitions per current status
+  - Delete confirmation modal
+  - Permission-based UI: agents read-only (no create/edit/delete)
+  - XSS-safe: no v-html with user data
+  - Inertia patterns: useForm, router, page props
+- 36 new frontend tests: 28 leadUtils + 8 leadApi
+
 #### Puertas
 - phpunit Lead: 96/96 PASS (206 assertions)
 - phpunit FAQ regression: 161/161 PASS
 - pint: PASS
 - phpstan: 0 errores
-- composer audit: clean (offline)
-- vitest: 302/302
+- vitest: 338/338
 - vue-tsc: 0 errores
 - vite build: PASS
 
 #### ESTADO
-EN PROGRESO — U2 completada. Pendiente commit. NO PUSH.
+EN PROGRESO — U3 completada. Pendiente commit. NO PUSH.

@@ -18,6 +18,7 @@ use App\Http\Controllers\Settings\ConversationsController;
 use App\Http\Controllers\Settings\FaqSettingsController;
 use App\Http\Controllers\Settings\FlowEditorSettingsController;
 use App\Http\Controllers\Settings\FlowsSettingsController;
+use App\Http\Controllers\Settings\LeadSettingsController;
 use App\Http\Controllers\Settings\UserSettingsController;
 use App\Http\Controllers\Settings\WhatsAppSettingsController;
 use Illuminate\Support\Facades\Route;
@@ -97,4 +98,8 @@ Route::middleware('auth')->group(function (): void {
     Route::get('settings/faq', [FaqSettingsController::class, 'show'])
         ->middleware(['verified', 'tenant'])
         ->name('settings.faq');
+
+    Route::get('settings/leads', [LeadSettingsController::class, 'show'])
+        ->middleware(['verified', 'tenant'])
+        ->name('settings.leads');
 });
