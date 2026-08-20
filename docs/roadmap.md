@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 COMPLETADA**. FASE 18 EN PROGRESO (U4).
+Estado general: **FASE 17 COMPLETADA**. FASE 18 EN PROGRESO (U5).
 
 ## Fases
 
@@ -24,7 +24,7 @@ Estado general: **FASE 17 COMPLETADA**. FASE 18 EN PROGRESO (U4).
 | 15 | Transferencia a humano | COMPLETADA |
 | 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime + Telemetry + Security) | COMPLETADA |
   | 17 | Base de conocimiento (RAG + pgvector) | COMPLETADA |
-| 18 | FAQ inteligente | EN PROGRESO (U3) |
+| 18 | FAQ inteligente | EN PROGRESO (U5) |
 | 19 | Leads | PENDIENTE |
 | 20 | Tags | PENDIENTE |
 | 21 | Analytics | PENDIENTE |
@@ -1895,7 +1895,7 @@ COMPLETADO — pendiente commit. NO PUSH.
 
 ---
 
-## FASE 18 — FAQ Inteligente (EN PROGRESO — U3)
+## FASE 18 — FAQ Inteligente (EN PROGRESO — U5)
 
 ### U1 — Data Model + Normalization
 - **Estado**: COMPLETADA
@@ -1939,6 +1939,7 @@ COMPLETADO — pendiente commit. NO PUSH.
 
 ### U4 — FlowEngine Runtime Integration
 - **Estado**: COMPLETADA
+- **Commit**: 896efab
 - FlowHandleResult VO (bool $handled) — retornado por FlowEngine::handleMessage()
 - FlowEngine: param `?callable $onUnhandled = null`, retorna FlowHandleResult
 - ProcessIncomingWhatsAppMessage: pasa callback FAQ cuando created=true
@@ -1957,7 +1958,16 @@ COMPLETADO — pendiente commit. NO PUSH.
 - 1206 passed, 13 skipped, 0 PHPStan errors, Pint clean
 
 ### U5 — Frontend
-- **Estado**: NO INICIADA
+- **Estado**: EN PROGRESO
+- FaqSettingsController (Inertia page wrapper)
+- Route: GET /settings/faq (verified + tenant)
+- Nav link in AppLayout.vue
+- Faq.vue page: list, search, filter (status), pagination, create/edit modal, delete confirmation
+- Feature module: faqTypes.ts, faqApi.ts, faqUtils.ts
+- Permission gating: faqs.view (agent), faqs.manage (owner/admin)
+- 16 faqUtils tests (buildFaqQuery, statusLabel, buildFaqPayload, extractErrorMessage)
+- 6 faqApi tests (fetchFaqs, createFaq, updateFaq, deleteFaq)
+- vue-tsc 0 errors, Vite build clean, 302 Vitest passing
 
 ### U6 — Hardening + Audit + Close
 - **Estado**: NO INICIADA
