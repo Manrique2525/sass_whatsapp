@@ -17,7 +17,7 @@ export async function fetchFaqs(tenantId: string, filters: FaqFilters): Promise<
   const res = await window.axios.get(`/api/v1/tenants/${tenantId}/faqs`, { params });
 
   return {
-    data: res.data.data,
+    faqs: res.data.faqs,
     meta: res.data.meta,
   };
 }

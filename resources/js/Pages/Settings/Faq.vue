@@ -59,7 +59,7 @@ const load = async (): Promise<void> => {
             page: pageNumber.value,
         });
         const res = await window.axios.get(`/api/v1/tenants/${tenantId}/faqs`, { params });
-        faqs.value = res.data.data;
+        faqs.value = res.data.faqs;
         meta.value = res.data.meta;
     } catch (err) {
         error.value = extractErrorMessage(err, 'No se pudieron cargar las FAQs.');
@@ -358,7 +358,7 @@ onMounted(load);
                             v-model="form.answer"
                             rows="4"
                             required
-                            maxlength="2000"
+                            maxlength="4096"
                             placeholder="Puedes agendar una cita en nuestro sitio web..."
                             class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                         />

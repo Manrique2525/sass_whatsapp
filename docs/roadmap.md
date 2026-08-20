@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 COMPLETADA**. FASE 18 EN PROGRESO (U5).
+Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA.
 
 ## Fases
 
@@ -24,7 +24,7 @@ Estado general: **FASE 17 COMPLETADA**. FASE 18 EN PROGRESO (U5).
 | 15 | Transferencia a humano | COMPLETADA |
 | 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime + Telemetry + Security) | COMPLETADA |
   | 17 | Base de conocimiento (RAG + pgvector) | COMPLETADA |
-| 18 | FAQ inteligente | EN PROGRESO (U5) |
+| 18 | FAQ inteligente | COMPLETADA |
 | 19 | Leads | PENDIENTE |
 | 20 | Tags | PENDIENTE |
 | 21 | Analytics | PENDIENTE |
@@ -1895,7 +1895,7 @@ COMPLETADO — pendiente commit. NO PUSH.
 
 ---
 
-## FASE 18 — FAQ Inteligente (EN PROGRESO — U5)
+## FASE 18 — FAQ Inteligente (COMPLETADA)
 
 ### U1 — Data Model + Normalization
 - **Estado**: COMPLETADA
@@ -1958,7 +1958,8 @@ COMPLETADO — pendiente commit. NO PUSH.
 - 1206 passed, 13 skipped, 0 PHPStan errors, Pint clean
 
 ### U5 — Frontend
-- **Estado**: EN PROGRESO
+- **Estado**: COMPLETADA
+- **Commit**: 31c0ac9
 - FaqSettingsController (Inertia page wrapper)
 - Route: GET /settings/faq (verified + tenant)
 - Nav link in AppLayout.vue
@@ -1970,4 +1971,22 @@ COMPLETADO — pendiente commit. NO PUSH.
 - vue-tsc 0 errors, Vite build clean, 302 Vitest passing
 
 ### U6 — Hardening + Audit + Close
-- **Estado**: NO INICIADA
+- **Estado**: COMPLETADA
+- **Commit**: (pending)
+- P1 fix: frontend API key mismatch (`res.data.data` → `res.data.faqs`)
+- P1 fix: FaqListResponse type aligned with API (`data` → `faqs`)
+- P2 fix: FaqService::index() explicit tenant_id filter (defense-in-depth)
+- P2 fix: Faq.vue maxlength aligned with backend (2000 → 4096)
+- Audit: 42 files reviewed, 0 P0, 0 P1 remaining, 0 P2 remaining
+- FlowEngine: all 12 return paths verified → FlowHandleResult
+- onUnhandled callback: exactly once, only when no flow handled
+- 25 hardening tests (PREC-11..14, CON-F01..F10, SEC-F01..F12)
+- Precedence: duplicate → idempotent, bot_paused → blocked, flow → wins, human → blocks FAQ
+- Concurrency: duplicate webhook dedup, flow-vs-FAQ race, cross-tenant isolation, FAQ delete/deactivate races
+- Security: IDOR 404, tenant injection ignored, XSS plain text, template literal sent literally, SQL-safe, audit no PII, AI not called, inactive/deleted FAQ excluded, Unicode injection safe, outbound metadata correct, matcher exception fail-open
+- Docker: not running locally (expected)
+- PHPStan 0 errors, Pint clean, vue-tsc 0 errors, Vitest 302/302, Vite build clean
+- composer audit: no vulnerabilities (larastan abandoned → larastan/larastan)
+- Security scan: .env not tracked, no secrets in tests
+- No new DDL, no feature creep, no fuzzy/semantic/AI
+- FASE 18 = COMPLETADA

@@ -41,7 +41,7 @@ final class FaqService
     {
         $this->authorization->authorize($user, TenantPermission::ViewFaqs, $tenant);
 
-        $query = Faq::query();
+        $query = Faq::query()->withoutTenantScope()->where('tenant_id', $tenant->id);
 
         if (isset($filters['search']) && $filters['search'] !== '') {
             $term = '%'.$filters['search'].'%';

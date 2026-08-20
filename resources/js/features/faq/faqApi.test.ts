@@ -24,7 +24,7 @@ describe('fetchFaqs', () => {
     it('llama al endpoint con los params correctos', async () => {
         mockGet.mockResolvedValueOnce({
             data: {
-                data: [{ id: '1', question: 'Horario', answer: '9 a 18' }],
+                faqs: [{ id: '1', question: 'Horario', answer: '9 a 18' }],
                 meta: { current_page: 1, last_page: 1, per_page: 15, total: 1 },
             },
         });
@@ -34,12 +34,12 @@ describe('fetchFaqs', () => {
         expect(mockGet).toHaveBeenCalledWith('/api/v1/tenants/tenant-1/faqs', {
             params: { page: 1, per_page: 15 },
         });
-        expect(result.data).toHaveLength(1);
+        expect(result.faqs).toHaveLength(1);
         expect(result.meta.total).toBe(1);
     });
 
     it('incluye search y status en params', async () => {
-        mockGet.mockResolvedValueOnce({ data: { data: [], meta: { current_page: 1, last_page: 1, per_page: 15, total: 0 } } });
+        mockGet.mockResolvedValueOnce({ data: { faqs: [], meta: { current_page: 1, last_page: 1, per_page: 15, total: 0 } } });
 
         await fetchFaqs('tenant-1', { search: 'horario', status: 'active', page: 2 });
 

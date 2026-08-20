@@ -16,7 +16,7 @@ export interface FaqMeta {
 }
 
 export interface FaqListResponse {
-  data: Faq[];
+  faqs: Faq[];
   meta: FaqMeta;
 }
 
