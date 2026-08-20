@@ -2076,7 +2076,7 @@ COMPLETADO — pendiente commit. NO PUSH.
 #### ESTADO
 COMPLETADA. Pendiente commit. NO PUSH.
 
-## FASE 20 — Tags (EN PROGRESO)
+## FASE 20 — Tags (COMPLETADA)
 
 ### U1 — Centralized Tag Mutations + Invariants
 - **Estado**: COMPLETADA

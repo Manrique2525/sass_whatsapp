@@ -1144,7 +1144,7 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   contrato anterior y reutilizará `FlowExecutionService` → `FlowEngine` sin crear un motor
   paralelo.
 
-## ADR-052: Ejecución automática de flujos por tag (FASE 20 U4)
+## ADR-076: Ejecución automática de flujos por tag (FASE 20 U4)
 
 - **Fecha**: 2026-08-18
 - **Estado**: Aceptado — implementación de FASE 20 U4

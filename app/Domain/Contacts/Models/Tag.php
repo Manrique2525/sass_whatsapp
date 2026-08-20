@@ -6,6 +6,7 @@ namespace App\Domain\Contacts\Models;
 
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Tenants\Traits\BelongsToTenant;
+use Database\Factories\Domain\Contacts\Models\TagFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -24,7 +25,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 final class Tag extends Model
 {
     use BelongsToTenant;
+
+    /** @use HasFactory<TagFactory> */
     use HasFactory;
+
     use HasUuids;
 
     protected $fillable = [
