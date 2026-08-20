@@ -178,6 +178,10 @@ Route::prefix('v1')->group(function (): void {
                 Route::get('{tenant}/tags/{tag}', [TagController::class, 'show']);
                 Route::patch('{tenant}/tags/{tag}', [TagController::class, 'update']);
                 Route::delete('{tenant}/tags/{tag}', [TagController::class, 'destroy']);
+
+                // FASE 20 U3 — Tag assignment a contactos.
+                Route::post('{tenant}/contacts/{contact}/tags', [TagController::class, 'assignTags']);
+                Route::delete('{tenant}/contacts/{contact}/tags/{tag}', [TagController::class, 'removeTag']);
             });
         });
     });

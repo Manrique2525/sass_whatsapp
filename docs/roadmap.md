@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA. FASE 19 COMPLETADA.
+Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA. FASE 19 COMPLETADA. FASE 20 EN PROGRESO (U1–U3 completadas, U4 pendiente).
 
 ## Fases
 
@@ -26,7 +26,7 @@ Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA. FASE 19 COMPLETADA.
   | 17 | Base de conocimiento (RAG + pgvector) | COMPLETADA |
 | 18 | FAQ inteligente | COMPLETADA |
 | 19 | Leads | COMPLETADA |
-| 20 | Tags | PENDIENTE |
+| 20 | Tags | EN PROGRESO (U1–U3 COMPLETADAS, U4 pendiente) |
 | 21 | Analytics | PENDIENTE |
 | 22 | Notificaciones | PENDIENTE |
 | 23 | Planes | PENDIENTE |
@@ -2075,3 +2075,41 @@ COMPLETADO — pendiente commit. NO PUSH.
 
 #### ESTADO
 COMPLETADA. Pendiente commit. NO PUSH.
+
+## FASE 20 — Tags (EN PROGRESO)
+
+### U1 — Centralized Tag Mutations + Invariants
+- **Estado**: COMPLETADA
+- **Commit**: f2cd4cd
+- TagService como writer centralizado (findOrCreateByName, assignToContact, removeFromContact)
+- Idempotencia attach/detach, tenant-scoped, cross-tenant fail-closed (assertSameTenant)
+- TagNotFoundException (404), TagDuplicateException (409 TAG_DUPLICATE)
+- TagNodeExecutor delega TODA mutación en TagService
+
+### U2 — Tag Management API + Permissions
+- **Estado**: COMPLETADA
+- **Commit**: 3050f82
+- TenantPermission: tags.view (todos los roles), tags.manage (owner/admin)
+- Rutas: GET/POST /api/v1/tenants/{tenant}/tags, GET/PATCH/DELETE .../tags/{tag}
+- TagController + TagResource + Requests; auditoría tag.created/updated/deleted
+
+### U3 — Tag Assignment/Removal + Domain Events
+- **Estado**: COMPLETADA
+- POST /api/v1/tenants/{tenant}/contacts/{contact}/tags — asignación batch atómica e idempotente
+- DELETE /api/v1/tenants/{tenant}/contacts/{contact}/tags/{tag} — remoción idempotente
+- AssignContactTagsRequest: tag_ids array 1..20, uuid, distinct; fail-closed (un tag cross-tenant invalida todo el batch → 403 sin mutar)
+- Eventos de dominio TagAssigned / TagRemoved (afterCommit=true, solo IDs estables, sin PII)
+- Enum TagAssignmentOrigin (manual|flow); TagNodeExecutor emite origin=flow con originExecutionId
+- ContactConversationResolver: conversación más reciente del contacto, determinista y tenant-scoped
+- ContactResource ampliado con tags[] (whenLoaded)
+- Auditoría tag.assigned / tag.removed
+- 55 tests nuevos: TAG-U3-01..10, TAG-ASG-01..13, TAG-ASG-PERM-01..06, TAG-ASG-MT-01..10, TAG-EVT-01..08, TAG-CONV-01..08
+
+### U4 — Tag Trigger Execution (StartFlowFromTag)
+- **Estado**: PENDIENTE (NOT STARTED)
+- Contrato ADR-050: listener de TagAssigned → reutilizar FlowExecutionService/FlowEngine
+- Pendiente: semántica EVENT/ANY/ALL de config.tags, barreras anti-recursión, orden del
+  conversationLock, verificación bot_paused/ejecución activa antes de disparar
+
+#### ESTADO
+U1–U3 COMPLETADAS. U4 NO INICIADA. NO PUSH.

@@ -530,6 +530,30 @@ Pirámide de tests con prioridad en lo crítico:
 - E2E CRUD (LEAD-E2E-01..07): full lifecycle, phone normalization, email normalization, status transitions, duplicate 409, cross-tenant 404, agent read-only.
 - Suite U4: **19 tests / 44 assertions** (1 skipped: PG-only). Total Lead backend: **114 tests / 250 assertions**.
 
+### FASE 20 — Tags
+
+#### U1 — TagService + TagNodeExecutor (backend)
+- `TagServiceTest` (TAG-U1-01..15, 15 tests): findOrCreateByName, assignToContact, removeFromContact, idempotencia, cross-tenant fail-closed, TagFactory.
+- `TagNodeExecutorTest` (TAG-REG-01..05, 5 tests): asignación via TagService, duplicados, config vacía, idempotencia, integración completa con FlowEngine.
+- `TagMultiTenancyTest` (TAG-MT-01..06, 6 tests): aislamiento cross-tenant, tenant-scoped queries, unique constraint por tenant.
+
+#### U2 — Tag Management API + Permissions (backend)
+- `TagApiTest` (TAG-API-01..15, 15 tests): CRUD API, search, paginación, validación, resource response.
+- `TagPermissionTest` (TAG-PERM-01..06, 6 tests): permission matrix tags.view / tags.manage.
+- `TagSecurityTest` (TAG-SEC-U2-01..10, 10 tests): IDOR, tenant injection, mass assignment, audit payload.
+- `TagMultiTenancyApiTest` (TAG-MT-U2-01..10, 10 tests): aislamiento A/B en API, unique constraint cross-tenant.
+- `TagPostgresTest` (10 tests): duplicate pivot PG, FK constraints, transaction rollback, cascade, tenant safety PG.
+- Total U1+U2 backend: **72 tests**.
+
+#### U3 — Tag Assignment/Removal + Domain Events (backend)
+- `TagAssignmentServiceTest` (TAG-U3-01..10, 10 tests): batch assign emite `TagAssigned` por cada tag nuevo; idempotente (re-asignación no emite evento); atomicidad (un tag inválido bloquea TODO el batch sin mutar); `TagRemoved` solo en remoción real; auditoría `tag.assigned`/`tag.removed`; contacto devuelto con tags cargados.
+- `TagAssignmentApiTest` (TAG-ASG-01..13, 13 tests): 200 batch/multi/idempotente; remove de tag no asignado → 200 no-op; validación 422 (array vacío, UUID inválido, duplicados, >20); cross-tenant assign → 403, remove → 404.
+- `TagAssignmentPermissionTest` (TAG-ASG-PERM-01..06, 6 tests): owner/admin asignan y remueven; agent → 403 `PERMISSION_DENIED` en ambas operaciones.
+- `TagAssignmentMultiTenancyTest` (TAG-ASG-MT-01..10, 10 tests): aislamiento A/B completo (assign/remove/contacto cross-tenant → 403/404, B intacto), sin fuga de datos entre tenants, unicidad de nombre de tag por tenant.
+- `TagEventsTest` (TAG-EVT-01..08, 8 tests): payload de `TagAssigned`/`TagRemoved`, enum `TagAssignmentOrigin` (manual|flow), origen flow incluye `originExecutionId`, Dispatchable, propiedades readonly públicas.
+- `ContactConversationResolverTest` (TAG-CONV-01..08, 8 tests): conversación más reciente por `updated_at` con desempates deterministas (`created_at` ASC, `id` ASC); null sin conversaciones; tenant-scoped (ignora conversaciones de otro tenant); sin filtro `bot_paused`/status.
+- Suite U3: **55 tests nuevos** (backend). Total Tag backend: **127 tests / 271 assertions**.
+
 ### Auth
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 

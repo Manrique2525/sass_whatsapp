@@ -12,9 +12,11 @@ use App\Domain\Tenants\Exceptions\TenantMembershipException;
 use App\Domain\Tenants\Exceptions\TenantNotActiveException;
 use App\Domain\Tenants\Models\Tenant;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Tags\AssignContactTagsRequest;
 use App\Http\Requests\Tags\StoreTagRequest;
 use App\Http\Requests\Tags\TagIndexRequest;
 use App\Http\Requests\Tags\UpdateTagRequest;
+use App\Http\Resources\ContactResource;
 use App\Http\Resources\TagResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -135,6 +137,59 @@ final class TagController extends Controller
 
         return response()->json([
             'message' => 'Tag eliminado.',
+        ]);
+    }
+
+    // ── U3: Tag assignment/removal ─────────────────────────────
+
+    public function assignTags(AssignContactTagsRequest $request, Tenant $tenant, string $contact): JsonResponse
+    {
+        try {
+            $contactModel = $this->service->assignTagsToContact(
+                $request->user(),
+                $tenant,
+                $contact,
+                $request->validated('tag_ids'),
+            );
+        } catch (TenantMembershipException) {
+            throw new NotFoundHttpException('Tenant no encontrado.');
+        } catch (PermissionDeniedException $e) {
+            return $this->forbidden($e);
+        } catch (TenantNotActiveException) {
+            return $this->tenantNotActive();
+        } catch (\DomainException $e) {
+            throw new NotFoundHttpException($e->getMessage());
+        }
+
+        return response()->json([
+            'message' => 'Tags asignados.',
+            'contact' => new ContactResource($contactModel),
+        ]);
+    }
+
+    public function removeTag(Request $request, Tenant $tenant, string $contact, string $tag): JsonResponse
+    {
+        try {
+            $this->service->removeTagFromContact(
+                $request->user(),
+                $tenant,
+                $contact,
+                $tag,
+            );
+        } catch (TenantMembershipException) {
+            throw new NotFoundHttpException('Tenant no encontrado.');
+        } catch (PermissionDeniedException $e) {
+            return $this->forbidden($e);
+        } catch (TenantNotActiveException) {
+            return $this->tenantNotActive();
+        } catch (TagNotFoundException) {
+            throw new NotFoundHttpException('Tag no encontrado.');
+        } catch (\DomainException $e) {
+            throw new NotFoundHttpException($e->getMessage());
+        }
+
+        return response()->json([
+            'message' => 'Tag removido.',
         ]);
     }
 

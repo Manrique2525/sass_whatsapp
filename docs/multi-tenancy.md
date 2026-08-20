@@ -267,6 +267,14 @@ Nunca se acepta `tenant_id` desde el request (se ignora o se rechaza — test
   (no lo crea ni lo limpia); los servicios internos usan `TenantContext::withId()` para crear
   modelos sin pisar el contexto activo (FASE 11). El nodo `webhook` usa `WebhookUrlGuard`
   (anti-SSRF) y las URLs externas llevan `execution_id` para idempotencia.
+- **Tags — asignación a contactos (FASE 20 U3)**: `POST /tenants/{tenant}/contacts/{contact}/tags`
+  y `DELETE .../contacts/{contact}/tags/{tag}` exigen `{tenant}` activo y `tags.manage`
+  (owner/admin). Contacto y tags se resuelven con `withoutTenantScope()` filtrando SIEMPRE por
+  `tenant_id` autorizado → ajeno/inexistente → **404**. La asignación batch es fail-closed: un
+  solo `tag_id` de otro tenant → **403** sin mutar nada. `ContactConversationResolver` (fuente
+  del `conversation_id` del evento) también filtra por `tenant_id` con orden determinista. Los
+  eventos `TagAssigned`/`TagRemoved` llevan `tenant_id` explícito (no dependen del contexto del
+  listener). Aislamiento CRITICO probado (TAG-ASG-MT-01..10).
 
 ## 5. Aislamiento en colas, eventos y notificaciones
 
@@ -381,3 +389,9 @@ tenant distinto del propietario:
     solo datos de A (prompt, business, contact). AI-SEC-F11 verifica que `tenant_id` injection
     en node config no altera el contexto. Tests AI-SEC-F01..F12 formalizan 12 propiedades
     de seguridad AI.
+
+22. (FASE 20 U3) Tenant A jamás asigna ni remueve tags de contactos de Tenant B: assign
+    cross-tenant → 403 (fail-closed, el batch completo queda sin mutar), remove/contacto
+    cross-tenant → 404 y B queda intacto (TAG-ASG-MT-01..04/08/09, CRITICO). Un mismo nombre
+    de tag puede existir en A y B sin colisión (TAG-ASG-MT-10). El resolver
+    Contact→Conversation nunca devuelve conversaciones de otro tenant (TAG-CONV-03).

@@ -6,23 +6,28 @@ namespace App\Application\Flows\Services\Executors;
 
 use App\Application\Audit\Services\AuditLogger;
 use App\Application\Contacts\Services\TagService;
+use App\Domain\Contacts\Enums\TagAssignmentOrigin;
+use App\Domain\Contacts\Events\TagAssigned;
 use App\Domain\Contacts\Models\Contact;
 use App\Domain\Flows\Contracts\NodeExecutorInterface;
 use App\Domain\Flows\Enums\FlowNodeType;
 use App\Domain\Flows\ValueObjects\NodeExecutionContext;
 use App\Domain\Flows\ValueObjects\NodeExecutionResult;
+use Illuminate\Events\Dispatcher;
 
 /**
  * Ejecutor del nodo `tag`: asigna etiquetas al contacto de la conversación.
  *
- * Delega TODA la mutación de tags a TagService (FASE 20 U1).
+ * Delega TODA la mutación de tags a TagService (FASE 20 U1+U3).
  * No accede directamente a Tag::query() ni a $contact->tags().
+ * Emite TagAssigned con origin=flow para que U4 decida si trigger.
  */
 final class TagNodeExecutor implements NodeExecutorInterface
 {
     public function __construct(
         private readonly TagService $tagService,
         private readonly AuditLogger $auditLogger,
+        private readonly Dispatcher $events,
     ) {}
 
     public function supports(): FlowNodeType
@@ -47,7 +52,19 @@ final class TagNodeExecutor implements NodeExecutorInterface
 
         foreach ($names as $name) {
             $tag = $this->tagService->findOrCreateByName($context->tenant, $name);
-            $this->tagService->assignToContact($contact, $tag);
+            $assigned = $this->tagService->assignToContact($contact, $tag);
+
+            if ($assigned) {
+                $this->events->dispatch(new TagAssigned(
+                    tenantId: $context->tenant->id,
+                    contactId: $contact->id,
+                    tagId: $tag->id,
+                    tagName: $tag->name,
+                    origin: TagAssignmentOrigin::Flow,
+                    conversationId: $context->conversation->id,
+                    originExecutionId: $context->execution->id,
+                ));
+            }
         }
 
         $this->auditLogger->record(

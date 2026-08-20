@@ -142,7 +142,7 @@ pendiente de la fase de storage).
 | Business profile | Ver §3.3: `GET/PUT /api/v1/tenants/{tenant}/business-profile` |
 | WhatsApp | Ver §3.4: `GET /api/v1/tenants/{tenant}/whatsapp`, `POST .../connect`, `POST .../disconnect` |
 | Contacts | Ver §3.5: `GET/POST /api/v1/tenants/{tenant}/contacts`, `GET/PATCH/DELETE /api/v1/tenants/{tenant}/contacts/{id}` (import pendiente) |
-| Tags | `GET/POST /api/v1/tags`, `PATCH/DELETE /api/v1/tags/{id}` (pendiente, FASE 20) |
+| Tags | Ver §3.9: CRUD + asignación a contactos (FASE 20 U1–U3) |
 | Conversations | `GET /api/v1/conversations`, `GET/PATCH /api/v1/conversations/{id}`, `POST /api/v1/conversations/{id}/assign`, `POST .../transfer`, `POST .../claim`, `POST .../close`, `POST .../reopen`, `POST .../resume-bot` |
 | Messages | Ver §3.7: `GET/POST /api/v1/tenants/{tenant}/conversations/{conversation}/messages` (`conversations.view` / `messages.send`) |
 | Chatbots | `GET/POST /api/v1/chatbots`, `PATCH/DELETE /api/v1/chatbots/{id}` |
@@ -402,6 +402,38 @@ enteras, aristas con `label` (`true`/`false` para ramas de condición) y `base_u
 (ADR-041); el `tenant_id` nunca viaja en el body. Conflictos de concurrencia → **409**
 `FLOW_CONFLICT` con `{message, code, current_updated_at}`; la resolución (recargar / seguir /
 sobrescribir) ocurre en el cliente con `ConflictDialog`.
+
+### 3.9 Tags y asignación a contactos (FASE 20 U1–U3)
+
+CRUD de etiquetas del tenant (U2) y asignación/desasignación sobre contactos (U3). Mismas reglas
+de enforcement que §3.2–§3.5: `{tenant}` debe ser el **activo**; otro tenant → **404**; sin
+permiso → **403** `PERMISSION_DENIED`; tenant suspendido → **409** `TENANT_NOT_ACTIVE`. El
+`{contact}` y `{tag}` se resuelven por el servicio filtrando SIEMPRE por `tenant_id` autorizado
+(sin route-model binding implícito); recurso ajeno o inexistente → **404** (oculta existencia,
+ADR-010/023). El `tenant_id` nunca se acepta del frontend.
+
+Permisos: `tags.view` (owner/admin/agent) y `tags.manage` (owner/admin).
+
+| Método | Ruta | Permiso | Descripción |
+|---|---|---|---|
+| GET | `/api/v1/tenants/{tenant}/tags` | `tags.view` | Listado paginado. Query: `search` (nombre, parcial), `per_page` (1..100). Respuesta: `{tags: TagResource[], meta}` |
+| POST | `/api/v1/tenants/{tenant}/tags` | `tags.manage` | Crea `{name*}` (trim; único por tenant) → **201**. Duplicado → **409** `TAG_DUPLICATE`. Audita `tag.created` |
+| GET | `/api/v1/tenants/{tenant}/tags/{tag}` | `tags.view` | Detalle. 404 si no existe/no es del tenant |
+| PATCH | `/api/v1/tenants/{tenant}/tags/{tag}` | `tags.manage` | Renombra (valida unicidad por tenant). Audita `tag.updated` |
+| DELETE | `/api/v1/tenants/{tenant}/tags/{tag}` | `tags.manage` | Elimina. Audita `tag.deleted` |
+| POST | `/api/v1/tenants/{tenant}/contacts/{contact}/tags` | `tags.manage` | Asignación **batch atómica** → **200** `{message, contact: ContactResource}`. Body: `{tag_ids*: uuid[] (1..20, distinct)}`. Valida TODOS los ids ANTES de mutar: uno ajeno/inexistente → **403** sin escribir nada (fail closed). Idempotente: tags ya asignados son no-op. Audita `tag.assigned` y emite `TagAssigned` (afterCommit) solo por cada asignación nueva |
+| DELETE | `/api/v1/tenants/{tenant}/contacts/{contact}/tags/{tag}` | `tags.manage` | Remueve → **200** `{message}`. Idempotente: tag no asignado → no-op 200. Tag/contacto ajeno o inexistente → **404**. Audita `tag.removed` y emite `TagRemoved` solo si hubo remoción real |
+
+`TagResource`: `{id, name, created_at, updated_at}` (jamás incluye `tenant_id`).
+`ContactResource` se amplía en FASE 20 U3 con `tags: TagResource[]` (`whenLoaded`).
+
+**Eventos de dominio (FASE 20 U3)**: `TagAssigned`
+`{tenant_id, contact_id, tag_id, tag_name, origin: manual|flow, conversation_id?,
+origin_execution_id?}` y `TagRemoved` `{tenant_id, contact_id, tag_id, tag_name}`. Solo IDs
+estables (sin modelos Eloquent ni PII), `afterCommit = true`. La resolución
+Contact→Conversation para `conversation_id` es determinista y tenant-scoped
+(`ContactConversationResolver`: más reciente por `updated_at`, sin filtrar `bot_paused`/status).
+Sin listeners todavía: el disparo automático de flujos por tag llega en FASE 20 U4 (ADR-050).
 
 ## 4. Webhooks (sin auth Bearer; autenticados por firma y dedupe)
 

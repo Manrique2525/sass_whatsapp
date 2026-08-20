@@ -454,6 +454,15 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - **Seguridad**: sin eval/exec; sin SSRF; token/hash nunca en logs/auditoría/responses;
   `TriggerResource` redacta `token_hash`.
 
+### Tags y asignación a contactos (FASE 20 U3)
+- **Autorización**: `tags.view` (todos los roles) y `tags.manage` (owner/admin). Asignar/remover exige `tags.manage`; agent → 403.
+- **Aislamiento fail-closed**: la asignación batch valida TODOS los `tag_ids` contra el tenant ANTES de mutar; un solo id ajeno/inexistente → **403** sin escribir ninguna fila. En remove, tag/contacto de otro tenant → **404** (no revela existencia).
+- **Nunca confiar en el frontend**: el body solo acepta `tag_ids` (array 1..20, uuid, distinct); `tenant_id` viene SIEMPRE de `TenantContext`/middleware.
+- **Eventos seguros**: `TagAssigned`/`TagRemoved` transportan solo IDs estables (sin modelos Eloquent ni PII), llevan `tenant_id` explícito y son `afterCommit = true`.
+- **Resolución Contact→Conversation**: filtra SIEMPRE por `tenant_id` (jamás resuelve conversaciones de otro tenant). No filtra `bot_paused`/status: esa política es de U4.
+- **Sin ejecución automática aún**: no existen `StartFlowFromTag` ni listeners; el disparo de flujos por tag llega en U4 (ADR-050).
+- **Auditoría**: `tag.created`, `tag.updated`, `tag.deleted` (U2), `tag.assigned`, `tag.removed` (U3).
+
 ## 3. Comprobaciones automatizadas
 
 - PHPStan nivel alto.
@@ -484,8 +493,10 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - [ ] (FASE 14 U3) Aislamiento webhook A/B verdes (WEBHOOK-19), token auth verdes
         (WEBHOOK-01..05), idempotencia verdes (WEBHOOK-10/11), secretos nunca en
         logs/audit (WEBHOOK-15/18), rate limit verdes (WEBHOOK-16).
-- [ ] (FASE 14 cierre) Trigger tag permanece sin ejecución automática; no existen
-        `StartFlowFromTag`, `TagAssigned`, listeners/observers ni API/UI adelantadas de FASE 20.
+- [ ] (FASE 14 cierre / FASE 20 U3) Trigger tag permanece sin EJECUCIÓN automática. U3 añadió
+        `TagAssigned`/`TagRemoved` como eventos de dominio SIN listeners y la API manual de
+        asignación. Siguen sin existir `StartFlowFromTag`, listeners/observers ni ejecución
+        automática por tag (diferidos a FASE 20 U4, ADR-050).
 - [ ] (FASE 16 U1) API key OpenAI nunca en response, logs, auditoría, exceptions ni frontend.
         Provider stateless re: tenant. Tests con Http::fake (sin llamadas reales).
         Binding AIProviderInterface → OpenAIProvider en AppServiceProvider (singleton lazy).

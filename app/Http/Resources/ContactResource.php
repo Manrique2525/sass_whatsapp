@@ -27,6 +27,7 @@ final class ContactResource extends JsonResource
             'metadata' => $this->metadata,
             'provider_contact_id' => $this->provider_contact_id,
             'last_interaction_at' => $this->last_interaction_at,
+            'tags' => TagResource::collection($this->whenLoaded('tags')),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];
