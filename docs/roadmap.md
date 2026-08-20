@@ -25,7 +25,7 @@ Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA.
 | 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime + Telemetry + Security) | COMPLETADA |
   | 17 | Base de conocimiento (RAG + pgvector) | COMPLETADA |
 | 18 | FAQ inteligente | COMPLETADA |
-| 19 | Leads | PENDIENTE |
+| 19 | Leads | EN PROGRESO (U1 completada) |
 | 20 | Tags | PENDIENTE |
 | 21 | Analytics | PENDIENTE |
 | 22 | Notificaciones | PENDIENTE |
@@ -1990,3 +1990,33 @@ COMPLETADO — pendiente commit. NO PUSH.
 - Security scan: .env not tracked, no secrets in tests
 - No new DDL, no feature creep, no fuzzy/semantic/AI
 - FASE 18 = COMPLETADA
+
+---
+
+## FASE 19 — Leads (EN PROGRESO)
+
+### U1 — Data Model + Normalization
+- **Estado**: COMPLETADA
+- **Commit**: (pending)
+- LeadStatus enum (new/contacted/qualified/won/lost)
+- LeadPhoneNormalizer (trim, strip non-digits, + prefix)
+- LeadEmailNormalizer (trim, lowercase)
+- Lead model (BelongsToTenant, HasUuids, SoftDeletes, HasFactory)
+- Migration with CHECK constraints (PG) and indexes
+- Partial indexes for phone/email (PG), standard indexes (SQLite)
+- LeadFactory with status states + withoutPhone/withoutEmail/withoutSource
+- LeadNotFoundException (404), LeadDuplicateException (409)
+- 42 tests (6 LeadStatus + 10 Phone + 8 Email + 17 Model + 12 PG)
+- ADR-072
+
+#### Puertas
+- phpunit: 42/42 PASS (87 assertions)
+- pint: PASS
+- phpstan: 0 errores
+- composer audit: clean
+- vitest: 302/302
+- vue-tsc: 0 errores
+- vite build: PASS
+
+#### ESTADO
+EN PROGRESO — pendiente commit. NO PUSH.

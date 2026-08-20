@@ -1880,3 +1880,42 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Tests: 10 precedence (FAQ-PREC-01..10), 7 idempotency (FAQ-IDEM-01..07),
     3 E2E (FAQ-E2E-01..03), 6 runtime MT (FAQ-RUNTIME-MT01..06),
     10 security (FAQ-SEC-U4-01..10) = 36 nuevos tests.
+
+## ADR-072: Lead Data Model + Normalization (FASE 19 U1)
+
+- **Fecha**: 2026-08-20
+- **Estado**: ACEPTADO
+- **Contexto**: FASE 19 establece un CRM básico multi-tenant para leads capturados
+  manualmente. Los leads son independientes de contacts (sin FK). Se necesita
+  data model, normalización de phone/email, status lifecycle, y indexes.
+- **Decisión**:
+  - **Tabla `leads`**: UUID PK, `tenant_id` FK cascadeOnDelete, `name` (VARCHAR 255,
+    NOT NULL), `phone` (VARCHAR 30, nullable), `email` (VARCHAR 255, nullable),
+    `status` (VARCHAR 20, default 'new'), `source` (VARCHAR 50, nullable),
+    `notes` (TEXT, nullable), timestamps, soft deletes.
+  - **LeadStatus enum**: `new`, `contacted`, `qualified`, `won`, `lost`. Lifecycle
+    lineal simplificado. Enforcement de transiciones pertenece a U2.
+  - **Phone normalization** (LeadPhoneNormalizer): reutiliza contrato de
+    ContactService::normalizePhone(). trim → strip non-digits → prepend `+`.
+    Representación canónica estilo internacional, NO validación E.164 completa.
+  - **Email normalization** (LeadEmailNormalizer): trim → lowercase UTF-8. Sin
+    plus-addressing strip, sin equivalencias provider-specific.
+  - **Sin UNIQUE en phone/email**: la deduplicación es de aplicación (U2). Mismos
+    datos pueden existir legítimamente (teléfonos compartidos, emails compartidos).
+  - **Indexes**: `(tenant_id, status)`, `(tenant_id, created_at)`, `(tenant_id, phone)`
+    partial PG, `(tenant_id, email)` partial PG. SQLite: standard indexes equivalentes.
+  - **CHECK constraints (PG only)**: `status IN ('new','contacted','qualified','won','lost')`
+    y `LENGTH(TRIM(name)) > 0`. SQLite: validación application-level.
+  - **Soft deletes**: phone/email en registros deleted no afectan partial indexes.
+    Dedup exclude soft-deleted (U2).
+  - **Source**: VARCHAR nullable con vocabulary controlado (`manual`, `whatsapp`, `web`,
+    `referral`, `other`). Sin tabla de sources, sin DB enum type.
+  - **Manual-only boundary**: U1-U2 no implementan AI extraction, auto-create from
+    WhatsApp, o Contact→Lead conversion.
+- **Consecuencias**:
+  - DDL: tabla `leads` con FK, CHECK constraints (PG), partial indexes (PG), standard
+    indexes (SQLite). Migración condicional PG/SQLite.
+  - 42 tests: 6 LeadStatus + 10 Phone + 8 Email + 17 Model + 12 PG.
+  - LeadNotFoundException (404), LeadDuplicateException (409) preparados para U2.
+  - LeadFactory con 5 status states + 3 nullable states.
+  - Sin Service, Controller, API routes, permissions, o frontend en U1.
