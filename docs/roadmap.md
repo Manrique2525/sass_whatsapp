@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA. FASE 19 EN PROGRESO.
+Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA. FASE 19 COMPLETADA.
 
 ## Fases
 
@@ -25,7 +25,7 @@ Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA. FASE 19 EN PROGRESO.
 | 16 | IA (AIProviderInterface, OpenAI + AI Node Runtime + Telemetry + Security) | COMPLETADA |
   | 17 | Base de conocimiento (RAG + pgvector) | COMPLETADA |
 | 18 | FAQ inteligente | COMPLETADA |
-| 19 | Leads | EN PROGRESO (U2 completada, U3 completada) |
+| 19 | Leads | COMPLETADA |
 | 20 | Tags | PENDIENTE |
 | 21 | Analytics | PENDIENTE |
 | 22 | Notificaciones | PENDIENTE |
@@ -1993,7 +1993,7 @@ COMPLETADO — pendiente commit. NO PUSH.
 
 ---
 
-## FASE 19 — Leads (EN PROGRESO)
+## FASE 19 — Leads (COMPLETADA)
 
 ### U1 — Data Model + Normalization
 - **Estado**: COMPLETADA
@@ -2047,14 +2047,31 @@ COMPLETADO — pendiente commit. NO PUSH.
   - Inertia patterns: useForm, router, page props
 - 36 new frontend tests: 28 leadUtils + 8 leadApi
 
-#### Puertas
-- phpunit Lead: 96/96 PASS (206 assertions)
+### U4 — Hardening, Auditoría Final y Cierre
+- **Estado**: COMPLETADA
+- **Commit**: (pending)
+- Scope guard: no feature creep (no contact_id, assigned_to, tags, custom_fields, score, AI)
+- Bug fixes:
+  - Fixed duplicate `id="lead-source"` → modal uses `id="lead-source-form"` (P1 HTML)
+  - Added Escape key handler on both modals (P1 a11y)
+  - Fixed search placeholder to include "notas" (P2 consistency)
+- Security matrix: 12 tests (LEAD-SEC-F01..F12) covering IDOR, tenant injection, mass assignment, SQL injection, XSS, PII audit, duplicate no-PII, invalid transitions, permissions, inactive membership (PG-only), soft delete, cross-tenant
+- E2E CRUD: 7 tests (LEAD-E2E-01..07) covering full lifecycle, phone/email normalization, status transitions, duplicate 409, cross-tenant 404, agent read-only
+- Docker: NOT available (daemon not running); PG tests (LEAD-PG-01..12) remain pending
+- Security scan: no secrets, no PII, no .env, no certs committed
+- DDL: NONE
+- docs: ADR-075, roadmap, testing updated
+
+#### Puertas finales
+- phpunit Lead: 114/114 PASS (250 assertions), 1 skipped (PG-only)
 - phpunit FAQ regression: 161/161 PASS
 - pint: PASS
 - phpstan: 0 errores
 - vitest: 338/338
 - vue-tsc: 0 errores
 - vite build: PASS
+- composer audit: clean
+- security scan: CLEAN
 
 #### ESTADO
-EN PROGRESO — U3 completada. Pendiente commit. NO PUSH.
+COMPLETADA. Pendiente commit. NO PUSH.

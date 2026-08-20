@@ -525,6 +525,11 @@ Pirámide de tests con prioridad en lo crítico:
 - `leadApi.test.ts` (LEAD-V14..V18, V19): fetchLeads, createLead, updateLead, deleteLead, tenant URL construction, filter serialization.
 - Suite U3: **36 tests**. Total Vitest: **338/338**.
 
+#### U4 — Hardening + Security Matrix (backend)
+- `LeadSecurityTest` (LEAD-SEC-F01..F12): IDOR, tenant injection, mass assignment, SQL injection, XSS, PII audit, duplicate no-PII, invalid transitions → 422, agent permissions, inactive membership (PG-only skip), soft delete, cross-tenant.
+- E2E CRUD (LEAD-E2E-01..07): full lifecycle, phone normalization, email normalization, status transitions, duplicate 409, cross-tenant 404, agent read-only.
+- Suite U4: **19 tests / 44 assertions** (1 skipped: PG-only). Total Lead backend: **114 tests / 250 assertions**.
+
 ### Auth
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 

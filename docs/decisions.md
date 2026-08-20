@@ -1982,3 +1982,32 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - 36 tests frontend: 28 leadUtils + 8 leadApi.
   - Total Vitest: 338/338. Typecheck: 0 errors. Vite build: clean.
   - Patrón de presentación reutilizable para futuros módulos CRUD de settings.
+
+## ADR-075: Lead Hardening + Security Matrix + Cierre (FASE 19 U4)
+
+- **Estado**: Aceptado · FASE 19 U4
+- **Contexto**: FASE 19 U1-U3 implementaron el módulo Leads completo (data model, API, frontend).
+  U4 realiza auditoría integral, hardening y cierre de fase.
+- **Decisión**:
+  - **Scope guard**: se confirma que Lead es CRM básico manual. No existen contact_id,
+    conversation_id, assigned_to, tags, custom_fields, score, ai_metadata.
+  - **Bug fixes** (3 items):
+    - Duplicate `id="lead-source"` en Leads.vue (P1 HTML) → modal usa `id="lead-source-form"`.
+    - Falta Escape key en modales (P1 a11y) → se agregó `@keydown.escape` en ambos overlays.
+    - Placeholder de búsqueda inconsistente con backend → actualizado a incluir "notas".
+  - **Security matrix**: 12 tests (LEAD-SEC-F01..F12): IDOR, tenant_id injection, mass assignment,
+    SQL injection, XSS payload storage, PII audit, duplicate no-PII leak, invalid transitions
+    → 422 (no 500), agent permissions, inactive membership (PG-only), soft delete, cross-tenant.
+  - **E2E CRUD**: 7 tests (LEAD-E2E-01..07): full lifecycle, normalization, status transitions,
+    duplicate 409, cross-tenant 404, agent read-only.
+  - **Dedup race condition**: riesgo residual documentado. Sin UNIQUE DB, dos CREATE concurrentes
+    con mismo phone/email pueden pasar el pre-check. Probabilidad baja (CRM manual), impacto bajo
+    (lead duplicado, no corrupción). Mitigación futura: UNIQUE index o advisory lock.
+  - **PostgreSQL tests (LEAD-PG-01..12)**: pendientes de ejecución (Docker daemon no disponible).
+    Tests escritos y listos para ejecutar cuando PG real esté disponible.
+  - **Security scan**: limpio — sin .env, keys, tokens, PII real, ni certificados.
+  - **DDL**: NONE. No se requieren migraciones nuevas.
+- **Consecuencias**:
+  - 19 tests de seguridad + E2E (12 SEC + 7 E2E). Backend Lead total: 114 tests / 250 assertions.
+  - Total Vitest: 338/338. PHPStan: 0 errors. Pint: clean.
+  - FASE 19 declarada COMPLETADA.

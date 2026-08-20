@@ -231,7 +231,7 @@ onMounted(load);
                             id="lead-search"
                             v-model="filters.search"
                             type="text"
-                            placeholder="Nombre, teléfono o email"
+                            placeholder="Nombre, teléfono, email o notas"
                             class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                         />
                     </div>
@@ -376,6 +376,7 @@ onMounted(load);
             v-if="showModal"
             class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 p-4"
             @click.self="showModal = false"
+            @keydown.escape="showModal = false"
         >
             <div class="w-full max-w-lg rounded-xl bg-white p-6 shadow-lg">
                 <h3 class="text-lg font-semibold text-zinc-900">
@@ -421,9 +422,9 @@ onMounted(load);
                     </div>
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label for="lead-source" class="mb-1 block text-sm font-medium text-zinc-700">Origen</label>
+                            <label for="lead-source-form" class="mb-1 block text-sm font-medium text-zinc-700">Origen</label>
                             <select
-                                id="lead-source"
+                                id="lead-source-form"
                                 v-model="form.source"
                                 class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                             >
@@ -490,6 +491,7 @@ onMounted(load);
             v-if="deletingLead !== null"
             class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 p-4"
             @click.self="deletingLead = null"
+            @keydown.escape="deletingLead = null"
         >
             <div class="w-full max-w-sm rounded-xl bg-white p-6 shadow-lg">
                 <h3 class="text-lg font-semibold text-zinc-900">Eliminar lead</h3>
