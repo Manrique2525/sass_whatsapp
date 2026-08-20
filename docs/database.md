@@ -26,7 +26,8 @@ tenants
   ├─ faqs
   ├─ audit_logs
   ├─ subscriptions 1─N usage_records
-  └─ analytics_daily
+  ├─ analytics_daily
+  └─ conversation_metrics
 ```
 
 ## 3. Tablas por módulo
@@ -444,7 +445,54 @@ deben ser idempotentes y testeadas con `migrate:fresh` en CI.
 Instalar extensión: `CREATE EXTENSION IF NOT EXISTS vector;`. Índice HNSW para búsqueda de
 similaridad (mejor latencia que IVFFlat para tamaños medianos).
 
-## 8. FASE 15 — Transferencia a humano (DDL)
+## 8. FASE 21 — Analytics Data Foundation (DDL)
+
+Migraciones verificadas en PostgreSQL 16 con `migrate:up`, `migrate:rollback`, y segundo `migrate:up`.
+
+### analytics_daily
+
+| Columna | Tipo | Constraint |
+|---|---|---|
+| `id` | uuid | PK |
+| `tenant_id` | uuid | NOT NULL, FK→tenants `cascadeOnDelete` |
+| `date` | date | NOT NULL |
+| `total_messages` | integer | NOT NULL, DEFAULT 0 |
+| `inbound_messages` | integer | NOT NULL, DEFAULT 0 |
+| `outbound_messages` | integer | NOT NULL, DEFAULT 0 |
+| `total_conversations` | integer | NOT NULL, DEFAULT 0 |
+| `conversations_started` | integer | NOT NULL, DEFAULT 0 |
+| `conversations_closed` | integer | NOT NULL, DEFAULT 0 |
+| `avg_response_time_seconds` | integer | NULLABLE |
+| `total_flow_executions` | integer | NOT NULL, DEFAULT 0 |
+| `total_ai_tokens` | bigint | NOT NULL, DEFAULT 0 |
+| `created_at` / `updated_at` | timestamp | — |
+
+- **Constraints**: `UNIQUE (tenant_id, date)`, `idx_analytics_daily_tenant_date`.
+- **Sin soft deletes**: datos históricos nunca se eliminan.
+- **Sin tenant_id fillable**: protección Anti-Exploration (ADR-077).
+
+### conversation_metrics
+
+| Columna | Tipo | Constraint |
+|---|---|---|
+| `id` | uuid | PK |
+| `tenant_id` | uuid | NOT NULL, FK→tenants `cascadeOnDelete` |
+| `conversation_id` | uuid | NOT NULL |
+| `total_messages` | integer | NOT NULL, DEFAULT 0 |
+| `inbound_messages` | integer | NOT NULL, DEFAULT 0 |
+| `outbound_messages` | integer | NOT NULL, DEFAULT 0 |
+| `avg_response_time_ms` | integer | NULLABLE |
+| `ai_tokens_used` | integer | NOT NULL, DEFAULT 0 |
+| `first_response_at` | timestamp | NULLABLE |
+| `last_message_at` | timestamp | NULLABLE |
+| `created_at` / `updated_at` | timestamp | — |
+
+- **Constraints**: `UNIQUE (tenant_id, conversation_id)`, composite FK `(tenant_id, conversation_id)` → `conversations(tenant_id, id)`.
+- **Índices**: `idx_conversation_metrics_tenant_conversation`, `idx_conversation_metrics_tenant_last_message`.
+- **Sin soft deletes**: métricas acumuladas se preservan.
+- **Anti-Cross-Tenant FK**: FK compuesta garantiza que conversation_id pertenece al mismo tenant.
+
+## 9. FASE 15 — Transferencia a humano (DDL)
 
 Migraciones verificadas con UP/DOWN/UP en PostgreSQL 16.
 

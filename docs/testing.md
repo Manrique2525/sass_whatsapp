@@ -593,7 +593,41 @@ En CI: secuencia lint → phpstan → test → build → typecheck → (E2E opci
 - Umbrales: código crítico (webhooks, engine, tenant, billing) >= 90%; global >= 80%.
 - Se registran excepciones justificadas en `docs/decisions.md`.
 
-## 7. Estado de pruebas por fase
+## 7. Analytics (FASE 21 U1)
+
+### Suite SQLite (Feature/Analytics/)
+
+Tests de invariantes de dominio que corren en SQLite (sin dependencias PG):
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `AnalyticsDailyTest.php` | 10 (AN-DOM-01..10) | Schema, defaults, unique, factory, fillable, timestamps |
+| `ConversationMetricTest.php` | 10 (AN-DOM-11..20) | Schema, defaults, composite FK, unique, factory, fillable |
+
+Ejecución: `vendor/bin/pest tests/Feature/Analytics/`
+
+### Suite PostgreSQL (Postgres/Analytics/)
+
+Tests de migración real y constraints PG:
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `AnalyticsPostgresTest.php` | 12 (AN-PG-01..12) | Migración UP, FKs, UNIQUEs, composite FK cross-tenant block, índices, defaults, rollback |
+
+Ejecución:
+```bash
+# Crear DB de test
+docker compose exec -T postgres createdb -U saas -O saas whatsapp_saas_analytics_test
+# Ejecutar tests
+HANDOFF_U2_PG_TEST=1 DB_DATABASE=whatsapp_saas_analytics_test \
+  docker compose exec app vendor/bin/pest \
+  --configuration=phpunit.pgsql.xml \
+  --filter="AnalyticsPostgresTest"
+# Limpiar
+docker compose exec -T postgres dropdb -U saas --if-exists --force whatsapp_saas_analytics_test
+```
+
+## 8. Estado de pruebas por fase
 
 Cada fase declara su estado en `docs/roadmap.md` (PASS/FAIL) usando el formato de reporte
 definido por el usuario (ver final de `roadmap.md`).

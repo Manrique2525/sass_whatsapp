@@ -2044,3 +2044,30 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - 19 tests de seguridad + E2E (12 SEC + 7 E2E). Backend Lead total: 114 tests / 250 assertions.
   - Total Vitest: 338/338. PHPStan: 0 errors. Pint: clean.
   - FASE 19 declarada COMPLETADA.
+
+## ADR-077 · Analytics Data Foundation (FASE 21 U1)
+
+- **Estado**: Aceptado · FASE 21 U1
+- **Contexto**: El SaaS necesita métricas de uso (mensajes, conversaciones, tokens AI, tiempos
+  de respuesta) para dashboard de analytics. Sin una capa de datos aggregada, cada consulta
+  tendría que escanear tablas transaccionales (messages, conversations, flow_executions) en
+  tiempo real, lo cual es inviable a escala.
+- **Decisión**: Dos tablas new, domain models, factories, y tests:
+  - `analytics_daily`: tabla aggregada por tenant+date con contadores pre-calculados
+    (total_messages, inbound/outbound, conversations_started/closed, avg_response_time_seconds,
+    total_flow_executions, total_ai_tokens). PK UUID, UNIQUE(tenant_id,date), FK→tenants CASCADE.
+    Todos los contadores INTEGER DEFAULT 0, total_ai_tokens BIGINT DEFAULT 0.
+  - `conversation_metrics`: tabla por conversación con métricas acumuladas
+    (total_messages, inbound/outbound, avg_response_time_ms, ai_tokens_used,
+    first_response_at, last_message_at). PK UUID, composite FK(tenant_id,conversation_id)
+    → conversations(tenant_id,id) CASCADE, UNIQUE(tenant_id,conversation_id).
+  - `MetricGranularity` enum: Daily/Weekly/Monthly (BackedEnum).
+  - AggregationService + AggregateDailyAnalyticsJob se implementan en U2 (no U1).
+  - Schema cache (Redis) + API endpoint se implementan en U3.
+  - Frontend dashboard + charts se implementan en U4.
+- **Consecuencias**:
+  - Migraciones verificadas en PostgreSQL 16 con UP/DOWN/UP.
+  - 20 tests SQLite invariantes + 12 tests PostgreSQL reales.
+  - tenant_id NOTfillable en ambos models (protección Anti-Exploration).
+  - 0 PII almacenado en analytics (solo IDs de tenant/conversation, no phone/names).
+  - ADR-076 (FASE 20 U4 Tags) precede este ADR.
