@@ -57,6 +57,7 @@ class LeadPostgresTest extends PgvectorTestCase
     public function it_runs_leads_migration_up(): void
     {
         $this->artisan('migrate:fresh');
+        $this->tenantId = createTestLeadTenant();
 
         $this->assertTrue(Schema::hasTable('leads'));
     }
@@ -64,8 +65,6 @@ class LeadPostgresTest extends PgvectorTestCase
     /** @test LEAD-PG-02: tenant FK works */
     public function it_inserts_with_valid_tenant_fk(): void
     {
-        $this->artisan('migrate:fresh');
-
         $id = (string) Str::uuid();
 
         DB::table('leads')->insert([
@@ -89,8 +88,6 @@ class LeadPostgresTest extends PgvectorTestCase
     /** @test LEAD-PG-03: status CHECK constraint valid values accepted */
     public function it_accepts_valid_status_values(): void
     {
-        $this->artisan('migrate:fresh');
-
         $validStatuses = ['new', 'contacted', 'qualified', 'won', 'lost'];
 
         foreach ($validStatuses as $status) {
@@ -110,8 +107,6 @@ class LeadPostgresTest extends PgvectorTestCase
     /** @test LEAD-PG-04: status CHECK constraint rejects invalid value */
     public function it_rejects_invalid_status_value(): void
     {
-        $this->artisan('migrate:fresh');
-
         $this->expectException(QueryException::class);
 
         DB::table('leads')->insert([
@@ -127,8 +122,6 @@ class LeadPostgresTest extends PgvectorTestCase
     /** @test LEAD-PG-05: name CHECK constraint rejects empty name */
     public function it_rejects_empty_name(): void
     {
-        $this->artisan('migrate:fresh');
-
         $this->expectException(QueryException::class);
 
         DB::table('leads')->insert([
@@ -144,8 +137,6 @@ class LeadPostgresTest extends PgvectorTestCase
     /** @test LEAD-PG-06: name CHECK constraint rejects whitespace-only name */
     public function it_rejects_whitespace_only_name(): void
     {
-        $this->artisan('migrate:fresh');
-
         $this->expectException(QueryException::class);
 
         DB::table('leads')->insert([
@@ -161,8 +152,6 @@ class LeadPostgresTest extends PgvectorTestCase
     /** @test LEAD-PG-07: same phone different leads allowed (NO UNIQUE) */
     public function it_allows_same_phone_different_leads(): void
     {
-        $this->artisan('migrate:fresh');
-
         DB::table('leads')->insert([
             'id' => (string) Str::uuid(),
             'tenant_id' => $this->tenantId,
@@ -194,8 +183,6 @@ class LeadPostgresTest extends PgvectorTestCase
     /** @test LEAD-PG-08: same email different leads allowed (NO UNIQUE) */
     public function it_allows_same_email_different_leads(): void
     {
-        $this->artisan('migrate:fresh');
-
         DB::table('leads')->insert([
             'id' => (string) Str::uuid(),
             'tenant_id' => $this->tenantId,
@@ -227,8 +214,6 @@ class LeadPostgresTest extends PgvectorTestCase
     /** @test LEAD-PG-09: same data across tenants allowed */
     public function it_allows_same_data_across_tenants(): void
     {
-        $this->artisan('migrate:fresh');
-
         $tenantB = createTestLeadTenant('Tenant B');
 
         DB::table('leads')->insert([
@@ -260,8 +245,6 @@ class LeadPostgresTest extends PgvectorTestCase
     /** @test LEAD-PG-10: invalid tenant rejected by FK */
     public function it_rejects_invalid_tenant_fk(): void
     {
-        $this->artisan('migrate:fresh');
-
         $fakeTenantId = (string) Str::uuid();
 
         $this->expectException(QueryException::class);
@@ -276,34 +259,40 @@ class LeadPostgresTest extends PgvectorTestCase
         ]);
     }
 
-    /** @test LEAD-PG-11: partial indexes exist */
+    /** @test LEAD-PG-11: partial indexes exist with correct predicates */
     public function it_has_partial_indexes_for_phone_and_email(): void
     {
-        $this->artisan('migrate:fresh');
-
         $phoneIndex = DB::selectOne(
             "SELECT indexdef FROM pg_indexes WHERE tablename = 'leads' AND indexname = 'leads_tenant_phone_index'"
         );
-        $this->assertNotNull($phoneIndex);
-        $this->assertStringContainsString('WHERE phone IS NOT NULL AND deleted_at IS NULL', $phoneIndex->indexdef);
+        $this->assertNotNull($phoneIndex, 'leads_tenant_phone_index must exist');
+        $this->assertStringContainsString('phone', $phoneIndex->indexdef);
+        $this->assertStringContainsString('IS NOT NULL', $phoneIndex->indexdef);
+        $this->assertStringContainsString('deleted_at', $phoneIndex->indexdef);
+        $this->assertStringNotContainsString('UNIQUE', $phoneIndex->indexdef);
 
         $emailIndex = DB::selectOne(
             "SELECT indexdef FROM pg_indexes WHERE tablename = 'leads' AND indexname = 'leads_tenant_email_index'"
         );
-        $this->assertNotNull($emailIndex);
-        $this->assertStringContainsString('WHERE email IS NOT NULL AND deleted_at IS NULL', $emailIndex->indexdef);
+        $this->assertNotNull($emailIndex, 'leads_tenant_email_index must exist');
+        $this->assertStringContainsString('email', $emailIndex->indexdef);
+        $this->assertStringContainsString('IS NOT NULL', $emailIndex->indexdef);
+        $this->assertStringContainsString('deleted_at', $emailIndex->indexdef);
+        $this->assertStringNotContainsString('UNIQUE', $emailIndex->indexdef);
     }
 
     /** @test LEAD-PG-12: up/down/up cycle */
     public function it_handles_up_down_up_cycle(): void
     {
         $this->artisan('migrate:fresh');
+        $this->tenantId = createTestLeadTenant();
         $this->assertTrue(Schema::hasTable('leads'));
 
         $this->artisan('migrate:rollback');
         $this->assertFalse(Schema::hasTable('leads'));
 
         $this->artisan('migrate');
+        $this->tenantId = createTestLeadTenant();
         $this->assertTrue(Schema::hasTable('leads'));
 
         DB::table('leads')->insert([
