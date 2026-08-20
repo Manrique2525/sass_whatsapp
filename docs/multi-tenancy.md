@@ -395,3 +395,9 @@ tenant distinto del propietario:
     cross-tenant → 404 y B queda intacto (TAG-ASG-MT-01..04/08/09, CRITICO). Un mismo nombre
     de tag puede existir en A y B sin colisión (TAG-ASG-MT-10). El resolver
     Contact→Conversation nunca devuelve conversaciones de otro tenant (TAG-CONV-03).
+23. (FASE 20 U4) El listener `DispatchTagTriggerJob` filtra triggers por `tenant_id` del
+    evento (`event->tenantId`) usando `withoutTenantScope()` + `where('tenant_id', ...)`.
+    Un trigger de Tenant B jamás se despacha por un TagAssigned de Tenant A (TAG-U4-12,
+    TAG-U4-16). El job `StartFlowFromTag` revalida `tenant_id` del trigger contra el
+    `tenantId` del job (defensa en profundidad). El `FlowEngine::handleScheduleTrigger`
+    opera SIEMPRE bajo `TenantContext` del tenant correcto.

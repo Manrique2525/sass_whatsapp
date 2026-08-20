@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA. FASE 19 COMPLETADA. FASE 20 EN PROGRESO (U1–U3 completadas, U4 pendiente).
+Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA. FASE 19 COMPLETADA. FASE 20 COMPLETADA.
 
 ## Fases
 
@@ -26,7 +26,7 @@ Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA. FASE 19 COMPLETADA. 
   | 17 | Base de conocimiento (RAG + pgvector) | COMPLETADA |
 | 18 | FAQ inteligente | COMPLETADA |
 | 19 | Leads | COMPLETADA |
-| 20 | Tags | EN PROGRESO (U1–U3 COMPLETADAS, U4 pendiente) |
+| 20 | Tags | COMPLETADA |
 | 21 | Analytics | PENDIENTE |
 | 22 | Notificaciones | PENDIENTE |
 | 23 | Planes | PENDIENTE |
@@ -2106,10 +2106,16 @@ COMPLETADA. Pendiente commit. NO PUSH.
 - 55 tests nuevos: TAG-U3-01..10, TAG-ASG-01..13, TAG-ASG-PERM-01..06, TAG-ASG-MT-01..10, TAG-EVT-01..08, TAG-CONV-01..08
 
 ### U4 — Tag Trigger Execution (StartFlowFromTag)
-- **Estado**: PENDIENTE (NOT STARTED)
-- Contrato ADR-050: listener de TagAssigned → reutilizar FlowExecutionService/FlowEngine
-- Pendiente: semántica EVENT/ANY/ALL de config.tags, barreras anti-recursión, orden del
-  conversationLock, verificación bot_paused/ejecución activa antes de disparar
+- **Estado**: COMPLETADA
+- Primer listener del codebase: `DispatchTagTriggerJob` escucha `TagAssigned`
+- Anti-recursión: origin=Flow → skip (previene cadenas tag→flow→tag)
+- Listener busca triggers activos del tenant con config.tags matching → despacha `StartFlowFromTag` por cada uno
+- `StartFlowFromTag`: ShouldBeUnique, TenantAwareJob, revalida defensa en profundidad (tenant, trigger activo, type=Tag, flow Published, config re-match, contact exist, conversation resolve)
+- Resolución Contact→Conversation via `ContactConversationResolver` (más reciente, tenant-scoped)
+- Delega a `FlowEngine::handleScheduleTrigger()` (reutiliza pipeline existente: conversationLock, bot_paused, ejecución activa, start+run)
+- Cache::lock por trigger (doble disparo)
+- Auditoría `flow.tag_triggered` con trigger_id, flow_id, conversation_id, tag_name
+- 16 tests: TAG-U4-01..16 (flujo válido, inactivo, no publicado, bot_paused, ejecución activa, case-sensitive, anti-recursión, sin conversación, múltiples triggers, audit, tag no match, cross-tenant, listener matching/no matching/inactivo/cross-tenant)
 
 #### ESTADO
-U1–U3 COMPLETADAS. U4 NO INICIADA. NO PUSH.
+FASE 20 COMPLETADA. Pendiente commit. NO PUSH.

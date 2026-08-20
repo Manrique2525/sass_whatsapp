@@ -22,14 +22,17 @@ use App\Application\KnowledgeBase\Contracts\KnowledgeSearchServiceInterface;
 use App\Application\KnowledgeBase\Services\KnowledgeSearchService;
 use App\Domain\AI\Contracts\AIProviderInterface;
 use App\Domain\AI\Contracts\EmbeddingProviderInterface;
+use App\Domain\Contacts\Events\TagAssigned;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\WhatsApp\Contracts\WhatsAppProviderInterface;
 use App\Infrastructure\AI\OpenAIEmbeddingProvider;
 use App\Infrastructure\AI\OpenAIProvider;
 use App\Infrastructure\WhatsApp\MetaWhatsAppProvider;
+use App\Listeners\DispatchTagTriggerJob;
 use App\Policies\TenantPolicy;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
@@ -102,6 +105,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::policy(Tenant::class, TenantPolicy::class);
+
+        Event::listen(TagAssigned::class, DispatchTagTriggerJob::class);
 
         Password::defaults(fn () => Password::min(8));
 

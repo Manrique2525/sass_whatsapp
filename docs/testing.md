@@ -554,6 +554,10 @@ Pirámide de tests con prioridad en lo crítico:
 - `ContactConversationResolverTest` (TAG-CONV-01..08, 8 tests): conversación más reciente por `updated_at` con desempates deterministas (`created_at` ASC, `id` ASC); null sin conversaciones; tenant-scoped (ignora conversaciones de otro tenant); sin filtro `bot_paused`/status.
 - Suite U3: **55 tests nuevos** (backend). Total Tag backend: **127 tests / 271 assertions**.
 
+#### U4 — Tag Trigger Execution (StartFlowFromTag) (backend)
+- `TagTriggerExecutionTest` (TAG-U4-01..16, 16 tests): flujo válido dispara y genera outbound; trigger inactivo → skip; flow no publicado → skip; bot_paused → skip; ejecución activa → skip; case-sensitive mismatch → skip; anti-recursión origin=Flow descarta; contacto sin conversación → skip; múltiples triggers matching disparan independientemente; audit log flow.tag_triggered verificado; tag no coincidente → skip; cross-tenant trigger → skip; listener despacha 1 job por trigger matching (Queue::fake); listener no despacha sin match; listener no despacha triggers inactivos; listener no despacha triggers de otro tenant.
+- Suite U4: **16 tests nuevos** (backend). Total Tag backend: **143 tests / 290 assertions**.
+
 ### Auth
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 

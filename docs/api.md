@@ -433,7 +433,14 @@ origin_execution_id?}` y `TagRemoved` `{tenant_id, contact_id, tag_id, tag_name}
 estables (sin modelos Eloquent ni PII), `afterCommit = true`. La resolución
 Contact→Conversation para `conversation_id` es determinista y tenant-scoped
 (`ContactConversationResolver`: más reciente por `updated_at`, sin filtrar `bot_paused`/status).
-Sin listeners todavía: el disparo automático de flujos por tag llega en FASE 20 U4 (ADR-050).
+
+**Ejecución automática (FASE 20 U4, ADR-050)**: `TagAssigned` con `origin=Manual` activa el
+pipeline de triggers. El listener `DispatchTagTriggerJob` busca todos los triggers activos del
+tenant de tipo `tag` cuyo `config.tags` contenga el nombre del tag asignado, y despacha un
+`StartFlowFromTag` por cada uno. `origin=Flow` → skip (anti-recursión). El job revalida todas
+las condiciones (defensa en profundidad), resuelve la conversación más reciente del contacto
+(`ContactConversationResolver`) y delega al `FlowEngine::handleScheduleTrigger()` existente
+(conversationLock, bot_paused, ejecución activa, start+run). Auditoría: `flow.tag_triggered`.
 
 ## 4. Webhooks (sin auth Bearer; autenticados por firma y dedupe)
 

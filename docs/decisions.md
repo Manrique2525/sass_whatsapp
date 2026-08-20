@@ -1144,6 +1144,39 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   contrato anterior y reutilizará `FlowExecutionService` → `FlowEngine` sin crear un motor
   paralelo.
 
+## ADR-052: Ejecución automática de flujos por tag (FASE 20 U4)
+
+- **Fecha**: 2026-08-18
+- **Estado**: Aceptado — implementación de FASE 20 U4
+- **Contexto**: ADR-050 difiere la ejecución del trigger `tag` a FASE 20. U1–U3 establecen
+  el contrato: `TagService` centralizado, eventos `TagAssigned`/`TagRemoved`, API de
+  asignación batch y `ContactConversationResolver`. U4 debe consumir estos contratos para
+  activar flujos automáticamente cuando un contacto recibe un tag que coincide con
+  `config.tags` de un trigger.
+- **Decisión**:
+  - **Semántica EVENT**: cada `TagAssigned` se evalúa independientemente. Un trigger con
+    `config.tags: ['vip', 'premium']` dispara si el tag asignado es `vip` O `premium` (no
+    requiere ambos). Esto es consistente con los triggers schedule y webhook.
+  - **Anti-recursión**: `origin=Flow` → skip completo en el listener. Un tag asignado por un
+    flujo NUNCA dispara otro flujo. Esto previene cadenas tag→flow→tag. El mecanismo es
+    simple y seguro: el enum `TagAssignmentOrigin` ya transporta el origen.
+  - **Listener architecture**: primer listener del codebase. `DispatchTagTriggerJob` registrado
+    vía `Event::listen()` en `AppServiceProvider::boot()`. Busca triggers activos del tenant
+    con config.tags matching y despacha un `StartFlowFromTag` por cada uno.
+  - **Job pattern**: `StartFlowFromTag` sigue exactamente el patrón de `StartFlowFromSchedule`
+    y `StartFlowFromWebhook`: ShouldBeUnique, TenantAwareJob, defensa en profundidad,
+    Cache::lock por trigger, delega a `FlowEngine::handleScheduleTrigger()`.
+  - **Resolución Contact→Conversation**: reutiliza `ContactConversationResolver` (U3). Null →
+    skip (sin conversación no se dispara). No se crea conversación implícita.
+  - **Matching**: case-sensitive, sin folding de acentos. `'VIP'` ≠ `'vip'`.
+  - **Auditoría**: `flow.tag_triggered` con `{trigger_id, flow_id, conversation_id, tag_name}`.
+- **Consecuencias**:
+  - `FlowEngine` NO se modifica; se reutiliza `handleScheduleTrigger()` directamente.
+  - El listener corre afterCommit del evento (transaction safety).
+  - `TagAssigned` con `origin=Flow` nunca llega al job (filtrado en listener).
+  - Tests: 16 nuevos (TAG-U4-01..16) cubriendo happy path, barrieras, anti-recursión,
+    matching, auditoría, multi-tenancy y listener.
+
 ---
 
 ## ADR-051: Semántica terminal de Human Handoff

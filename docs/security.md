@@ -459,9 +459,18 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - **Aislamiento fail-closed**: la asignación batch valida TODOS los `tag_ids` contra el tenant ANTES de mutar; un solo id ajeno/inexistente → **403** sin escribir ninguna fila. En remove, tag/contacto de otro tenant → **404** (no revela existencia).
 - **Nunca confiar en el frontend**: el body solo acepta `tag_ids` (array 1..20, uuid, distinct); `tenant_id` viene SIEMPRE de `TenantContext`/middleware.
 - **Eventos seguros**: `TagAssigned`/`TagRemoved` transportan solo IDs estables (sin modelos Eloquent ni PII), llevan `tenant_id` explícito y son `afterCommit = true`.
-- **Resolución Contact→Conversation**: filtra SIEMPRE por `tenant_id` (jamás resuelve conversaciones de otro tenant). No filtra `bot_paused`/status: esa política es de U4.
-- **Sin ejecución automática aún**: no existen `StartFlowFromTag` ni listeners; el disparo de flujos por tag llega en U4 (ADR-050).
-- **Auditoría**: `tag.created`, `tag.updated`, `tag.deleted` (U2), `tag.assigned`, `tag.removed` (U3).
+- **Resolución Contact→Conversation**: filtra SIEMPRE por `tenant_id` (jamás resuelve conversaciones de otro tenant).
+
+### Trigger automático por tag (FASE 20 U4, ADR-050)
+- **Primer listener del codebase**: `DispatchTagTriggerJob` escucha `TagAssigned` y despacha `StartFlowFromTag` por cada trigger activo del tenant con `config.tags` matching.
+- **Anti-recursión**: `origin=Flow` → skip completo (el listener descarta el evento antes de buscar triggers). Esto previene cadenas tag→flow→tag.
+- **Defensa en profundidad (job)**: revalida tenant, trigger activo, type=Tag, flow Published, config re-match exacto (case-sensitive), contacto existente, conversación no nula.
+- **conversationLock**: `FlowEngine::handleScheduleTrigger()` adquiere lock interno; el job tiene Cache::lock por trigger.
+- **bot_paused / ejecución activa**: verificados dentro de `handleScheduleTriggerLocked()` (pipeline existente).
+- **Auditoría**: `flow.tag_triggered` con `{trigger_id, flow_id, conversation_id, tag_name}`.
+- **Semántica EVENT**: cada `TagAssigned` dispara matching triggers independientemente.
+- **Sin ejecución por eventos origin=Flow**: solo `origin=Manual` (API) activa triggers. Un tag asignado por un flujo NUNCA dispara otro flujo.
+- **Auditoría total**: `tag.created`, `tag.updated`, `tag.deleted` (U2), `tag.assigned`, `tag.removed` (U3), `flow.tag_triggered` (U4).
 
 ## 3. Comprobaciones automatizadas
 
@@ -493,10 +502,11 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - [ ] (FASE 14 U3) Aislamiento webhook A/B verdes (WEBHOOK-19), token auth verdes
         (WEBHOOK-01..05), idempotencia verdes (WEBHOOK-10/11), secretos nunca en
         logs/audit (WEBHOOK-15/18), rate limit verdes (WEBHOOK-16).
-- [ ] (FASE 14 cierre / FASE 20 U3) Trigger tag permanece sin EJECUCIÓN automática. U3 añadió
-        `TagAssigned`/`TagRemoved` como eventos de dominio SIN listeners y la API manual de
-        asignación. Siguen sin existir `StartFlowFromTag`, listeners/observers ni ejecución
-        automática por tag (diferidos a FASE 20 U4, ADR-050).
+- [x] (FASE 14 cierre / FASE 20 U3–U4) Trigger tag: ejecución automática IMPLEMENTADA en FASE 20 U4.
+        `DispatchTagTriggerJob` (primer listener del codebase) escucha `TagAssigned` y despacha
+        `StartFlowFromTag` por trigger matching. Anti-recursión: origin=Flow → skip. Semántica
+        EVENT (cada asignación dispara independientemente). Defensa en profundidad completa.
+        Auditoría `flow.tag_triggered`.
 - [ ] (FASE 16 U1) API key OpenAI nunca en response, logs, auditoría, exceptions ni frontend.
         Provider stateless re: tenant. Tests con Http::fake (sin llamadas reales).
         Binding AIProviderInterface → OpenAIProvider en AppServiceProvider (singleton lazy).
