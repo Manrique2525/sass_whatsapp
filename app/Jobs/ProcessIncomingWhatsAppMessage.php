@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Application\Faq\Services\FaqReplyService;
 use App\Application\Flows\Services\FlowEngine;
 use App\Application\Messages\Services\MessageService;
 use App\Domain\Conversations\Models\Conversation;
@@ -19,12 +20,16 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Procesa un mensaje entrante recibido por el webhook (FASE 6 + FASE 9).
+ * Procesa un mensaje entrante recibido por el webhook (FASE 6 + FASE 9 + FASE 18 U4).
  *
  * FASE 6: ingesta (recibir → verificar → dedupe → resolver tenant → encolar) y
  * acuse idempotente. FASE 9 (ADR-032): desde aquí se persisten contact/
  * conversation/message (dedupe por `provider_message_id`) y se actualiza la
  * conversación, antes de marcar el evento `processed`.
+ *
+ * FASE 18 U4: si el inbound fue persistido ahora (created=true), se pasa un
+ * callback FAQ al FlowEngine. El motor ejecuta el callback bajo el mismo lock
+ * de conversación solo cuando ningún flow procesó el mensaje (ADR-071).
  *
  * - Tipo de Meta no soportado → `UnsupportedMessageTypeException` (permanente):
  *   el evento se marca `failed` y NO se reintenta (el webhook ya respondió 200).
@@ -98,7 +103,13 @@ final class ProcessIncomingWhatsAppMessage implements ShouldQueue
                 ->first();
 
             if ($conversation !== null) {
-                app(FlowEngine::class)->handleMessage($tenant, $result->message, $conversation);
+                $faqCallback = $result->created
+                    ? function ($t, $m, $c): void {
+                        app(FaqReplyService::class)->tryReply($t, $m, $c);
+                    }
+                : null;
+
+                app(FlowEngine::class)->handleMessage($tenant, $result->message, $conversation, $faqCallback);
             }
         }
 

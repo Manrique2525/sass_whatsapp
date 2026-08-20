@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Application\Faq\Contracts\FaqMatcherServiceInterface;
+use App\Application\Faq\Services\FaqMatcherService;
 use App\Application\Flows\Services\ConversationLockContext;
 use App\Application\Flows\Services\Executors\AiNodeExecutor;
 use App\Application\Flows\Services\Executors\ButtonsNodeExecutor;
@@ -62,6 +64,8 @@ class AppServiceProvider extends ServiceProvider
         });
 
         $this->app->bind(KnowledgeSearchServiceInterface::class, KnowledgeSearchService::class);
+
+        $this->app->bind(FaqMatcherServiceInterface::class, FaqMatcherService::class);
 
         $this->app->bind(EmbeddingProviderInterface::class, function (): OpenAIEmbeddingProvider {
             $config = config('ai.embedding.providers.openai');

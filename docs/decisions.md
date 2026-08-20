@@ -1830,3 +1830,53 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Tests: 20 matcher (FAQ-MATCH-01..20) + 5 multi-tenancy (FAQ-MT-U2-01..05).
   - `FaqMatcherServiceInterface` listo para `FakeFaqMatcherService` en U4.
   - FlowEngine, MessageService, API, frontend: NO modificados en U2.
+
+## ADR-071 · FAQ Runtime Integration — FlowEngine precedence and callback contract
+
+- **Estado**: Aceptado · FASE 18 U4
+- **Contexto**: La capa de FAQ (U1–U3) provee datos + API + matcher determinístico pero no
+  interactúa con el pipeline de inbound messages. El motor de flujos (FlowEngine) procesa
+  cada inbound bajo lock de conversación. Se necesita integrar FAQ como fallback cuando
+  ningún flow matchea, sin duplicar locks, sin romper idempotencia existente y sin crear
+  un segundo punto de decisión fuera del motor.
+- **Decisión**:
+  1. **Integration point**: FAQ se ejecuta como callback `onUnhandled` pasado al
+     `FlowEngine::handleMessage()`. El callback corre **bajo el mismo lock de conversación**
+     que el motor — una sola decisión atómica por inbound.
+  2. **Precedence inside FlowEngine** (orden estricto, primero que retorne gana):
+     a. `recoverCommittedHandoff` → handled: true
+     b. `bot_paused` → handled: false, sin callback
+     c. Active execution Running → handled: true, sin callback
+     d. Active execution Waiting (question/buttons/delay) → handled: true, sin callback
+     e. `matchFlow` → found → handled: true, sin callback
+     f. No flow match → handled: false, **callback called**
+  3. **created guard**: el job `ProcessIncomingWhatsAppMessage` solo pasa el callback
+     cuando `$result->created === true` (el inbound fue persistido ahora, no es replay
+     del mismo `provider_message_id`).
+  4. **Fail-open**: cualquier excepción del matcher o de `createOutbound` se registra
+     en log y se retorna sin romper el pipeline. FAQ es enrichment, no path crítico.
+  5. **Defense-in-depth en FaqReplyService**: el servicio re-verifica `bot_paused`,
+     `type === Text` y `body !== ''` antes de llamar al matcher. Si bien FlowEngine
+     ya verificó `bot_paused`, la verificación defensiva protege contra invocation
+     directa desde tests u otros puntos futuros.
+  6. **Source attribution**: el outbound de FAQ incluye `faq_id` y `match_type` en
+     `message.metadata`. Sin DDL nuevo (campo JSON ya existente).
+  7. **Audit**: `faq.matched` con payload seguro: `tenant_id`, `conversation_id`,
+     `message_id`, `faq_id`, `match_type`, `priority`. Sin PII, sin question, sin answer.
+  8. **FlowHandleResult**: nuevo VO readonly con `bool $handled`. Retornado por
+     `handleMessage()` en lugar de `void`. Backward-compatible (return value ignorado
+     por callers existentes).
+  9. **No second lock**: la lógica FAQ corre dentro del lock existente del FlowEngine.
+     No hay competencia, no hay deadlock posible.
+  10. **No AI calls**: en match FAQ, se llama 0 veces a AIProvider/EmbeddingProvider/
+      KnowledgeSearchService. FAQ y RAG son capas independientes.
+- **Consecuencias**:
+  - FlowEngine `handleMessage()` cambia firma: `void` → `FlowHandleResult`, param
+    `?callable $onUnhandled = null`. Todos los callers existentes usan el default
+    `null` → backward-compatible.
+  - ProcessIncomingWhatsAppMessage encapsula la creación del callback en closure.
+    Resuelve `FaqReplyService` del container bajo request scope.
+  - AppServiceProvider registra `FaqMatcherServiceInterface → FaqMatcherService`.
+  - Tests: 10 precedence (FAQ-PREC-01..10), 7 idempotency (FAQ-IDEM-01..07),
+    3 E2E (FAQ-E2E-01..03), 6 runtime MT (FAQ-RUNTIME-MT01..06),
+    10 security (FAQ-SEC-U4-01..10) = 36 nuevos tests.

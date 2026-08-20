@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 COMPLETADA**. FASE 18 EN PROGRESO (U3).
+Estado general: **FASE 17 COMPLETADA**. FASE 18 EN PROGRESO (U4).
 
 ## Fases
 
@@ -1921,7 +1921,8 @@ COMPLETADO — pendiente commit. NO PUSH.
 - ADR-070
 
 ### U3 — CRUD API + Permissions
-- **Estado**: COMPLETADA (PENDIENTE COMMIT)
+- **Estado**: COMPLETADA
+- **Commit**: 7eed362
 - TenantPermission: +ViewFaqs, +ManageFaqs (19 permisos total)
 - FaqService (Application layer): CRUD + authorization + normalization + audit
 - FaqController (Http): thin, delegates to service
@@ -1937,7 +1938,23 @@ COMPLETADO — pendiente commit. NO PUSH.
 - 1170 passed, 13 skipped, 0 PHPStan errors, Pint clean
 
 ### U4 — FlowEngine Runtime Integration
-- **Estado**: NO INICIADA
+- **Estado**: COMPLETADA
+- FlowHandleResult VO (bool $handled) — retornado por FlowEngine::handleMessage()
+- FlowEngine: param `?callable $onUnhandled = null`, retorna FlowHandleResult
+- ProcessIncomingWhatsAppMessage: pasa callback FAQ cuando created=true
+- FaqReplyService: defense-in-depth (bot_paused, Text type, empty body), fail-open
+- FakeFaqMatcherService (tests/Fakes/): test double configurable
+- AppServiceProvider: bind FaqMatcherServiceInterface → FaqMatcherService
+- Precedence: handoff → bot_paused → active execution → matchFlow → FAQ callback
+- Source attribution: faq_id + match_type en outbound metadata (sin DDL)
+- Audit: faq.matched con payload seguro (sin PII)
+- 10 precedence tests (FAQ-PREC-01..10)
+- 7 idempotency tests (FAQ-IDEM-01..07)
+- 3 E2E tests (FAQ-E2E-01..03)
+- 6 runtime MT tests (FAQ-RUNTIME-MT01..06)
+- 10 security tests (FAQ-SEC-U4-01..10)
+- ADR-071
+- 1206 passed, 13 skipped, 0 PHPStan errors, Pint clean
 
 ### U5 — Frontend
 - **Estado**: NO INICIADA

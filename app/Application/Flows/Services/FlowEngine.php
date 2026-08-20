@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Application\Flows\Services;
 
+use App\Application\Flows\ValueObjects\FlowHandleResult;
 use App\Domain\Conversations\Enums\InboxConversationChangeKind;
 use App\Domain\Conversations\Exceptions\ConversationInvalidStateException;
 use App\Domain\Conversations\Models\Conversation;
@@ -66,15 +67,21 @@ final class FlowEngine
     /**
      * Punto de entrada por mensaje entrante (webhook job). Bajo lock: resuelve
      * trigger o reanuda la ejecución activa, y avanza el ciclo.
+     *
+     * @param  (\Closure(Tenant, Message, Conversation): void)|null  $onUnhandled
      */
-    public function handleMessage(Tenant $tenant, Message $inbound, Conversation $conversation): void
-    {
+    public function handleMessage(
+        Tenant $tenant,
+        Message $inbound,
+        Conversation $conversation,
+        ?callable $onUnhandled = null,
+    ): FlowHandleResult {
         $lock = $this->executions->conversationLock($tenant, $conversation->id);
         $lock->block(seconds: 10);
         $this->lockContext->enter($tenant->id, $conversation->id, $lock);
 
         try {
-            $this->handleMessageLocked($tenant, $inbound, $conversation);
+            return $this->handleMessageLocked($tenant, $inbound, $conversation, $onUnhandled);
         } finally {
             $this->lockContext->leave($tenant->id, $conversation->id);
             $lock->release();
@@ -154,16 +161,23 @@ final class FlowEngine
         return true;
     }
 
-    private function handleMessageLocked(Tenant $tenant, Message $inbound, Conversation $conversation): void
-    {
+    /**
+     * @param  (\Closure(Tenant, Message, Conversation): void)|null  $onUnhandled
+     */
+    private function handleMessageLocked(
+        Tenant $tenant,
+        Message $inbound,
+        Conversation $conversation,
+        ?callable $onUnhandled,
+    ): FlowHandleResult {
         $conversation->refresh();
 
         if ($this->recoverCommittedHandoff($conversation)) {
-            return;
+            return new FlowHandleResult(handled: true);
         }
 
         if ($conversation->bot_paused) {
-            return;
+            return new FlowHandleResult(handled: false);
         }
 
         $execution = $this->executions->findActive($conversation);
@@ -172,24 +186,28 @@ final class FlowEngine
             $flow = $this->matchFlow($tenant, $inbound, $conversation);
 
             if ($flow === null) {
-                return;
+                if ($onUnhandled !== null) {
+                    $onUnhandled($tenant, $inbound, $conversation);
+                }
+
+                return new FlowHandleResult(handled: false);
             }
 
             $execution = $this->executions->start($flow, $conversation, $inbound);
 
             $this->run($tenant, $execution, $conversation, $inbound);
 
-            return;
+            return new FlowHandleResult(handled: true);
         }
 
         if ($execution->status === FlowExecutionStatus::Running) {
             // El ciclo ya está en curso (otro worker bajo lock): el inbound se
             // ignora; la ejecución activa continuará por sí misma.
-            return;
+            return new FlowHandleResult(handled: true);
         }
 
         if ($inbound->id === $execution->last_inbound_message_id) {
-            return;
+            return new FlowHandleResult(handled: true);
         }
 
         $currentNode = $execution->currentNode;
@@ -199,36 +217,38 @@ final class FlowEngine
                 'reason' => 'missing_current_node',
             ]);
 
-            return;
+            return new FlowHandleResult(handled: true);
         }
 
         if ($currentNode->type === FlowNodeType::Question) {
             $this->resumeAfterAnswer($tenant, $execution, $conversation, $currentNode, $inbound);
 
-            return;
+            return new FlowHandleResult(handled: true);
         }
 
         if ($currentNode->type === FlowNodeType::Buttons) {
             if (! $this->matchesButton($currentNode, $inbound->body)) {
                 $this->resendButtons($tenant, $execution, $conversation, $currentNode, $inbound);
 
-                return;
+                return new FlowHandleResult(handled: true);
             }
 
             $this->resumeAfterAnswer($tenant, $execution, $conversation, $currentNode, $inbound);
 
-            return;
+            return new FlowHandleResult(handled: true);
         }
 
         if ($currentNode->type === FlowNodeType::Delay) {
             // Esperando la continuación programada (`ContinueFlowExecution`).
-            return;
+            return new FlowHandleResult(handled: true);
         }
 
         $this->executions->finish($execution, FlowExecutionStatus::Failed, 'execution.failed', [
             'reason' => 'invalid_waiting_state',
             'node_type' => $currentNode->type->value,
         ]);
+
+        return new FlowHandleResult(handled: true);
     }
 
     private function continueExecutionLocked(Tenant $tenant, FlowExecution $execution, string $mode): void
