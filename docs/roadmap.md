@@ -1997,7 +1997,7 @@ COMPLETADO — pendiente commit. NO PUSH.
 
 ### U1 — Data Model + Normalization
 - **Estado**: COMPLETADA
-- **Commit**: (pending)
+- **Commit**: 418993f
 - LeadStatus enum (new/contacted/qualified/won/lost)
 - LeadPhoneNormalizer (trim, strip non-digits, + prefix)
 - LeadEmailNormalizer (trim, lowercase)
@@ -2009,14 +2009,32 @@ COMPLETADO — pendiente commit. NO PUSH.
 - 42 tests (6 LeadStatus + 10 Phone + 8 Email + 17 Model + 12 PG)
 - ADR-072
 
+### U2 — Application Service + API + Permissions
+- **Estado**: COMPLETADA
+- **Commit**: (pending)
+- LeadStatus.canTransitionTo() — lifecycle enforcement (new→contacted→qualified→won/lost, lost→new)
+- LeadService — index (search/status/source/pagination), show, create, update, delete
+  - Server-side normalization (LeadPhoneNormalizer, LeadEmailNormalizer)
+  - Application-level dedup (phone/email within tenant → 409 LEAD_DUPLICATE)
+  - Status transition validation (422 LEAD_INVALID_TRANSITION)
+  - Audit events (lead.created/updated/deleted, no PII)
+- LeadController — thin controller delegating to LeadService
+- LeadResource — JSON resource (hides tenant_id, deleted_at)
+- Requests: LeadIndexRequest, StoreLeadRequest, UpdateLeadRequest
+- TenantPermission: ViewLeads (all roles), ManageLeads (owner/admin)
+- Tenant routes: GET/POST leads, GET/PATCH/DELETE leads/{lead}
+- 54 new tests: 25 API (LEAD-API-01..25) + 13 transitions (LEAD-TRANS-01..13) + 6 permissions (LEAD-PERM-01..06) + 10 MT (LEAD-MT-01..10)
+- ADR-073
+
 #### Puertas
-- phpunit: 42/42 PASS (87 assertions)
+- phpunit Lead: 96/96 PASS (206 assertions)
+- phpunit FAQ regression: 161/161 PASS
 - pint: PASS
 - phpstan: 0 errores
-- composer audit: clean
+- composer audit: clean (offline)
 - vitest: 302/302
 - vue-tsc: 0 errores
 - vite build: PASS
 
 #### ESTADO
-EN PROGRESO — pendiente commit. NO PUSH.
+EN PROGRESO — U2 completada. Pendiente commit. NO PUSH.

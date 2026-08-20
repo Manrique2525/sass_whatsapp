@@ -1919,3 +1919,42 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - LeadNotFoundException (404), LeadDuplicateException (409) preparados para U2.
   - LeadFactory con 5 status states + 3 nullable states.
   - Sin Service, Controller, API routes, permissions, o frontend en U1.
+
+## ADR-073: Lead Application Service + API + Permissions (FASE 19 U2)
+
+- **Fecha**: 2026-08-20
+- **Estado**: ACEPTADO
+- **Contexto**: FASE 19 U1 estableció data model + normalización para leads. U2
+  implementa la capa de aplicación completa: service, controller, API, permissions,
+  deduplicación, transiciones de estado, y auditoría.
+- **Decisión**:
+  - **LeadService**: casos de uso CRUD (index, show, create, update, delete).
+    Normalización server-side vía LeadPhoneNormalizer/LeadEmailNormalizer.
+    Deduplicación a nivel de aplicación (sin UNIQUE en DB) — phone o email duplicado
+    dentro del mismo tenant → 409 LEAD_DUPLICATE. La dedup excluye soft-deleted.
+    Transiciones de estado validadas vía LeadStatus.canTransitionTo() — transición
+    inválida → 422 LEAD_INVALID_TRANSITION. Auditoría: lead.created/updated/deleted
+    sin PII (solo tenant_id, status, source, changed).
+  - **LeadStatus.canTransitionTo()**: lifecycle lineal — new→contacted,
+    contacted→qualified/won/lost, qualified→won/lost, won→(terminal),
+    lost→new (reabrir). Self-transition rechazada.
+  - **LeadController**: controller delgado que delega a LeadService. Manejo de
+    TenantMembershipException→404, PermissionDeniedException→403,
+    TenantNotActiveException→409, LeadDuplicateException→409, DomainException→422.
+  - **LeadResource**: JSON resource ocultando tenant_id y deleted_at.
+  - **Requests**: LeadIndexRequest (search/status/source/per_page),
+    StoreLeadRequest (name required, phone/email/status/source/notes optional),
+    UpdateLeadRequest (todos nullable para PATCH). Email validación: `email` (sin dns).
+  - **TenantPermission**: ViewLeads (owner/admin/agent), ManageLeads (owner/admin).
+  - **Rutas**: tenant-scoped bajo `/api/v1/tenants/{tenant}/leads` — RESTful CRUD.
+  - **Dedup rules**: phone normalizado duplicado → 409; email normalizado duplicado → 409;
+    phone+email pueden ambos causar conflicto en la misma request.
+  - **Sin scope creep**: no assigned_to, tags, scoring, kanban, imports, AI extraction,
+    Contact→Lead, o FASE 20 features.
+- **Consecuencias**:
+  - 54 tests: 25 API (LEAD-API-01..25) + 13 transitions (LEAD-TRANS-01..13) +
+    6 permissions (LEAD-PERM-01..06) + 10 MT (LEAD-MT-01..10) = 54 nuevos tests.
+  - Total lead tests: 96 (42 U1 + 54 U2). FAQ regression: 161/161. Vitest: 302/302.
+  - LeadService requires: AuthorizationService, AuditLogger, LeadPhoneNormalizer,
+    LeadEmailNormalizer (4 dependencies via constructor injection).
+  - PHPStan 0 errors after fixing Eloquent cast type inference via getAttribute().

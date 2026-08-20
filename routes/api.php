@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\V1\FlowController;
 use App\Http\Controllers\Api\V1\FlowExecutionController;
 use App\Http\Controllers\Api\V1\InvitationController;
 use App\Http\Controllers\Api\V1\KnowledgeBaseController;
+use App\Http\Controllers\Api\V1\LeadController;
 use App\Http\Controllers\Api\V1\MemberController;
 use App\Http\Controllers\Api\V1\MemberInvitationController;
 use App\Http\Controllers\Api\V1\MessagesController;
@@ -162,6 +163,13 @@ Route::prefix('v1')->group(function (): void {
                 Route::get('{tenant}/faqs/{faq}', [FaqController::class, 'show']);
                 Route::patch('{tenant}/faqs/{faq}', [FaqController::class, 'update']);
                 Route::delete('{tenant}/faqs/{faq}', [FaqController::class, 'destroy']);
+
+                // FASE 19 U2 — Leads del tenant.
+                Route::get('{tenant}/leads', [LeadController::class, 'index']);
+                Route::post('{tenant}/leads', [LeadController::class, 'store']);
+                Route::get('{tenant}/leads/{lead}', [LeadController::class, 'show']);
+                Route::patch('{tenant}/leads/{lead}', [LeadController::class, 'update']);
+                Route::delete('{tenant}/leads/{lead}', [LeadController::class, 'destroy']);
             });
         });
     });

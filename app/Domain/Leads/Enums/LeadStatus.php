@@ -35,4 +35,29 @@ enum LeadStatus: string
             self::Lost => 'Lost',
         };
     }
+
+    /**
+     * Evalúa si la transición de estado es válida.
+     *
+     * Lifecycle lineal simplificado:
+     *   new → contacted
+     *   contacted → qualified, won, lost
+     *   qualified → won, lost
+     *   won → (terminal)
+     *   lost → new (reabrir ciclo)
+     */
+    public function canTransitionTo(self $target): bool
+    {
+        if ($this === $target) {
+            return false;
+        }
+
+        return match ($this) {
+            self::New => in_array($target, [self::Contacted]),
+            self::Contacted => in_array($target, [self::Qualified, self::Won, self::Lost]),
+            self::Qualified => in_array($target, [self::Won, self::Lost]),
+            self::Won => false,
+            self::Lost => $target === self::New,
+        };
+    }
 }
