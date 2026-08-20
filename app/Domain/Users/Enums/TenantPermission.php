@@ -81,6 +81,9 @@ enum TenantPermission: string
     case ViewLeads = 'leads.view';
     case ManageLeads = 'leads.manage';
 
+    case ViewTags = 'tags.view';
+    case ManageTags = 'tags.manage';
+
     /**
      * Todos los permisos de la plataforma (para el seeder).
      *
@@ -119,6 +122,8 @@ enum TenantPermission: string
             self::ManageFaqs,
             self::ViewLeads,
             self::ManageLeads,
+            self::ViewTags,
+            self::ManageTags,
         ];
     }
 
@@ -173,6 +178,8 @@ enum TenantPermission: string
                 self::ManageFaqs,
                 self::ViewLeads,
                 self::ManageLeads,
+                self::ViewTags,
+                self::ManageTags,
             ],
             UserRole::Agent => [
                 self::ViewTenants,
@@ -186,6 +193,7 @@ enum TenantPermission: string
                 self::ViewKnowledge,
                 self::ViewFaqs,
                 self::ViewLeads,
+                self::ViewTags,
             ],
             // super_admin es rol global de plataforma (spatie, sin team):
             // no obtiene permisos de tenant, se autoriza aparte.

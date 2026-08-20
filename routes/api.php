@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\V1\LeadController;
 use App\Http\Controllers\Api\V1\MemberController;
 use App\Http\Controllers\Api\V1\MemberInvitationController;
 use App\Http\Controllers\Api\V1\MessagesController;
+use App\Http\Controllers\Api\V1\TagController;
 use App\Http\Controllers\Api\V1\TenantController;
 use App\Http\Controllers\Api\V1\TriggerController;
 use App\Http\Controllers\Api\V1\WhatsAppController;
@@ -170,6 +171,13 @@ Route::prefix('v1')->group(function (): void {
                 Route::get('{tenant}/leads/{lead}', [LeadController::class, 'show']);
                 Route::patch('{tenant}/leads/{lead}', [LeadController::class, 'update']);
                 Route::delete('{tenant}/leads/{lead}', [LeadController::class, 'destroy']);
+
+                // FASE 20 U2 — Tags del tenant.
+                Route::get('{tenant}/tags', [TagController::class, 'index']);
+                Route::post('{tenant}/tags', [TagController::class, 'store']);
+                Route::get('{tenant}/tags/{tag}', [TagController::class, 'show']);
+                Route::patch('{tenant}/tags/{tag}', [TagController::class, 'update']);
+                Route::delete('{tenant}/tags/{tag}', [TagController::class, 'destroy']);
             });
         });
     });

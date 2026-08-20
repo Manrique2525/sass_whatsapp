@@ -14,7 +14,6 @@ use App\Domain\Flows\Models\Flow;
 use App\Domain\Flows\Models\FlowExecution;
 use App\Domain\Flows\Models\FlowNode;
 use App\Domain\Flows\ValueObjects\NodeExecutionContext;
-use App\Domain\Messages\Models\Message;
 use App\Domain\Tenants\Models\Tenant;
 use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -158,14 +157,6 @@ test('TAG-REG-04: second execution with same tags does not create duplicates', f
         TenantContext::clear();
     }
 });
-
-function engine_conversation_for(Message $message): Conversation
-{
-    return Conversation::query()
-        ->withoutTenantScope()
-        ->whereKey($message->conversation_id)
-        ->firstOrFail();
-}
 
 test('TAG-REG-05: FLOW-10 full engine integration with tag node', function (): void {
     $tenant = Tenant::factory()->create();

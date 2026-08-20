@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Application\Flows\Services\FlowEngine;
 use App\Domain\Audit\Models\AuditLog;
-use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Flows\Enums\FlowExecutionStatus;
 use App\Domain\Flows\Enums\FlowStatus;
 use App\Domain\Flows\Enums\FlowTriggerType;
@@ -37,14 +36,6 @@ function publish_flow(Flow $flow, array $nodes, array $connections): Flow
     $flow->forceFill(['status' => FlowStatus::Published->value])->save();
 
     return $flow;
-}
-
-function engine_conversation_for(Message $message): Conversation
-{
-    return Conversation::query()
-        ->withoutTenantScope()
-        ->whereKey($message->conversation_id)
-        ->firstOrFail();
 }
 
 function continue_engine(Tenant $tenant, FlowExecution $execution, string $mode = 'delay'): void

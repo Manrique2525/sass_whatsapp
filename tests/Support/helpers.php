@@ -330,6 +330,14 @@ function run_flow_engine(Tenant $tenant, Message $message, Conversation $convers
     }
 }
 
+function engine_conversation_for(Message $message): Conversation
+{
+    return Conversation::query()
+        ->withoutTenantScope()
+        ->whereKey($message->conversation_id)
+        ->firstOrFail();
+}
+
 /**
  * Crea un contacto del tenant con el TenantContext activo (como en producción).
  */
