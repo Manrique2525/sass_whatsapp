@@ -2178,3 +2178,36 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - composer audit: no vulnerabilities. npm audit: 0 vulnerabilities.
   - Bundle: app-DzPLfDgx.js → 247 KB + Overview chunk 977 KB (ApexCharts lazy-loaded).
   - FASE 21 U4 completada. U5 (hardening) pendiente.
+
+## ADR-081 · Analytics Security Hardening + Closure (FASE 21 U5)
+
+- **Estado**: Aceptado · FASE 21 U5
+- **Contexto**: FASE 21 U1-U4 implementaron analytics completo (data model, aggregation, API,
+  dashboard). U5 realiza auditoría integral de seguridad, tenant isolation, cache isolation,
+  y cierre formal de la fase.
+- **Decisión**:
+  - **Auth-before-cache (AN-SEC-F05)**: AnalyticsService ejecuta authorize() ANTES de
+    Cache::remember. Un agent denied en request 2 NO recibe cache generado por owner en request 1.
+    Test explícito verifica que Cache::remember callback NO se ejecuta cuando auth falla.
+  - **Response no PII (AN-SEC-F07)**: Response JSON contiene solo aggregate counters.
+    Verificado: no tenant_id, no contact_id, no conversation_id, no phone, no email,
+    no cache keys, no internal audit data.
+  - **Aggregation no PII (AN-SEC-F08)**: AnalyticsDaily almacena solo columnas numéricas.
+    ConversationMetric almacena solo counts y timestamps, nunca message body, prompt,
+    response, phone, email, o API key.
+  - **AI telemetry safe (AN-SEC-F09)**: computeAiTokens extrae solo payload->>'total_tokens'.
+    No accede a prompt, response, content, api_key, contact, phone, email.
+    Verificado vía ReflectionMethod sobre el source code.
+  - **Concurrent aggregation (AN-SEC-F12)**: doble aggregateForDate produce 1 sola row.
+    UPSERT manual + UNIQUE(tenant_id, date) garantiza idempotencia.
+  - **Baseline verification**: 6 pre-existing HandoffFinalTest/HandoffRuntimeTest failures
+    confirmados en origin/master (TypeError en TagNodeExecutor, no relacionado con FASE 21).
+  - **Security scan**: 0 .env, 0 API keys, 0 tokens, 0 passwords, 0 PII fixtures.
+  - **No bugs P0/P1/P2 found**: auditoría integral sin correcciones necesarias.
+- **Consecuencias**:
+  - 8 security matrix tests (AN-SEC-F05, F07a, F07b, F07c, F08a, F08b, F09, F12).
+  - Total analytics tests: 108 (U1:20 + U2:47 + U3:33 + U4:64 + U5:8 → ajustado: 108 Backend).
+  - Total Vitest: 399/399. PHPStan: 0 errors. Pint: 615 files clean.
+  - composer audit: no vulnerabilities. npm audit: 0 vulnerabilities.
+  - PG tests: 22 pass. Redis cache isolation verified.
+  - FASE 21 declarada COMPLETADA. FASE 22 NO iniciada.

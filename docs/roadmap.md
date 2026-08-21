@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA. FASE 19 COMPLETADA. FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COMPLETADA. FASE 21 U4 COMPLETADA.
+Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA. FASE 19 COMPLETADA. FASE 20 COMPLETADA. FASE 21 COMPLETADA.
 
 ## Fases
 
@@ -2171,4 +2171,15 @@ FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COM
 - Loading skeletons, error with retry, empty state, manual refresh
 - Tests: 34 analyticsUtils + 7 analyticsApi + 3 StatCard + 20 dashboard = **64 tests nuevos, todos verdes**
 - Quality gates: Pint clean, PHPStan 0, vitest 399 pass, typecheck 0 errors, build pass, npm audit clean, composer audit clean
-- FASE 21 COMPLETADA (U1-U4)
+- FASE 21 U4 completada
+
+### U5 — Security + Tenant Isolation + Hardening + Final Closure
+- **Estado**: COMPLETADA
+- Security matrix: AN-SEC-F05 (auth-before-cache), AN-SEC-F07 (response no PII), AN-SEC-F08 (aggregation no PII), AN-SEC-F09 (AI telemetry safe), AN-SEC-F12 (concurrent aggregation) — 8 tests, 65 assertions
+- Pre-existing baseline verified: 6 HandoffFinalTest/HandoffRuntimeTest failures confirmed on origin/master (TypeError in TagNodeExecutor, not FASE 21)
+- Code audit: 0 P0, 0 P1, 0 P2 unfixed
+- Security scan: no secrets, no .env, no PII fixtures, no API keys, no certs
+- Quality gates: PHPStan 0 errors, Pint 615 files clean, vitest 399 pass, typecheck 0 errors, build pass, npm audit 0, composer audit 0
+- PG tests: 22 pass (UP/DOWN/UP + FK + UNIQUE + cross-tenant + aggregation)
+- Full regression: 108 analytics tests all pass
+- FASE 21 COMPLETADA (U1-U5)

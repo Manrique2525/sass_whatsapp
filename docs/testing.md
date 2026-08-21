@@ -657,6 +657,16 @@ Tests del dashboard visualization (FASE 21 U4):
 
 Ejecución: `npm run test`
 
+### Suite Security Matrix (tests/Feature/Analytics/AnalyticsSecurityTest.php)
+
+Tests de hardening y cierre de FASE 21 U5:
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `AnalyticsSecurityTest.php` | 8 (AN-SEC-F05, F07a, F07b, F07c, F08a, F08b, F09, F12) | Auth-before-cache (agent denied despite owner cache), response no PII (no IDs/phone/email), response no internals (no cache/lock keys), daily series shape, aggregation numeric columns only, conversation_metrics no PII in stored data, AI telemetry only reads total_tokens, concurrent aggregation idempotent |
+
+Ejecución: `vendor/bin/pest --filter="AnalyticsSecurityTest"`
+
 ## 8. Estado de pruebas por fase
 
 Cada fase declara su estado en `docs/roadmap.md` (PASS/FAIL) usando el formato de reporte
