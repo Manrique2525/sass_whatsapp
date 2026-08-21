@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA. FASE 19 COMPLETADA. FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA.
+Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA. FASE 19 COMPLETADA. FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COMPLETADA.
 
 ## Fases
 
@@ -2118,7 +2118,7 @@ COMPLETADA. Pendiente commit. NO PUSH.
 - 16 tests: TAG-U4-01..16 (flujo válido, inactivo, no publicado, bot_paused, ejecución activa, case-sensitive, anti-recursión, sin conversación, múltiples triggers, audit, tag no match, cross-tenant, listener matching/no matching/inactivo/cross-tenant)
 
 #### ESTADO
-FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. Pendiente commit. NO PUSH.
+FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COMPLETADA. Pendiente commit. NO PUSH.
 
 ---
 
@@ -2143,8 +2143,17 @@ FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. Pendiente comm
 - Tests: 34 SQLite + 13 Job/Command + 10 PG = **57 tests nuevos, todos verdes**
 - Quality gates: Pint clean, PHPStan 0, typecheck pass, build pass, vitest 338 pass
 
-### U3 — Cache Foundation + API Endpoint
-- **Estado**: PENDIENTE
-- Redis cache para analytics_daily (TTL, invalidación)
-- API endpoint: GET /api/v1/tenants/{tenant}/analytics/overview
-- Frontend dashboard: ApexCharts
+### U3 — Analytics Overview API + Cache
+- **Estado**: COMPLETADA
+- `view_analytics` permiso: Owner YES, Admin YES, Agent NO
+- `AnalyticsService`: lectura de `analytics_daily` + `conversation_metrics` (avg exacto)
+- `AnalyticsOverview` VO readonly + `AnalyticsOverviewResource`
+- `OverviewRequest`: from/to optional, date_format:Y-m-d, max 365 days
+- `AnalyticsController`: thin controller, patrón try/catch estándar
+- Route: GET /api/v1/tenants/{tenant}/analytics/overview
+- Cache: `tenant:{id}:analytics:overview:{from}:{to}`, TTL 300s, `Cache::remember`
+- Daily series: fill missing days with zeros; empty range → []
+- Response: `{data: {period, messages, conversations, flows, leads, ai, daily}}`
+- Tests: 20 API + 8 Cache + 5 Permission = 33 tests nuevos, todos verdes
+- Quality gates: Pint clean, PHPStan 0, vitest 338 pass, typecheck pass, build pass, composer audit clean
+- NO new DDL, NO new jobs, NO frontend changes

@@ -633,6 +633,17 @@ docker compose exec -T app vendor/bin/pest \
    `BelongsToTenant::creating` que auto-sobrescribe `tenant_id` con `TenantContext::id()`.
    Solución: `aggregateForDate` setea TenantContext antes del transaction y restaura en `finally`.
 
+### Suite SQLite — API/Cache/Permission (Feature/Analytics/)
+
+Tests del endpoint overview, cache behavior, y permisos (FASE 21 U3):
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `AnalyticsOverviewApiTest.php` | 25 (AN-API-01..13, AN-PERM-01..04, AN-MT-U3-01..08) | Default range, explicit range, max 365, 366 rejected, from>to, invalid dates, empty data, response shape, sums, avg response time, daily series, missing dates fill, owner/admin access, agent 403, unauth 401, cross-tenant 404, tenant isolation, cache scoped, inactive membership |
+| `AnalyticsCacheTest.php` | 8 (AN-CACHE-01..08) | First compute, second hit, tenant-scoped, date-range-scoped, TTL, expired recompute, cached value type, no wildcard invalidation |
+
+Ejecución: `vendor/bin/pest --filter="AN-"`
+
 ## 8. Estado de pruebas por fase
 
 Cada fase declara su estado en `docs/roadmap.md` (PASS/FAIL) usando el formato de reporte

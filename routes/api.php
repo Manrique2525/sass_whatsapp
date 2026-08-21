@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domain\Tenants\Models\Tenant;
+use App\Http\Controllers\Api\V1\AnalyticsController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\PasswordController;
 use App\Http\Controllers\Api\V1\BusinessProfileController;
@@ -182,6 +183,9 @@ Route::prefix('v1')->group(function (): void {
                 // FASE 20 U3 — Tag assignment a contactos.
                 Route::post('{tenant}/contacts/{contact}/tags', [TagController::class, 'assignTags']);
                 Route::delete('{tenant}/contacts/{contact}/tags/{tag}', [TagController::class, 'removeTag']);
+
+                // FASE 21 U3 — Analytics del tenant.
+                Route::get('{tenant}/analytics/overview', [AnalyticsController::class, 'overview']);
             });
         });
     });

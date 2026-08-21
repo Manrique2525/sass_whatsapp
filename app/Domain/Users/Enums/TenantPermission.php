@@ -84,6 +84,8 @@ enum TenantPermission: string
     case ViewTags = 'tags.view';
     case ManageTags = 'tags.manage';
 
+    case ViewAnalytics = 'analytics.view';
+
     /**
      * Todos los permisos de la plataforma (para el seeder).
      *
@@ -124,6 +126,7 @@ enum TenantPermission: string
             self::ManageLeads,
             self::ViewTags,
             self::ManageTags,
+            self::ViewAnalytics,
         ];
     }
 
@@ -180,6 +183,7 @@ enum TenantPermission: string
                 self::ManageLeads,
                 self::ViewTags,
                 self::ManageTags,
+                self::ViewAnalytics,
             ],
             UserRole::Agent => [
                 self::ViewTenants,

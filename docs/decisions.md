@@ -2105,3 +2105,35 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
     date cast mismatch → solución: UPSERT manual via `DB::table`.
   - Cache de analytics (Redis) diferido a U3.
   - Frontend dashboard diferido a U4.
+
+## ADR-079 · Analytics Overview API + Cache Semantics (FASE 21 U3)
+
+- **Estado**: Aceptado · FASE 21 U3
+- **Contexto**: U2 materializa datos diarios en `analytics_daily` pero no hay endpoint para
+  consumirlos. Se necesita API REST legible, cacheada, con autorización granular y multi-tenant.
+- **Decisión**:
+  - `view_analytics` (`analytics.view`): permiso añadido a `TenantPermission`.
+    Owner: YES, Admin: YES, Agent: NO (solo gestores ven métricas).
+  - `AnalyticsService`: servicio de lectura (WRITE=AggregationService U2, READ=AnalyticsService U3).
+    - `getOverview(User, Tenant, params)`: autoriza vía AuthorizationService, resuelve fechas
+      en tenant timezone (default: últimos 30 días), consulta `analytics_daily` y
+      `conversation_metrics` (para avg exacto), retorna `AnalyticsOverview` VO.
+    - Cache: `Cache::remember("tenant:{id}:analytics:overview:{from}:{to}", 300s)`.
+    - TenantContext save/restore dentro de la transacción de cache (misma defensa que U2).
+  - Avg response time: AVG(response_time_seconds) de `conversation_metrics` en el rango,
+    no AVG de promedios diarios (que sería incorrecto para pesos desiguales).
+  - Daily series: fill missing days with zero (series continua para charts de U4).
+    Empty range (sin rows) → daily: [].
+  - `AnalyticsOverview`: VO readonly con `toArray()` — no Eloquent, no DTOs serializables.
+  - `AnalyticsOverviewResource`: serializa VO a JSON. NO incluye tenant_id ni PII.
+  - `OverviewRequest`: from/to nullable, date_format:Y-m-d, validación post: from<=to, max 365 días.
+  - `AnalyticsController`: thin controller, patrón try/catch idéntico a FaqController/LeadController.
+  - Route: `GET /api/v1/tenants/{tenant}/analytics/overview`.
+  - Response shape: `{data: {period, messages, conversations, flows, leads, ai, daily}}`.
+  - Cache invalidation: TTL 300s automático. No wildcard delete. Eventual consistency ≤5 min.
+- **Consecuencias**:
+  - 20 tests API (AN-API-01..13, AN-PERM-01..04, AN-MT-U3-01..08) — todos verdes.
+  - 8 tests Cache (AN-CACHE-01..08) — todos verdes.
+  - 122 analytics tests totales (U1+U2+U3 SQLite+PG) — todos verdes.
+  - PHPStan 0 errors. Pint clean. Vitest 338 pass. vue-tsc pass. Vite build pass.
+  - No new DDL, no new jobs, no frontend changes.
