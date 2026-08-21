@@ -2137,3 +2137,44 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - 122 analytics tests totales (U1+U2+U3 SQLite+PG) — todos verdes.
   - PHPStan 0 errors. Pint clean. Vitest 338 pass. vue-tsc pass. Vite build pass.
   - No new DDL, no new jobs, no frontend changes.
+
+## ADR-080 · Analytics Dashboard — Frontend Visualization (FASE 21 U4)
+
+- **Estado**: Aceptado · FASE 21 U4
+- **Contexto**: U3 expone `GET /api/v1/tenants/{tenant}/analytics/overview` con datos agregados
+  cacheados. No hay interfaz visual para consumirlo. Se necesita dashboard con stat cards,
+  charts, presets de rango, y protección por permisos.
+- **Decisión**:
+  - **ApexCharts v6.10.0 + vue3-apexcharts v1.11.1**: única librería de charts. Lazy-loaded
+    via Vite code splitting (chunk `Overview-BEE4JI_m.js` ≈ 977 KB con ApexCharts incluido).
+  - **Feature module**: `resources/js/features/analytics/` con `analyticsTypes.ts`
+    (tipos del contrato U3), `analyticsApi.ts` (fetchAnalyticsOverview), `analyticsUtils.ts`
+    (safeRate, formatDuration, formatNumber, date presets, labels, extractErrorMessage).
+  - **Components**: `StatCard.vue` (reutilizable), `MessageVolumeChart.vue` (area: inbound+outbound),
+    `ConversationStatusChart.vue` (donut: open/resolved/archived), `LeadStatusChart.vue`
+    (bar: new/won/lost), `FlowPerformanceChart.vue` (bar: completed/failed).
+  - **Page**: `resources/js/Pages/Analytics/Overview.vue` — Inertia page en `/settings/analytics`.
+    `AnalyticsSettingsController` + route en web.php + nav link en AppLayout.
+  - **Presets**: 7d, 30d (default), 90d, custom (from/to inputs). Validación client-side
+    (from<=to, max 365 días) antes de llamar API. Backend sigue siendo autoridad.
+  - **Permission**: `analytics.view` verificado en frontend (hide UI) + backend (403).
+    Owner/Admin ven dashboard completo. Agent ve "No tienes permiso".
+  - **Loading**: skeleton animation (animate-pulse cards + chart placeholders).
+    Error banner con "Reintentar" button. Empty state amigable cuando daily=[].
+  - **Refresh manual**: button "Actualizar" re-petition API. Sin polling, sin WebSocket.
+  - **Cache semantics UX**: texto "Datos agregados · {from} — {to}". Sin TTL expuesto.
+  - **Stat cards**: 4 cards — Mensajes totales, Conversaciones activas, Conversión de leads
+    (won/total), Finalización de flujos (completed/total). Denominator=0 → 0%, nunca NaN.
+    Avg response time como subtitle de Conversaciones.
+  - **Responsive**: grid 4 cols desktop, 2 tablet, 1 mobile. Charts 2-col → 1-col.
+    Chart height 300px, width 100%.
+  - **Security**: sin PII, sin v-html, sin console.log, sin tenant_id injection,
+    sin IDs internos. Solo aggregate counters.
+  - **Dark mode**: app no soporta → no se implementa.
+- **Consecuencias**:
+  - 61 tests frontend nuevos: 34 analyticsUtils + 7 analyticsApi + 3 StatCard + 17 dashboard.
+  - Total Vitest: 399/399. Typecheck: 0 errors. Vite build: pass.
+  - Backend regression: 100 analytics tests pass. PHPStan 0 errors. Pint clean.
+  - composer audit: no vulnerabilities. npm audit: 0 vulnerabilities.
+  - Bundle: app-DzPLfDgx.js → 247 KB + Overview chunk 977 KB (ApexCharts lazy-loaded).
+  - FASE 21 U4 completada. U5 (hardening) pendiente.

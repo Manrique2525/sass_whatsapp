@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA. FASE 19 COMPLETADA. FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COMPLETADA.
+Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA. FASE 19 COMPLETADA. FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COMPLETADA. FASE 21 U4 COMPLETADA.
 
 ## Fases
 
@@ -2157,3 +2157,18 @@ FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COM
 - Tests: 20 API + 8 Cache + 5 Permission = 33 tests nuevos, todos verdes
 - Quality gates: Pint clean, PHPStan 0, vitest 338 pass, typecheck pass, build pass, composer audit clean
 - NO new DDL, NO new jobs, NO frontend changes
+
+### U4 — Analytics Dashboard Visualization (frontend)
+- **Estado**: COMPLETADA
+- Packages: apexcharts@6.10.0, vue3-apexcharts@1.11.1
+- Feature module: `resources/js/features/analytics/` (analyticsTypes.ts, analyticsApi.ts, analyticsUtils.ts)
+- Components: StatCard.vue, MessageVolumeChart.vue (area), ConversationStatusChart.vue (donut), LeadStatusChart.vue (bar), FlowPerformanceChart.vue (bar)
+- Page: `resources/js/Pages/Analytics/Overview.vue` at `/settings/analytics`
+- Controller: `AnalyticsSettingsController` (Inertia render), route GET /settings/analytics (auth+verified+tenant)
+- AppLayout nav link: "Analytics" after Leads
+- Presets: 7d, 30d (default), 90d, custom (from/to). Client-side validation.
+- Permission: analytics.view gate in frontend + backend
+- Loading skeletons, error with retry, empty state, manual refresh
+- Tests: 34 analyticsUtils + 7 analyticsApi + 3 StatCard + 20 dashboard = **64 tests nuevos, todos verdes**
+- Quality gates: Pint clean, PHPStan 0, vitest 399 pass, typecheck 0 errors, build pass, npm audit clean, composer audit clean
+- FASE 21 COMPLETADA (U1-U4)

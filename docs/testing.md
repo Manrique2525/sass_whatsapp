@@ -644,6 +644,19 @@ Tests del endpoint overview, cache behavior, y permisos (FASE 21 U3):
 
 Ejecución: `vendor/bin/pest --filter="AN-"`
 
+### Suite Frontend Analytics (resources/js/)
+
+Tests del dashboard visualization (FASE 21 U4):
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `analyticsUtils.test.ts` | 34 (AN-V01..V14 + extras) | safeRate, formatDuration, formatNumber, date presets (today/daysAgo, getPresetRange), isValidRange, maxRangeDays, dateLabel, presetLabel, extractErrorMessage |
+| `analyticsApi.test.ts` | 7 (AN-V15..V20 + typed data) | fetchAnalyticsOverview call shape, from/to params, default empty range |
+| `StatCard.test.ts` | 3 (AN-V21, AN-V22, AN-V22b) | renders value, subtitle, zero rate |
+| `analyticsDashboard.test.ts` | 20 (AN-UI-01..AN-UI-20) | page render, API load, presets, cards, charts, zero denominators, loading, error, retry, empty data, refresh, agent denied, no PII, no v-html, no polling |
+
+Ejecución: `npm run test`
+
 ## 8. Estado de pruebas por fase
 
 Cada fase declara su estado en `docs/roadmap.md` (PASS/FAIL) usando el formato de reporte
