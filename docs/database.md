@@ -492,6 +492,18 @@ Migraciones verificadas en PostgreSQL 16 con `migrate:up`, `migrate:rollback`, y
 - **Sin soft deletes**: métricas acumuladas se preservan.
 - **Anti-Cross-Tenant FK**: FK compuesta garantiza que conversation_id pertenece al mismo tenant.
 
+### U2 — Aggregation Service (runtime, no DDL)
+
+U2 no crea nuevas tablas. Opera sobre las tablas de U1:
+
+- `AggregationService::aggregateForDate()`: usa DB::table para UPSERT en `analytics_daily`
+  (no Model::updateOrCreate por bug de date cast en SQLite).
+- `ConversationMetric::updateOrCreate()` dentro de transacción con TenantContext
+  save/restore para que `BelongsToTenant::creating` obtenga el tenant_id correcto.
+- Query SQL: parámetros posicionales (`?`) exclusivamente — PG rechaza mezcla named + positional.
+- Schedule: `analytics:aggregate-daily` a las 02:00 UTC, `withoutOverlapping()`.
+- Tabla de scheduling: `job_batches` (ya existente en Laravel).
+
 ## 9. FASE 15 — Transferencia a humano (DDL)
 
 Migraciones verificadas con UP/DOWN/UP en PostgreSQL 16.

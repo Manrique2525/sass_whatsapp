@@ -17,3 +17,7 @@ Schedule::command('whatsapp:reprocess-webhook-events')
 Schedule::command('flow:fire-schedule-triggers')
     ->everyMinute()
     ->withoutOverlapping();
+
+Schedule::command('analytics:aggregate-daily')
+    ->dailyAt('02:00')
+    ->withoutOverlapping();

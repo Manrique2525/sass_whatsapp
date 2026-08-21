@@ -2062,7 +2062,7 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
     first_response_at, last_message_at). PK UUID, composite FK(tenant_id,conversation_id)
     → conversations(tenant_id,id) CASCADE, UNIQUE(tenant_id,conversation_id).
   - `MetricGranularity` enum: Daily/Weekly/Monthly (BackedEnum).
-  - AggregationService + AggregateDailyAnalyticsJob se implementan en U2 (no U1).
+  - AggregationService + AggregateDailyAnalyticsJob implementados en U2.
   - Schema cache (Redis) + API endpoint se implementan en U3.
   - Frontend dashboard + charts se implementan en U4.
 - **Consecuencias**:
@@ -2071,3 +2071,37 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - tenant_id NOTfillable en ambos models (protección Anti-Exploration).
   - 0 PII almacenado en analytics (solo IDs de tenant/conversation, no phone/names).
   - ADR-076 (FASE 20 U4 Tags) precede este ADR.
+
+## ADR-078 · Analytics Aggregation Service (FASE 21 U2)
+
+- **Estado**: Aceptado · FASE 21 U2
+- **Contexto**: U1 creó las tablas `analytics_daily` y `conversation_metrics` pero sin lógica
+  de materialización. Se necesita un servicio que lea datos transaccionales y materialice
+  aggregates diarios de forma idempotente, multi-tenant, y timezone-aware.
+- **Decisión**:
+  - `AggregationService`: servicio puro de aplicación (sin estado, sin cache en U2).
+    - `aggregateForDate(Tenant, date)`: calcula window en tenant timezone, ejecuta 6 queries
+      de conteo (messages, conversations, contacts, flow_executions, leads, AI tokens) + 1 query
+      de conversation_metrics, y materializa en `analytics_daily` via DB::table UPSERT
+      (no Model::updateOrCreate, por bug de date cast en SQLite).
+    - `aggregateForTenant(tenantId, from, to)`: itera rango de fechas (máx 365 días).
+    - TenantContext: se setea y restaura dentro de `aggregateForDate` para que
+      `ConversationMetric` (BelongsToTenant) obtenga el tenant_id correcto.
+    - Query SQL: parámetros posicionales (`?`) para compatibilidad PG (no mezclar named + positional).
+  - `AggregateDailyAnalyticsJob`: Job ShouldBeUnique+TenantAwareJob, dispatch en cola `analytics`.
+    - `uniqueId()`: `analytics:aggregate:{tenantId}:{date}` + `uniqueFor(300)`.
+    - Cache::lock con 10s block, release en finally.
+    - Tries=3, backoff=[30,60,120], timeout=300.
+  - `AggregateDailyAnalyticsCommand`: `analytics:aggregate-daily [--date=]`.
+    - Itera todos los tenants, dispatch job por tenant con fecha calculada en timezone del tenant.
+  - Schedule: `dailyAt('02:00')` + `withoutOverlapping()`.
+- **Consecuencias**:
+  - 34 tests SQLite (AN-AGG-U01..16, AN-CM-01..10, AN-MT-U2-01..08) — todos verdes.
+  - 13 tests Job/Command (AN-JOB-01..08, AN-CMD-01..05) — todos verdes.
+  - 10 tests PostgreSQL (AN-PG-U2-01..10) — todos verdes.
+  - Bug descubierto y corregido: `computeConversationMetrics` mezclaba parámetros named
+    (`:tid`) y posicionales (`?`) en la query IN → fallo en PostgreSQL.
+  - Bug descubierto y corregido: `AnalyticsDaily::updateOrCreate` falla en SQLite por
+    date cast mismatch → solución: UPSERT manual via `DB::table`.
+  - Cache de analytics (Redis) diferido a U3.
+  - Frontend dashboard diferido a U4.

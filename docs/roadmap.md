@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA. FASE 19 COMPLETADA. FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA.
+Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA. FASE 19 COMPLETADA. FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA.
 
 ## Fases
 
@@ -2118,4 +2118,33 @@ COMPLETADA. Pendiente commit. NO PUSH.
 - 16 tests: TAG-U4-01..16 (flujo válido, inactivo, no publicado, bot_paused, ejecución activa, case-sensitive, anti-recursión, sin conversación, múltiples triggers, audit, tag no match, cross-tenant, listener matching/no matching/inactivo/cross-tenant)
 
 #### ESTADO
-FASE 20 COMPLETADA. Pendiente commit. NO PUSH.
+FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. Pendiente commit. NO PUSH.
+
+---
+
+## FASE 21 — Analytics
+
+### U1 — Analytics Data Foundation
+- **Estado**: COMPLETADA
+- **Commit**: 227c5a6
+- Migraciones: `analytics_daily` (27 cols, UUID PK, UNIQUE(tenant_id,date)), `conversation_metrics` (14 cols, composite FK)
+- Models: `AnalyticsDaily`, `ConversationMetric` (BelongsToTenant, NO SoftDeletes)
+- Enum: `MetricGranularity` (Daily/Weekly/Monthly)
+- Factories: `AnalyticsDailyFactory`, `ConversationMetricFactory`
+- Tests: 20 SQLite (AN-DOM-01..20) + 12 PG (AN-PG-01..12)
+
+### U2 — Aggregation Service + Daily Job + Command
+- **Estado**: COMPLETADA
+- `AggregationService`: materialización daily de métricas, timezone-aware, idempotent (UPSERT manual)
+- `AggregateDailyAnalyticsJob`: ShouldBeUnique, TenantAwareJob, Cache::lock, tries=3, backoff=[30,60,120]
+- `AggregateDailyAnalyticsCommand`: `analytics:aggregate-daily [--date=]`, dispatches per tenant
+- Schedule: `dailyAt('02:00')` + `withoutOverlapping()`
+- Bugs corregidos: PG param mix (:tid + ?), date cast UPSERT mismatch, TenantContext save/restore
+- Tests: 34 SQLite + 13 Job/Command + 10 PG = **57 tests nuevos, todos verdes**
+- Quality gates: Pint clean, PHPStan 0, typecheck pass, build pass, vitest 338 pass
+
+### U3 — Cache Foundation + API Endpoint
+- **Estado**: PENDIENTE
+- Redis cache para analytics_daily (TTL, invalidación)
+- API endpoint: GET /api/v1/tenants/{tenant}/analytics/overview
+- Frontend dashboard: ApexCharts

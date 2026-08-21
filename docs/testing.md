@@ -593,39 +593,45 @@ En CI: secuencia lint → phpstan → test → build → typecheck → (E2E opci
 - Umbrales: código crítico (webhooks, engine, tenant, billing) >= 90%; global >= 80%.
 - Se registran excepciones justificadas en `docs/decisions.md`.
 
-## 7. Analytics (FASE 21 U1)
+## 7. Analytics (FASE 21 U1 + U2)
 
 ### Suite SQLite (Feature/Analytics/)
 
-Tests de invariantes de dominio que corren en SQLite (sin dependencias PG):
+Tests de invariantes de dominio + servicio de agregación que corren en SQLite:
 
 | Suite | Tests | Cobertura |
 |---|---|---|
 | `AnalyticsDailyTest.php` | 10 (AN-DOM-01..10) | Schema, defaults, unique, factory, fillable, timestamps |
 | `ConversationMetricTest.php` | 10 (AN-DOM-11..20) | Schema, defaults, composite FK, unique, factory, fillable |
+| `AggregationServiceTest.php` | 34 (AN-AGG-U01..16, AN-CM-01..10, AN-MT-U2-01..08) | AggregationService: window computation, message/conversation/flow/lead/AI token metrics, UPSERT idempotency, ConversationMetric materialization, multi-tenancy isolation |
+| `AggregateDailyAnalyticsJobTest.php` | 13 (AN-JOB-01..08, AN-CMD-01..05) | Job dispatch, uniqueId, uniqueFor, tries, backoff, timeout, nonexistent tenant, end-to-end integration. Command dispatches, per-tenant dates, timezone default, empty tenants, queue routing |
 
-Ejecución: `vendor/bin/pest tests/Feature/Analytics/`
+Ejecución: `vendor/bin/pest --filter="AN-"`
 
 ### Suite PostgreSQL (Postgres/Analytics/)
 
-Tests de migración real y constraints PG:
+Tests de migración real, constraints PG, y AggregationService contra PG real:
 
 | Suite | Tests | Cobertura |
 |---|---|---|
 | `AnalyticsPostgresTest.php` | 12 (AN-PG-01..12) | Migración UP, FKs, UNIQUEs, composite FK cross-tenant block, índices, defaults, rollback |
+| `AnalyticsAggregationPostgresTest.php` | 10 (AN-PG-U2-01..10) | AggregationService en PG real: insert, composite FK, UPSERT idempotency, cross-tenant isolation, conversation_metric UPSERT, flow executions, AI tokens, leads, timezone, JSONB columns |
 
 Ejecución:
 ```bash
-# Crear DB de test
-docker compose exec -T postgres createdb -U saas -O saas whatsapp_saas_analytics_test
-# Ejecutar tests
-HANDOFF_U2_PG_TEST=1 DB_DATABASE=whatsapp_saas_analytics_test \
-  docker compose exec app vendor/bin/pest \
+docker compose exec -T app vendor/bin/pest \
   --configuration=phpunit.pgsql.xml \
-  --filter="AnalyticsPostgresTest"
-# Limpiar
-docker compose exec -T postgres dropdb -U saas --if-exists --force whatsapp_saas_analytics_test
+  --filter="AnalyticsPostgresTest|AnalyticsAggregationPostgresTest"
 ```
+
+### Suite PostgreSQL U2 — Bugs descubiertos y corregidos
+
+1. **Parámetros mixtos en SQL** (`computeConversationMetrics`): la query mezclaba `:tid` (named)
+   con `?` (positional) para el `IN` clause → PostgreSQL rechaza `HY093: mixed named and positional`.
+   Solución: cambiar `:tid` a `?`.
+2. **TenantContext save/restore** (`aggregateForDate`): `ConversationMetric::updateOrCreate` usa
+   `BelongsToTenant::creating` que auto-sobrescribe `tenant_id` con `TenantContext::id()`.
+   Solución: `aggregateForDate` setea TenantContext antes del transaction y restaura en `finally`.
 
 ## 8. Estado de pruebas por fase
 
