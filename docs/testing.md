@@ -667,7 +667,33 @@ Tests de hardening y cierre de FASE 21 U5:
 
 Ejecución: `vendor/bin/pest --filter="AnalyticsSecurityTest"`
 
-## 8. Estado de pruebas por fase
+## 8. FASE 22 — Notifications Test Suite (U1)
+
+### Suite SQLite — Model + Enum (Feature/Notifications/)
+
+Tests del data model y enums (FASE 22 U1):
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `NotificationModelTest.php` | 15 (NOTIF-DB-01..15) | Factory create, UUID PK, tenant_id auto-assign, tenant_id NOT mass-assignable, type cast, priority cast, data cast, read_at null=unread, read_at datetime cast, user relation, tenant-wide (null user), title/body persist, safe metadata, soft delete preserves, repeated type allowed |
+| `NotificationEnumTest.php` | 4 (NOTIF-ENUM-01..04) | NotificationType cases exact, NotificationPriority cases exact, type values stable strings, both enums have labels |
+
+Ejecución: `vendor/bin/pest --filter="Notification"`
+
+### Suite PostgreSQL (tests/Postgres/Notifications/)
+
+Tests de migración y constraints en PostgreSQL 16:
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `NotificationPostgresTest.php` | 12 (NOTIF-PG-01..12) | Migration up, tenant FK exists, user FK exists, FK violation rejected, null user allowed, indexes exist, read_at nullable, JSONB persistence, repeated notifications allowed, tenant cascade delete, user delete SET NULL, UP/DOWN/UP cycle |
+
+Ejecución:
+```bash
+docker compose exec -T -e HANDOFF_U2_PG_TEST=1 -e DB_CONNECTION=pgsql -e DB_HOST=postgres -e DB_PORT=5432 -e DB_DATABASE=whatsapp_saas_handoff_u2_test -e DB_USERNAME=saas -e DB_PASSWORD=saas_secret app vendor/bin/pest --configuration=phpunit.pgsql.xml --no-coverage --filter="NotificationPostgresTest"
+```
+
+## 9. Estado de pruebas por fase
 
 Cada fase declara su estado en `docs/roadmap.md` (PASS/FAIL) usando el formato de reporte
 definido por el usuario (ver final de `roadmap.md`).

@@ -522,3 +522,8 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
         ignored, exceptions sanitized. Bug fix: RuntimeException → AIProviderException.
         RAG/FAQ/Billing boundaries verificados ausentes. DDL boundary verificado (0 migrations).
         FASE 16 cerrada. Suite total: 763 tests / 3055 assertions.
+- [x] (FASE 22 U1) Notification data model: tenant_id auto-asignado (BelongsToTenant),
+        FK CASCADE en tenant, FK SET NULL en user (preserva historial), user_id nullable
+        (soporta tenant-wide), data JSON sin PII (solo metadata segura), soft deletes
+        (audit trail), sin unique constraint (múltiples notificaciones legítimas).
+        Tests NOTIF-DB-01..15 (model) + NOTIF-ENUM-01..04 (enums) + NOTIF-PG-01..12 (PG).

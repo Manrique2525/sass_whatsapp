@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA. FASE 19 COMPLETADA. FASE 20 COMPLETADA. FASE 21 COMPLETADA.
+Estado general: **FASE 21 COMPLETADA**. FASE 22 U1 COMPLETADA.
 
 ## Fases
 
@@ -27,8 +27,8 @@ Estado general: **FASE 17 COMPLETADA**. FASE 18 COMPLETADA. FASE 19 COMPLETADA. 
 | 18 | FAQ inteligente | COMPLETADA |
 | 19 | Leads | COMPLETADA |
 | 20 | Tags | COMPLETADA |
-| 21 | Analytics | PENDIENTE |
-| 22 | Notificaciones | PENDIENTE |
+| 21 | Analytics | COMPLETADA |
+| 22 | Notificaciones (U1: Data Model DONE) | EN PROGRESO |
 | 23 | Planes | PENDIENTE |
 | 24 | Billing (Stripe) | PENDIENTE |
 | 25 | Usage limits | PENDIENTE |
@@ -2183,3 +2183,20 @@ FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COM
 - PG tests: 22 pass (UP/DOWN/UP + FK + UNIQUE + cross-tenant + aggregation)
 - Full regression: 108 analytics tests all pass
 - FASE 21 COMPLETADA (U1-U5)
+
+---
+
+## FASE 22 — Notificaciones
+
+### U1 — Notification Data Model + Domain Foundation
+- **Estado**: COMPLETADA
+- Tabla `notifications`: UUID PK, tenant_id FK CASCADE, user_id nullable FK SET NULL, type, priority, title, body, data JSON, read_at, softDeletes. 3 índices compuestos.
+- NotificationType enum: HandoffRequested, ConversationAssigned, ConversationClaimed, System
+- NotificationPriority enum: Low, Normal, High
+- Model: Notification (BelongsToTenant, HasUuids, HasFactory, SoftDeletes, isRead/markAsRead)
+- Factory: NotificationFactory (10 states: unread, read, highPriority, lowPriority, handoffRequested, conversationAssigned, conversationClaimed, tenantWide, targeted, withData)
+- Migración aplicada y verificada (UP/DOWN/UP en PostgreSQL 16)
+- Tests: 19 SQLite (NOTIF-DB-01..15 + NOTIF-ENUM-01..04) + 12 PG (NOTIF-PG-01..12) = 31 tests, todos verdes
+- Quality gates: PHPStan 0 errors, Pint 624 files clean, vitest 399/399, typecheck 0 errors, build pass, composer audit 0
+- Scope: SOLO data model + domain. NO API, NO listeners, NO email, NO realtime, NO frontend, NO Redis, NO push
+- ADR-082 registrado

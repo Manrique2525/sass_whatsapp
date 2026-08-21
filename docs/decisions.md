@@ -2211,3 +2211,44 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - composer audit: no vulnerabilities. npm audit: 0 vulnerabilities.
   - PG tests: 22 pass. Redis cache isolation verified.
   - FASE 21 declarada COMPLETADA. FASE 22 NO iniciada.
+
+## ADR-082 · Notification Data Model + Domain Foundation (FASE 22 U1)
+
+- **Estado**: Aceptado · FASE 22 U1
+- **Contexto**: FASE 21 (Analytics) completada. FASE 22 es "Notificaciones" — items diferidos
+  de ADR-051 (semántica terminal de handoff), ADR-053 (frontera realtime del Inbox para handoff),
+  y FASE 15 U4 (notifications para handoff requests). Actualmente `Domain/Notifications/` existe
+  pero está vacío. No hay tabla `notifications`, ni modelo, ni fábrica. El sistema notifica
+  solo vía eventos in-process (InboxConversationChanged) sin persistencia.
+- **Decisión**:
+  - **Tabla `notifications`**: UUID PK, `tenant_id` FK CASCADE, `user_id` nullable FK SET NULL,
+    `type` VARCHAR(100), `priority` VARCHAR(20) default 'normal', `title` VARCHAR(255),
+    `body` TEXT, `data` JSON nullable, `read_at` nullable timestamp, `deleted_at` (SoftDeletes).
+    Índices: `(tenant_id, user_id, read_at)`, `(tenant_id, created_at)`, `(tenant_id, type)`.
+  - **SoftDeletes**: sí — usuario puede descartar; preserva trail de auditoría.
+  - **user_id nullable**: sí — soporta dirigido (user_id != NULL) y tenant-wide (user_id = NULL).
+  - **User FK**: SET NULL on delete — preservar historial.
+  - **Tenant FK**: CASCADE on delete — datos de tenant mueren con el tenant.
+  - **Sin unique constraint** en type+user+conversation — múltiples notificaciones legítimas.
+  - **No unique constraint on (type, user_id, conversation_id)**: múltiples notificaciones del
+    mismo tipo para la misma conversación y usuario son legítimas (ej: handoff rechazado →
+    handoff aceptado).
+  - **NotificationType enum**: HandoffRequested, ConversationAssigned, ConversationClaimed, System.
+  - **NotificationPriority enum**: Low, Normal, High.
+  - **Model Notification**: BelongsToTenant, HasUuids, HasFactory, SoftDeletes, con relaciones
+    tenant()/user() e helpers isRead()/markAsRead().
+  - **Data JSON**: metadata segura únicamente (conversation_id, agent_id, event type, route hints).
+    NO PII (nombres, teléfonos, emails, bodies de mensaje).
+  - **title/body**: texto plano únicamente.
+  - **Preferences table**: DEFERRED a U4 (no existe storage actual).
+  - **Push/Realtime/Email/Frontend**: DEFERIDOS a sub-unidades futuras (U2–U5).
+  - **Alcance estricto**: U1 = data model + domain foundation únicamente. NO API,
+    NO listeners, NO email, NO realtime, NO frontend, NO Redis, NO push.
+- **Consecuencias**:
+  - 3 archivos PHP nuevos: NotificationType, NotificationPriority, Notification model.
+  - 1 factory (NotificationFactory) + 1 migración.
+  - 19 tests SQLite (15 model + 4 enum), 12 tests PostgreSQL.
+  - PHPStan 0 errors. Pint clean. composer audit clean.
+  - Vitest 399/399. Typecheck 0 errors. Vite build pass.
+  - Baseline: 6 pre-existing HandoffFinalTest/HandoffRuntimeTest failures (no relacionado).
+  - FASE 22 U1 declarada DONE. U2 (Event Listeners + Notification Dispatch) pendiente.

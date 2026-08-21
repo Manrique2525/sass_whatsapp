@@ -28,6 +28,30 @@ tenants
   ├─ subscriptions 1─N usage_records
   ├─ analytics_daily
   └─ conversation_metrics
+
+## 10. FASE 22 — Notifications (DDL)
+
+### notifications
+
+| Columna | Tipo | Constraint |
+|---|---|---|
+| `id` | uuid | PK |
+| `tenant_id` | uuid | NOT NULL, FK→tenants `cascadeOnDelete` |
+| `user_id` | uuid | NULLABLE, FK→users `nullOnDelete` |
+| `type` | varchar(100) | NOT NULL |
+| `priority` | varchar(20) | NOT NULL, DEFAULT 'normal' |
+| `title` | varchar(255) | NOT NULL |
+| `body` | text | NOT NULL |
+| `data` | json | NULLABLE |
+| `read_at` | timestamp | NULLABLE |
+| `created_at` / `updated_at` / `deleted_at` | timestamp | — (SoftDeletes) |
+
+- **Índices**: `idx_notifications_tenant_user_read (tenant_id, user_id, read_at)`, `idx_notifications_tenant_created (tenant_id, created_at)`, `idx_notifications_tenant_type (tenant_id, type)`.
+- **FK compuesta**: `(tenant_id, user_id)` → `users(tenant_id, id)` — integridad referencial tenant-first.
+- **user_id nullable**: permite notificaciones tenant-wide (user_id = NULL) y dirigidas (user_id != NULL).
+- **SoftDeletes**: usuario puede descartar; preserva historial de auditoría.
+- **Sin unique constraint** en type+user+conversation — múltiples notificaciones del mismo tipo son legítimas.
+- Migración verificada: PostgreSQL 16 — `migrate:up` completa, `migrate:rollback` revierte, segundo `migrate:up` re-aplica limpiamente.
 ```
 
 ## 3. Tablas por módulo
