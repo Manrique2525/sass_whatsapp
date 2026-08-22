@@ -154,7 +154,7 @@ pendiente de la fase de storage).
 | Analytics | `GET /api/v1/analytics/overview?from=&to=` |
 | Plans | `GET /api/v1/plans` |
 | Subscriptions | `GET/POST /api/v1/subscriptions`, `GET /api/v1/usage` |
-| Notifications | `GET /api/v1/notifications`, `PATCH /api/v1/notifications/{id}/read` |
+| Notifications | `GET /api/v1/tenants/{tenant}/notifications`, `PATCH /api/v1/tenants/{tenant}/notifications/{notification}/read`, `POST /api/v1/tenants/{tenant}/notifications/read-all` |
 | Audit | `GET /api/v1/audit-logs` (solo owner/admin) |
 
 ### 3.4 WhatsApp (implementado en FASE 6)
@@ -441,6 +441,26 @@ tenant de tipo `tag` cuyo `config.tags` contenga el nombre del tag asignado, y d
 las condiciones (defensa en profundidad), resuelve la conversación más reciente del contacto
 (`ContactConversationResolver`) y delega al `FlowEngine::handleScheduleTrigger()` existente
 (conversationLock, bot_paused, ejecución activa, start+run). Auditoría: `flow.tag_triggered`.
+
+### 3.10 Notificaciones (implementado en FASE 22 U1–U3)
+
+Bandeja de notificaciones personal. Mismas reglas de enforcement que §3.2–§3.9: `{tenant}` debe
+ser el **activo**; otro tenant → **404** (middleware `tenant`); sin permiso → **403**
+`PERMISSION_DENIED`. El `{notification}` del path se resuelve por servicio filtrando SIEMPRE por
+`tenant_id` + `user_id` del usuario autenticado; notificación ajena o inexistente → **404**.
+
+Permisos: `notifications.view` (todos los roles: owner/admin/agent). No existe `notifications.manage`
+— marcar como leído es operación de bandeja personal, no administrativa.
+
+| Método | Ruta | Permiso | Descripción |
+|---|---|---|---|
+| GET | `/api/v1/tenants/{tenant}/notifications` | `notifications.view` | Listado paginado. Query: `read_status` (`all`|`unread`|`read`, default `all`), `per_page` (1..100, default 20). Respuesta: `{notifications: NotificationResource[], meta: {current_page, last_page, per_page, total}, counts: {unread: int}}` |
+| PATCH | `/api/v1/tenants/{tenant}/notifications/{notification}/read` | `notifications.view` | Marca como leída → **200** `{message, read_at}`. CAS: `UPDATE WHERE read_at IS NULL` — idempotente (segunda llamada retorna el mismo `read_at`). Notificación ajena/inexistente → **404** |
+| POST | `/api/v1/tenants/{tenant}/notifications/read-all` | `notifications.view` | Marca todas las no leídas del usuario → **200** `{message, count}`. `count` = filas afectadas. Idempotente: si todas ya están leídas, `count = 0` |
+
+`NotificationResource`: `{id, type, priority, title, body, data, read_at, created_at}` (jamás
+incluye `tenant_id` ni `user_id`). `type` ∈ {`handoff_requested`, `conversation_assigned`,
+`conversation_transferred`, `system`}. `priority` ∈ {`high`, `normal`, `low`}`.
 
 ## 4. Webhooks (sin auth Bearer; autenticados por firma y dedupe)
 

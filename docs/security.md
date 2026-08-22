@@ -535,3 +535,12 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
         seguro (notification_id, type, priority, target_user_id, conversation_id — sin PII).
         Tests NOTIF-SVC-01..10 + NOTIF-HO-01..10 + NOTIF-ASG-01..10 + NOTIF-MT-U2-01..06
         + NOTIF-SEC-01..08 + NOTIF-PG-U2-01..06.
+- [x] (FASE 22 U3) Notification API + permissions + read state:
+        `notifications.view` permission (Owner/Admin/Agent). CAS-style mark-read
+        (`WHERE read_at IS NULL`) — idempotent, concurrent-safe without locks.
+        Ownership enforcement: every query includes `user_id` + `tenant_id`.
+        Cross-user/cross-tenant → 404 (hides existence). `NotificationResource` does NOT
+        expose `tenant_id` or `user_id`. Input validation (`read_status` enum, `per_page`
+        1..100). Bulk mark-all-read returns affected count. No audit for mark-read (UI state).
+        Tests NOTIF-API-01..15 + NOTIF-PERM-01..06 + NOTIF-MT-U3-01..10 +
+        NOTIF-SEC-U3-01..10 + NOTIF-CON-01..03.

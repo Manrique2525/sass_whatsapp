@@ -86,6 +86,8 @@ enum TenantPermission: string
 
     case ViewAnalytics = 'analytics.view';
 
+    case ViewNotifications = 'notifications.view';
+
     /**
      * Todos los permisos de la plataforma (para el seeder).
      *
@@ -127,6 +129,7 @@ enum TenantPermission: string
             self::ViewTags,
             self::ManageTags,
             self::ViewAnalytics,
+            self::ViewNotifications,
         ];
     }
 
@@ -146,6 +149,7 @@ enum TenantPermission: string
      * - messages: send para todos los roles del tenant (responder en el chat).
      * - flows: view para todos (leer flujos/chatbots/ejecuciones); manage solo
      *   owner/admin (crear/editar/publicar/desactivar flujos y triggers).
+     * - notifications: view para todos (inbox personal de notificaciones).
      *
      * @return list<TenantPermission>
      */
@@ -184,6 +188,7 @@ enum TenantPermission: string
                 self::ViewTags,
                 self::ManageTags,
                 self::ViewAnalytics,
+                self::ViewNotifications,
             ],
             UserRole::Agent => [
                 self::ViewTenants,
@@ -198,6 +203,7 @@ enum TenantPermission: string
                 self::ViewFaqs,
                 self::ViewLeads,
                 self::ViewTags,
+                self::ViewNotifications,
             ],
             // super_admin es rol global de plataforma (spatie, sin team):
             // no obtiene permisos de tenant, se autoriza aparte.

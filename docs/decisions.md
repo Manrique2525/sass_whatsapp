@@ -2288,3 +2288,63 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
     necesidad de re-establecer TenantContext manualmente en el test.
   - Los tests que llaman directamente al NotificationService (sin listener) siguen
     necesitando `TenantContext::setId()` explícito antes de la llamada.
+
+## ADR-084 · Personal Notification Inbox + Read-State Semantics (FASE 22 U3)
+
+- **Estado**: Aceptado · FASE 22 U3
+- **Contexto**: FASE 22 U1 creó el modelo de notificaciones y U2 dispatch events into
+  notifications. However, users have no way to view or manage their notifications. The
+  inbox needs to be personal (each user sees only their own), support read/unread filtering,
+  paginated listing, and idempotent mark-as-read. Two operations exist: individual
+  mark-read (CAS on single row) and bulk mark-all-read.
+- **Decisión**:
+  - **Endpoint pattern**: Three endpoints — `GET /notifications` (index), `PATCH
+    /notifications/{notification}/read` (mark single read), `POST /notifications/read-all`
+    (mark all read). These follow the existing tenant-scoped controller pattern
+    (FaqController, TagController).
+  - **Permission**: New `ViewNotifications = 'notifications.view'` added to `TenantPermission`
+    enum. Assigned to Owner, Admin, and Agent roles (all active members). No
+    `ManageNotifications` — mark-read is personal inbox, not admin.
+  - **Ownership enforcement**: Every query includes `where('user_id', $userId)` and
+    `where('tenant_id', $tenantId)`. Users can only see/interact with their own
+    notifications. Cross-user access returns 404.
+  - **CAS-style markRead**: `UPDATE notifications SET read_at = now() WHERE id = ? AND
+    read_at IS NULL AND tenant_id = ? AND user_id = ?`. Returns affected row count.
+    Idempotent: second call affects 0 rows. No row-level locks needed — the WHERE clause
+    prevents double-read at the SQL level.
+  - **markAllRead**: Same CAS pattern but over all unread notifications for the user.
+    Returns count of newly-read notifications.
+  - **Index response shape**: `{notifications: [...], meta: {current_page, last_page,
+    per_page, total}, counts: {unread: N}}`. The `unread` count is computed independently
+    of any filter.
+  - **Resource safety**: `NotificationResource` does NOT expose `tenant_id` or `user_id`.
+    Exposes: id, type, priority, title, body, data, read_at, created_at.
+  - **No audit for mark-read**: Marking a notification as read is UI state, not a
+    business action. Audit logs from notification creation (U2) are retained.
+  - **Tenant-wide rows** (`user_id = NULL`): Supported by schema but excluded from
+    personal inbox queries in this MVP. Reserved for future system-wide notifications.
+- **Consecuencias**:
+  - Clean separation: U2 dispatches, U3 consumes. NotificationService handles both creation
+    (U2) and read-state management (U3).
+  - CAS semantics make the endpoints safe under concurrent requests without explicit locks.
+  - The `counts.unread` in the index response supports badge indicators in the frontend.
+  - Future tenant-wide notifications (system announcements) can leverage the existing
+    `user_id = NULL` column with a separate query path.
+
+## ADR-085 · Notification Multi-Tenancy Middleware Behavior (FASE 22 U3)
+
+- **Estado**: Aceptado · FASE 22 U3
+- **Contexto**: Cross-tenant access to notification endpoints needed clarification.
+  The existing `TenantMiddleware` returns 404 (via `TenantMembershipException` →
+  `NotFoundHttpException`) when the user is not a member of the tenant in the URL.
+  This differs from explicit 403 PERMISSION_DENIED in service-level authorization.
+- **Decisión**: The notification endpoints follow the same middleware behavior as all
+  other tenant-scoped endpoints:
+  - User not member of `{tenant}` in URL → **404** (via `TenantMiddleware`)
+  - User member but lacks `notifications.view` permission → **403** `PERMISSION_DENIED`
+  - Notification exists but belongs to different user → **404** (service-level, hides existence)
+  - Notification does not exist → **404**
+- **Consecuencias**:
+  - Consistent with all other modules (contacts, conversations, etc.)
+  - No information leakage about which tenants or notifications exist
+  - Test assertions use `assertNotFound()` for cross-tenant (not `assertForbidden()`)

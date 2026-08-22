@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 21 COMPLETADA**. FASE 22 U1/U2 COMPLETADAS.
+Estado general: **FASE 21 COMPLETADA**. FASE 22 U1/U2/U3 COMPLETADAS.
 
 ## Fases
 
@@ -28,7 +28,7 @@ Estado general: **FASE 21 COMPLETADA**. FASE 22 U1/U2 COMPLETADAS.
 | 19 | Leads | COMPLETADA |
 | 20 | Tags | COMPLETADA |
 | 21 | Analytics | COMPLETADA |
-| 22 | Notificaciones (U1: Data Model DONE, U2: Event Listeners DONE) | EN PROGRESO |
+| 22 | Notificaciones (U1: Data Model DONE, U2: Event Listeners DONE, U3: Notification API DONE) | EN PROGRESO |
 | 23 | Planes | PENDIENTE |
 | 24 | Billing (Stripe) | PENDIENTE |
 | 25 | Usage limits | PENDIENTE |

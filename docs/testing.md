@@ -722,6 +722,51 @@ Ejecución:
 docker compose exec -T -e HANDOFF_U2_PG_TEST=1 -e DB_CONNECTION=pgsql -e DB_HOST=postgres -e DB_PORT=5432 -e DB_DATABASE=whatsapp_saas_handoff_u2_test -e DB_USERNAME=saas -e DB_PASSWORD=saas_secret app vendor/bin/pest --configuration=phpunit.pgsql.xml --no-coverage --filter="NotificationPostgresU2Test"
 ```
 
+### Suite PostgreSQL — Concurrency (tests/Postgres/Notifications/)
+
+Tests CAS semantics under PostgreSQL (FASE 22 U3):
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `NotificationConcurrencyTest.php` | 3 (NOTIF-CON-01..03) | CAS markRead second call affects 0 rows, CAS markAllRead second call affects 0 rows, markAllRead then new notification reflects latest state |
+
+Ejecución:
+```bash
+docker compose exec -T -e HANDOFF_U2_PG_TEST=1 -e DB_CONNECTION=pgsql -e DB_HOST=postgres -e DB_PORT=5432 -e DB_DATABASE=whatsapp_saas_handoff_u2_test -e DB_USERNAME=saas -e DB_PASSWORD=saas_secret app vendor/bin/pest --configuration=phpunit.pgsql.xml --no-coverage --filter="NotificationConcurrencyTest"
+```
+
+## 8C. FASE 22 — Notifications Test Suite (U3: Notification API + Permissions + Read State)
+
+### Suite SQLite — API + Permissions + Multi-Tenancy + Security (Feature/Notifications/)
+
+Tests del endpoint, permisos, aislamiento multi-tenant y seguridad:
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `NotificationApiTest.php` | 15 (NOTIF-API-01..15) | List paginated, ordering DESC, empty state, unread filter, read filter, counts, mark-read single, mark-read idempotent, mark-all-read, mark-all-read count, 404 on non-existent, 404 cross-user, resource safety (no tenant_id/user_id), per_page bounds |
+| `NotificationPermissionTest.php` | 6 (NOTIF-PERM-01..06) | Owner views, admin views, agent views, unauthenticated 401, non-member 404, no cross-user read |
+| `NotificationMultiTenancyU3Test.php` | 10 (NOTIF-MT-U3-01..10) | Tenant A isolation, user A isolation, IDOR cross-user, IDOR cross-tenant, tenant-wide excluded from personal inbox, soft-delete excluded, injection attempt, inactive membership, concurrent tenant-scoped queries, boundary notification counts |
+| `NotificationSecurityU3Test.php` | 10 (NOTIF-SEC-U3-01..10) | IDOR UUID cross-user, tenant_id injection ignored, SQL injection in filter, no PII in response, no internal IDs exposed, soft-delete hidden, no mass assignment, read_status validation, data JSON safety, no verbose errors |
+
+Ejecución: `vendor/bin/pest --filter="Notification"`
+
+## 8D. FASE 22 — Notifications Full Test Summary
+
+| Category | Tests |
+|---|---|
+| Model + Enums (U1) | 19 (15 model + 4 enum) |
+| PostgreSQL Migrations (U1) | 12 |
+| Event Listeners + Dispatch (U2) | 54 (10 service + 10 handoff + 10 assignment + 6 multi-tenancy + 8 security) |
+| PostgreSQL U2 Integration | 6 |
+| Notification API (U3) | 15 |
+| Permissions (U3) | 6 |
+| Multi-Tenancy U3 | 10 |
+| Security U3 | 10 |
+| Concurrency CAS (U3) | 3 |
+| **Total SQLite** | **114** |
+| **Total PostgreSQL** | **21** |
+| **Total** | **135** |
+
 ## 9. Estado de pruebas por fase
 
 Cada fase declara su estado en `docs/roadmap.md` (PASS/FAIL) usando el formato de reporte

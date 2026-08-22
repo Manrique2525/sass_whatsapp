@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\LeadController;
 use App\Http\Controllers\Api\V1\MemberController;
 use App\Http\Controllers\Api\V1\MemberInvitationController;
 use App\Http\Controllers\Api\V1\MessagesController;
+use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\TagController;
 use App\Http\Controllers\Api\V1\TenantController;
 use App\Http\Controllers\Api\V1\TriggerController;
@@ -186,6 +187,11 @@ Route::prefix('v1')->group(function (): void {
 
                 // FASE 21 U3 — Analytics del tenant.
                 Route::get('{tenant}/analytics/overview', [AnalyticsController::class, 'overview']);
+
+                // FASE 22 U3 — Notificaciones del usuario en el tenant.
+                Route::get('{tenant}/notifications', [NotificationController::class, 'index']);
+                Route::patch('{tenant}/notifications/{notification}/read', [NotificationController::class, 'markRead']);
+                Route::post('{tenant}/notifications/read-all', [NotificationController::class, 'markAllRead']);
             });
         });
     });
