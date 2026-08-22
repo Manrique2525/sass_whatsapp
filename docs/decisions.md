@@ -2431,3 +2431,54 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Tenant switch limpio: no hay contaminación cruzada de notificaciones.
   - La UI de preferencias email se expone solo a roles que tienen efecto real.
   - No se implementan push notifications, SMS, ni integraciones externas.
+
+## ADR-088 · Plan & Subscription Data Foundation (FASE 23 U1)
+
+- **Estado**: Aceptado · FASE 23 U1
+- **Contexto**: FASE 22 (Notificaciones) completada. FASE 23 es "Planes" — base de datos para
+  plan de suscripción, catálogo de planes globales, suscripciones tenant-scoped, items de
+  suscripción y registro de uso append-only. FASE 24 será Stripe/Billing y FASE 25 UsageGuard.
+- **Decisión**:
+  - **Plan es GLOBAL** (sin `tenant_id`): catálogo compartido por todos los tenants.
+    Managed por super_admin. Tabla `plans`: uuid PK, slug UNIQUE, name, description, is_active,
+    price_monthly/price_yearly (decimal:2), limits JSON (quota por categoría), features JSON
+    (feature flags), sort_order, timestamps, softDeletes.
+  - **Subscription es TENANT-SCOPED**: source of truth para plan assignment del tenant.
+    Tabla `subscriptions`: uuid PK, tenant_id FK CASCADE (BelongsToTenant), plan_id FK NULL,
+    status (SubscriptionStatus enum: active|cancelled), quantity int, current_period_start/end,
+    metadata JSON (append-only), timestamps, softDeletes.
+  - **One active subscription per tenant**: UNIQUE parcial `(tenant_id) WHERE deleted_at IS NULL`.
+    Soft deletes permite plan changes (cancelled old + new active).
+  - **SubscriptionItem es TENANT-SCOPED**: categoría de uso + quota incluida + precio unitario.
+    Tabla `subscription_items`: uuid PK, tenant_id FK CASCADE, subscription_id FK CASCADE,
+    category (UsageCategory enum), included_usage int, per_unit_price, timestamps.
+    UNIQUE parcial `(subscription_id, category) WHERE deleted_at IS NULL`.
+  - **UsageRecord es TENANT-SCOPED + append-only**: ledger inmutable de consumo.
+    Tabla `usage_records`: uuid PK, tenant_id FK CASCADE, subscription_id FK NULL,
+    category (UsageCategory), quantity int, description nullable, metadata JSON,
+    recorded_at datetime, timestamps. NO soft deletes (inmutable).
+  - **tenants.plan_id FK**: `nullOnDelete` — si se elimina plan, tenant va a NULL.
+    Denormalized cache de la relación active subscription.
+  - **SubscriptionStatus enum**: `active`, `cancelled` en U1 (FASE 24 extiende con
+    trialing, past_due, expired).
+  - **PlanInterval enum**: `monthly`, `yearly` (FASE 24 lo usa).
+  - **UsageCategory enum**: `messages`, `ai_tokens`, `contacts`, `flow_executions`,
+    `users`, `knowledge_documents`.
+  - **PlanSeeder**: solo plan `free` (no hay planes definidos en specs contractuales).
+    Idempotente via `updateOrCreate` por slug.
+  - **Plan model methods**: `getLimit(string $category): ?int`, `hasFeature(string $feature): bool`.
+  - **Subscription model methods**: `isActive(): bool`.
+  - **Factories**: PlanFactory, SubscriptionFactory (con states: active, cancelled),
+    SubscriptionItemFactory, UsageRecordFactory.
+  - **BelongsToTenant en Subscription/SubscriptionItem/UsageRecord**: tenant_id auto-asignado
+    desde TenantContext. TenantContextMissingException si context no está activo.
+  - **Billing permissions**: `ViewBilling` → owner+admin, `ManageBilling` → solo owner.
+    Agent no tiene acceso a billing.
+  - **Tests**: 52 tests (BILL-ENUM-01..09, BILL-DOM-01..25, BILL-MT-01..08, BILL-SEC-01..10).
+- **Consecuencias**:
+  - El catálogo de planes es global — un solo super_admin gestiona pricing.
+  - La suscripción es la source of truth; tenants.plan_id es cache denormalizado.
+  - UsageRecord append-only preserva historial completo para auditoría y facturación.
+  - FASE 24 (Stripe) extiende sin breaking changes: agrega facturas, invoices, webhooks.
+  - FASE 25 (UsageGuard) consume UsageRecord para enforce quotas del plan.
+  - Plan free como base garantiza que todo tenant tiene un plan válido desde el inicio.

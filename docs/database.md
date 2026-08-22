@@ -557,3 +557,68 @@ Backfill: `tenant_id` en assignments/participants se deriva exclusivamente de
 Migración verificada: PostgreSQL 16 — `migrate:up` completa, `migrate:rollback` revierte,
 segundo `migrate:up` re-aplica limpiamente. Filas legacy (sin `tenant_id`) se backfillan
 antes de añadir `NOT NULL`.
+
+## 11. FASE 23 — Billing/Plans DDL
+
+### 11.1 plans (global — sin tenant_id)
+
+| Column | Type | Constraints |
+|---|---|---|
+| id | uuid | PK |
+| slug | varchar(100) | UNIQUE, NOT NULL |
+| name | varchar(100) | NOT NULL |
+| description | text | nullable |
+| is_active | boolean | default true |
+| price_monthly | decimal(10,2) | default 0 |
+| price_yearly | decimal(10,2) | default 0 |
+| limits | jsonb | nullable |
+| features | jsonb | nullable |
+| sort_order | int | default 0 |
+| timestamps, soft_deletes | | |
+
+### 11.2 subscriptions (tenant-scoped)
+
+| Column | Type | Constraints |
+|---|---|---|
+| id | uuid | PK |
+| tenant_id | uuid | FK→tenants CASCADE, NOT NULL |
+| plan_id | uuid | FK→plans NULL ON DELETE, NOT NULL |
+| status | varchar(20) | default 'active' |
+| quantity | int | default 1 |
+| current_period_start | timestamp | nullable |
+| current_period_end | timestamp | nullable |
+| metadata | jsonb | default {} |
+| timestamps, soft_deletes | | |
+| UNIQUE | (tenant_id) WHERE deleted_at IS NULL |
+
+### 11.3 subscription_items (tenant-scoped)
+
+| Column | Type | Constraints |
+|---|---|---|
+| id | uuid | PK |
+| tenant_id | uuid | FK→tenants CASCADE, NOT NULL |
+| subscription_id | uuid | FK→subscriptions CASCADE, NOT NULL |
+| category | varchar(50) | NOT NULL |
+| included_usage | int | NOT NULL |
+| per_unit_price | decimal(10,2) | default 0 |
+| timestamps, soft_deletes | | |
+| UNIQUE | (subscription_id, category) WHERE deleted_at IS NULL |
+
+### 11.4 usage_records (tenant-scoped, append-only)
+
+| Column | Type | Constraints |
+|---|---|---|
+| id | uuid | PK |
+| tenant_id | uuid | FK→tenants CASCADE, NOT NULL |
+| subscription_id | uuid | FK→subscriptions SET NULL |
+| category | varchar(50) | NOT NULL |
+| quantity | int | NOT NULL |
+| description | text | nullable |
+| metadata | jsonb | nullable |
+| recorded_at | timestamp | NOT NULL |
+| timestamps | | |
+
+### 11.5 tenants.plan_id FK
+
+- `plan_id` uuid, nullable, FK→plans NULL ON DELETE
+- Denormalized cache de la relación active subscription

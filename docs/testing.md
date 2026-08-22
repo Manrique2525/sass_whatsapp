@@ -788,3 +788,15 @@ Ejecución: `vendor/bin/pest --filter="NotificationPreference|NotificationMail"`
 
 Cada fase declara su estado en `docs/roadmap.md` (PASS/FAIL) usando el formato de reporte
 definido por el usuario (ver final de `roadmap.md`).
+
+## 10. FASE 23 — Billing/Plans Test Suite (U1)
+
+Tests del data model, enums, multi-tenancy y seguridad (FASE 23 U1):
+
+| Category | Tests |
+|---|---|
+| Enums (BILL-ENUM) | 9 (SubscriptionStatus, PlanInterval, UsageCategory: cases, values, labels) |
+| Model Invariants (BILL-DOM) | 25 (Plan, Subscription, SubscriptionItem, UsageRecord: factory, UUID, casts, relations, helpers) |
+| Multi-Tenancy (BILL-MT) | 8 (cross-tenant visibility, TenantContext, Plans global) |
+| Security (BILL-SEC) | 10 (PII, HTML, API keys, mass assignment, integer casts) |
+| **Total** | **52** |

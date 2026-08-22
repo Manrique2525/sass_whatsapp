@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 22 COMPLETADA**.
+Estado general: **FASE 22 COMPLETADA · FASE 23 U1 EN PROGRESO**.
 
 ## Fases
 
@@ -29,7 +29,7 @@ Estado general: **FASE 22 COMPLETADA**.
 | 20 | Tags | COMPLETADA |
 | 21 | Analytics | COMPLETADA |
 | 22 | Notificaciones (U1: Data Model, U2: Event Listeners, U3: Notification API, U4: Email Preferences, U5: Realtime + Frontend) | COMPLETADA |
-| 23 | Planes | PENDIENTE |
+| 23 | Planes (U1: Data Model) | EN PROGRESO |
 | 24 | Billing (Stripe) | PENDIENTE |
 | 25 | Usage limits | PENDIENTE |
 | 26 | Auditoría | PENDIENTE |
@@ -2220,3 +2220,19 @@ FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COM
 - Quality gates: PHPStan 0 errors, Pint 632 files clean, vitest 399/399, typecheck 0 errors, build pass, composer audit 0
 - Scope: SOLO event listeners + dispatch. NO API, NO email, NO realtime, NO frontend, NO Redis, NO push, NO permissions changes
 - ADR-083 registrado
+
+## FASE 23 — Planes & Suscripciones
+
+### U1 — Plan & Subscription Data Foundation
+- **Estado**: COMPLETADA
+- Enums: SubscriptionStatus (active|cancelled), PlanInterval (monthly|yearly), UsageCategory (6 categories)
+- Models: Plan (global, HasUuids, HasFactory), Subscription (BelongsToTenant, SoftDeletes), SubscriptionItem (BelongsToTenant, SoftDeletes), UsageRecord (BelongsToTenant, append-only)
+- Migrations: plans, subscriptions, subscription_items, usage_records, add_plan_id_fk_to_tenants (5 migrations, all applied on PG)
+- PlanSeeder: free plan, idempotent via updateOrCreate
+- Tenants: plan_id FK nullable nullOnDelete added
+- TenantPermission: ViewBilling (owner+admin), ManageBilling (owner)
+- Factories: PlanFactory, SubscriptionFactory, SubscriptionItemFactory, UsageRecordFactory
+- Tests: 52 SQLite (BILL-ENUM-01..09, BILL-DOM-01..25, BILL-MT-01..08, BILL-SEC-01..10)
+- Quality gates: PHPStan 0 errors, Pint clean, composer audit 0 vulnerabilities, migration UP/DOWN/UP verified
+- Scope: SOLO data model. NO API, NO controllers, NO Stripe, NO usage guard, NO billing UI
+- ADR-088 registrado

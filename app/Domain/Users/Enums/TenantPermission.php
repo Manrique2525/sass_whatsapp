@@ -34,6 +34,10 @@ namespace App\Domain\Users\Enums;
  * FASE 17 U2.1 añade el dominio knowledge: `knowledge.view` (todos los roles,
  * listar y ver KBs/documentos) y `knowledge.manage` (owner/admin: crear,
  * editar y eliminar KBs y documentos).
+ *
+ * FASE 23 U1 añade el dominio billing: `billing.view` (owner/admin:
+ * ver planes, suscripción, uso) y `billing.manage` (owner: gestionar
+ * facturación). Agent no tiene acceso a billing.
  */
 enum TenantPermission: string
 {
@@ -88,6 +92,9 @@ enum TenantPermission: string
 
     case ViewNotifications = 'notifications.view';
 
+    case ViewBilling = 'billing.view';
+    case ManageBilling = 'billing.manage';
+
     /**
      * Todos los permisos de la plataforma (para el seeder).
      *
@@ -130,6 +137,8 @@ enum TenantPermission: string
             self::ManageTags,
             self::ViewAnalytics,
             self::ViewNotifications,
+            self::ViewBilling,
+            self::ManageBilling,
         ];
     }
 
@@ -150,6 +159,8 @@ enum TenantPermission: string
      * - flows: view para todos (leer flujos/chatbots/ejecuciones); manage solo
      *   owner/admin (crear/editar/publicar/desactivar flujos y triggers).
      * - notifications: view para todos (inbox personal de notificaciones).
+     * - billing: view para owner/admin (planes, suscripción, uso); manage
+     *   solo owner (gestión de facturación). Agent sin acceso.
      *
      * @return list<TenantPermission>
      */
@@ -189,6 +200,7 @@ enum TenantPermission: string
                 self::ManageTags,
                 self::ViewAnalytics,
                 self::ViewNotifications,
+                self::ViewBilling,
             ],
             UserRole::Agent => [
                 self::ViewTenants,
