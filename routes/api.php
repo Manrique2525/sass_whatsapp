@@ -191,6 +191,7 @@ Route::prefix('v1')->group(function (): void {
 
                 // FASE 22 U3 — Notificaciones del usuario en el tenant.
                 Route::get('{tenant}/notifications', [NotificationController::class, 'index']);
+                Route::get('{tenant}/notifications/unread-count', [NotificationController::class, 'unreadCount']);
                 Route::patch('{tenant}/notifications/{notification}/read', [NotificationController::class, 'markRead']);
                 Route::post('{tenant}/notifications/read-all', [NotificationController::class, 'markAllRead']);
 

@@ -2,6 +2,7 @@
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import type { AuthUser } from '@/types/inertia';
+import NotificationBell from '@/Components/Notifications/NotificationBell.vue';
 
 const props = defineProps<{
     user: AuthUser | null;
@@ -63,6 +64,7 @@ const logout = (): void => {
                     </span>
                 </div>
                 <div class="flex items-center gap-4">
+                    <NotificationBell v-if="currentTenantId !== null" />
                     <div class="text-right">
                         <p class="text-sm font-medium text-zinc-800">{{ props.user?.name }}</p>
                         <p class="text-xs text-zinc-500">{{ props.user?.email }}</p>

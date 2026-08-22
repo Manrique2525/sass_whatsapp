@@ -16,6 +16,7 @@ use App\Domain\Users\Enums\TenantMembershipStatus;
 use App\Domain\Users\Enums\TenantPermission;
 use App\Domain\Users\Models\TenantUser;
 use App\Domain\Users\Models\User;
+use App\Events\NotificationCreated;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 
@@ -294,6 +295,8 @@ final class NotificationService
             subjectId: $notification->id,
             tenantId: $tenant->id,
         );
+
+        NotificationCreated::dispatch($notification);
 
         return $notification;
     }

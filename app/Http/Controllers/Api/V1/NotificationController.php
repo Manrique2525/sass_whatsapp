@@ -54,6 +54,23 @@ final class NotificationController extends Controller
         ]);
     }
 
+    public function unreadCount(Request $request, Tenant $tenant): JsonResponse
+    {
+        try {
+            $count = $this->service->unreadCount($request->user(), $tenant);
+        } catch (TenantMembershipException) {
+            throw new NotFoundHttpException('Tenant no encontrado.');
+        } catch (PermissionDeniedException $e) {
+            return $this->forbidden($e);
+        } catch (TenantNotActiveException) {
+            return $this->tenantNotActive();
+        }
+
+        return response()->json([
+            'unread_count' => $count,
+        ]);
+    }
+
     public function markRead(Request $request, Tenant $tenant, string $notification): JsonResponse
     {
         try {

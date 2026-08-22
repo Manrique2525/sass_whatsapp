@@ -2392,3 +2392,42 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - No frontend for preferences in U4 (API-only). Frontend can be added later.
   - The `email_notifications_enabled` column defaults to false, ensuring zero surprise emails
     on existing memberships.
+
+## ADR-087 · Realtime Personal Notification Delivery + Frontend Notification Center (FASE 22 U5)
+
+- **Estado**: Aceptado · FASE 22 U5
+- **Contexto**: U1-U4 implementaron notificaciones in-app, inbox API, read-state y preferencias
+  email. Falta entrega en tiempo real y frontend para que el usuario vea notificaciones
+  sin polling.
+- **Decisión**:
+  - **Personal channel**: `private-tenant.{tenantId}.users.{userId}.notifications` — canal
+    privado por usuario, no tenant-wide. Cada usuario solo puede suscribirse a su propio canal.
+  - **Channel auth**:双重验证: `user.id === userId` AND `user.belongsToTenantById(tenantId)`.
+    Un usuario jamás puede suscribirse al canal de otro usuario, ni de otro tenant.
+  - **NotificationCreated event**: implementa `ShouldBroadcast`, `afterCommit = true`. Se despacha
+    después de crear cada notificación en `NotificationService::createNotification()`.
+  - **Broadcast payload**: usa `NotificationResource` (sin tenant_id, user_id, PII). Solo campos
+    públicos: id, type, priority, title, body, data, read_at, created_at.
+  - **Unread count endpoint**: `GET /api/v1/tenants/{tenant}/notifications/unread-count` — ligero,
+    sin carga de listado. Ubicado ANTES de `{notification}` para evitar conflicto de routing.
+  - **Frontend module**: `features/notifications/` con types, API client, utils puros, composable
+    `useNotificationChannel` (subscribe/listen/cleanup). Patrón idéntico a `useInboxChannel`.
+  - **NotificationBell**: ícono campana + badge unread en el header de `AppLayout`. Click abre
+    `NotificationCenter` (dropdown). Integrado solo cuando `currentTenantId !== null`.
+  - **NotificationCenter**: dropdown compacto con listado, mark-read individual, mark-all-read,
+    "cargar más", loading/error/empty states. Escape para cerrar.
+  - **NotificationPreferenceToggle**: integrado en Dashboard. Solo visible para owner/admin
+    (agent no tiene email efectivo). Toggle con loading/disabled/error states.
+  - **Tenant switch**: al cambiar de tenant, el composable abandona el canal anterior, limpia
+    notificaciones locales y se suscribe al nuevo canal. No hay fuga de datos entre tenants.
+  - **Dedup**: eventos duplicados se ignoran por `id` (Set cap en 500). Prepend sin duplicados.
+  - **No realtime read-state**: el broadcast solo notifica creación. Marcar leído es solo HTTP.
+  - **No full notifications page**: bell + dropdown es MVP suficiente.
+  - **Tests**: 12 backend broadcast tests (event, channel, auth, payload safety, service dispatch),
+    4 routing tests, 29 frontend utils tests, 12 realtime composable tests.
+- **Consecuencias**:
+  - El usuario recibe notificaciones al instante sin refrescar la página.
+  - El canal personal aísla completamente las notificaciones de cada usuario.
+  - Tenant switch limpio: no hay contaminación cruzada de notificaciones.
+  - La UI de preferencias email se expone solo a roles que tienen efecto real.
+  - No se implementan push notifications, SMS, ni integraciones externas.

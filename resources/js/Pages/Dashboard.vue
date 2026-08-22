@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import NotificationPreferenceToggle from '@/Components/Notifications/NotificationPreferenceToggle.vue';
 
 const page = usePage();
 const user = page.props.auth.user;
@@ -31,6 +32,10 @@ const currentTenant = page.props.auth.tenants.find(
                     Sin tenant activo. Selecciona uno con el selector superior.
                 </template>
             </p>
+        </div>
+
+        <div class="mt-6">
+            <NotificationPreferenceToggle />
         </div>
     </AppLayout>
 </template>

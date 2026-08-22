@@ -31,3 +31,7 @@ Broadcast::channel('tenant.{tenantId}.conversations.{conversationId}', function 
 Broadcast::channel('tenant.{tenantId}.inbox', function (User $user, string $tenantId): bool {
     return $user->belongsToTenantWithPermission($tenantId, 'conversations.view');
 });
+
+Broadcast::channel('tenant.{tenantId}.users.{userId}.notifications', function (User $user, string $tenantId, string $userId): bool {
+    return (string) $user->id === $userId && $user->belongsToTenantById($tenantId);
+});
