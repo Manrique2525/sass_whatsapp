@@ -800,3 +800,18 @@ Tests del data model, enums, multi-tenancy y seguridad (FASE 23 U1):
 | Multi-Tenancy (BILL-MT) | 8 (cross-tenant visibility, TenantContext, Plans global) |
 | Security (BILL-SEC) | 10 (PII, HTML, API keys, mass assignment, integer casts) |
 | **Total** | **52** |
+
+## 11. FASE 23 — Billing/Plans Test Suite (U2)
+
+Usage metering service tests (FASE 23 U2):
+
+| Category | Tests |
+|---|---|
+| UsageTrackingService (BILL-USG) | 12 (record, quantity, category, metadata, subscription resolution, unlimited, no update/delete) |
+| Period Semantics (BILL-PERIOD) | 6 (start inclusive, end exclusive, mixed records, null-period fallback, no off-by-one) |
+| Summary & History (BILL-USG-14..18) | 4 (all categories, history ordering, category filter, date filter) |
+| Multi-Tenancy (BILL-MT-U2) | 6 (cross-tenant visibility, sequential A→B, metadata injection, subscription scope) |
+| Security (BILL-USG-SEC) | 7 (server-derived tenant_id, enum-only category, metadata whitelist, no PII, no secrets, no update/delete methods, exception safety) |
+| Concurrency (BILL-USG-CONC) | 1 (concurrent inserts produce correct SUM) |
+| **Total U2** | **36** |
+| **Total FASE 23 (U1+U2)** | **88** |

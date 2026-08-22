@@ -554,3 +554,12 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
         Inactive membership denied. Audit for preference changes. Mail idempotency via
         upstream event. Residual replay risk documented. No frontend in U4.
         Tests NOTIF-PREF-API-01..08 + NOTIF-PREF-MT-01..06 + NOTIF-MAIL-01..10.
+- [x] (FASE 23 U2) Usage metering infrastructure:
+        `UsageTrackingService` es internal (sin rutas HTTP). Append-only ledger: solo INSERT + SELECT + SUM.
+        No UPDATE/DELETE expuestos. Subscription resolution server-side (caller NUNCA controla la suscripción).
+        Metadata whitelist de 5 keys técnicas (message_id, conversation_id, flow_execution_id,
+        knowledge_document_id, source) — strip silencioso de keys no whitelist (no exception).
+        NO PII, NO phone, NO email en metadata. BelongsToTenant en UsageRecord previene
+        cross-tenant via scope. Unique constraint previene duplicates. null limit = unlimited
+        (no magic numbers). Tests BILL-USG-01..20 + BILL-PERIOD-01..06 + BILL-MT-U2-01..06
+        + BILL-USG-SEC-01..07 + BILL-USG-CONC-01.

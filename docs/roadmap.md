@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 22 COMPLETADA · FASE 23 U1 EN PROGRESO**.
+Estado general: **FASE 22 COMPLETADA · FASE 23 U2 COMPLETADA**.
 
 ## Fases
 
@@ -29,7 +29,7 @@ Estado general: **FASE 22 COMPLETADA · FASE 23 U1 EN PROGRESO**.
 | 20 | Tags | COMPLETADA |
 | 21 | Analytics | COMPLETADA |
 | 22 | Notificaciones (U1: Data Model, U2: Event Listeners, U3: Notification API, U4: Email Preferences, U5: Realtime + Frontend) | COMPLETADA |
-| 23 | Planes (U1: Data Model) | EN PROGRESO |
+| 23 | Planes (U1: Data Model, U2: Usage Metering) | EN PROGRESO |
 | 24 | Billing (Stripe) | PENDIENTE |
 | 25 | Usage limits | PENDIENTE |
 | 26 | Auditoría | PENDIENTE |
@@ -2236,3 +2236,21 @@ FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COM
 - Quality gates: PHPStan 0 errors, Pint clean, composer audit 0 vulnerabilities, migration UP/DOWN/UP verified
 - Scope: SOLO data model. NO API, NO controllers, NO Stripe, NO usage guard, NO billing UI
 - ADR-088 registrado
+
+### U2 — Usage Metering Infrastructure
+- **Estado**: COMPLETADA
+- **Exceptions**: `SubscriptionNotFoundException`, `InvalidUsageQuantityException`
+- **Value Objects**: `UsageCategorySummary` (used, limit, remaining), `UsageSummary` (subscriptionId, periodStart, periodEnd, categories)
+- **UsageTrackingService** (`app/Application/Billing/Services/UsageTrackingService.php`): servicio final, internal, append-only
+  - `record()`: registra uso contra suscripción activa del tenant (server-side resolution)
+  - `currentPeriodUsage()`: SUM(quantity) por categoría en periodo actual
+  - `currentPeriodSummary()`: resumen used/limit/remaining de todas las categorías
+  - `history()`: paginado, filtrable por category/from/to, ordenado recorded_at DESC
+- Periodo: [start, end) start inclusive, end exclusive. Fallback: calendar month UTC
+- Metadata: whitelist de 5 keys técnicas (message_id, conversation_id, flow_execution_id, knowledge_document_id, source)
+- Unique constraint: `usage_records_unique_per_period` en `(tenant_id, subscription_id, category, recorded_at)`
+- Sin Redis, sin cache, sin batching, sin API, sin HTTP
+- Tests: 36 SQLite (BILL-USG-01..20, BILL-PERIOD-01..06, BILL-MT-U2-01..06, BILL-USG-SEC-01..07, BILL-USG-CONC-01) + total FASE 23: 88 tests
+- Quality gates: PHPStan 0 errors, Pint 683 files clean, composer audit 0 vulnerabilities
+- Scope: SOLO usage metering service. NO UsageGuard, NO API, NO Stripe, NO frontend, NO Redis
+- ADR-089 registrado

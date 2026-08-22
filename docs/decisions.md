@@ -2482,3 +2482,45 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - FASE 24 (Stripe) extiende sin breaking changes: agrega facturas, invoices, webhooks.
   - FASE 25 (UsageGuard) consume UsageRecord para enforce quotas del plan.
   - Plan free como base garantiza que todo tenant tiene un plan válido desde el inicio.
+
+## ADR-089 · Append-Only Usage Metering Infrastructure (FASE 23 U2)
+
+- **Estado**: Aceptado · FASE 23 U2
+- **Contexto**: U1 estableció el data model (Plan, Subscription, SubscriptionItem, UsageRecord).
+  U2 implementa la capa de aplicación: registro de uso, cómputo de periodos, resumen por
+  categoría e historial paginado. Requisitos: append-only, sin update/delete expuestos,
+  multi-tenant, periodos flexibles, metadata sanitizada.
+- **Decisión**:
+  - **UsageTrackingService** (`app/Application/Billing/Services/UsageTrackingService.php`):
+    servicio `final` de aplicación, interno (sin rutas HTTP). Métodos: `record()`,
+    `currentPeriodUsage()`, `currentPeriodSummary()`, `history()`.
+  - **Append-only ledger**: solo INSERT + SELECT + SUM. Sin UPDATE/DELETE expuestos.
+    UsageRecord ES el ledger completo; no hay tabla auxiliar ni AuditLog por registro.
+  - **Subscription resolution server-side**: `Subscription::where(status=Active)->latest()->first()`.
+    El caller NUNCA controla la suscripción contra la que se registra uso.
+  - **Period boundaries [start, end)**: start inclusive, end exclusive. Si subscription tiene
+    `current_period_start` y `current_period_end`, usa esos. Si no: fallback a calendar month UTC.
+  - **null limit = unlimited**: `Plan::getLimit()` retorna `?int`. null = sin límite.
+    No se usan magic numbers (999999). `UsageCategorySummary.remaining` es null cuando limit es null.
+  - **Metadata whitelist**: solo `message_id`, `conversation_id`, `flow_execution_id`,
+    `knowledge_document_id`, `source`. Cualquier otra clave se elimina silenciosamente.
+    NO hay PII, NO hay phone, NO hay email.
+  - **Sin Redis, sin cache, sin batching**: PostgreSQL es source of truth directo.
+    Performance suficiente para volúmenes iniciales. Optimización futura (Redis counters)
+    será transparente al caller.
+  - **Value Objects**: `UsageCategorySummary` (used, limit, remaining), `UsageSummary`
+    (subscriptionId, periodStart, periodEnd, categories).
+  - **Exceptions**: `SubscriptionNotFoundException`, `InvalidUsageQuantityException`.
+  - **History**: paginado (`LengthAwarePaginator`), ordenado por `recorded_at DESC, id DESC`.
+    Filtros: category, from, to, per_page.
+  - **Tests**: 36 tests U2 (BILL-USG-01..20, BILL-PERIOD-01..06, BILL-MT-U2-01..06,
+    BILL-USG-SEC-01..07, BILL-USG-CONC-01). Total FASE 23: 88 tests.
+  - **Unique constraint**: `usage_records_unique_per_period` en
+    `(tenant_id, subscription_id, category, recorded_at)` previene duplicados.
+- **Consecuencias**:
+  - El servicio es la ÚNICA interfaz para registrar consumo. No hay way-around.
+  - Append-only garantiza auditoría completa: cada registro es inmutable.
+  - null limit permite planes sin cuotas (ilimitados) sin wrappers especiales.
+  - Metadata whitelist previene PII leakage silenciosamente (no exception, solo strip).
+  - FASE 25 (UsageGuard) consume `currentPeriodSummary()` para enforce quotas.
+  - FASE 24 (Stripe) puede extender con facturación basada en el mismo ledger.
