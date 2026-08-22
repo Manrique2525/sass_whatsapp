@@ -7,8 +7,12 @@ namespace App\Application\Notifications\Listeners;
 use App\Application\Notifications\Services\NotificationService;
 use App\Domain\Conversations\Enums\InboxConversationChangeKind;
 use App\Domain\Tenants\Models\Tenant;
+use App\Domain\Users\Enums\UserRole;
+use App\Domain\Users\Models\TenantUser;
+use App\Domain\Users\Notifications\HandoffRequestMailNotification;
 use App\Events\InboxConversationChanged;
 use App\Infrastructure\Tenancy\TenantContext;
+use Illuminate\Support\Facades\Notification as NotificationFacade;
 
 /**
  * Escucha InboxConversationChanged y crea notificaciones in-app (FASE 22 U2).
@@ -69,6 +73,34 @@ class CreateNotificationFromInboxChange
             $tenant,
             $event->conversation,
         );
+
+        $this->dispatchHandoffEmails($tenant);
+    }
+
+    /**
+     * Envía email a owners y admins del tenant con email_notifications_enabled = true.
+     *
+     * Solo para HandoffRequested. Agentes NO reciben email (ADR-086).
+     * afterCommit: el evento upstream ya garantiza transacción confirmada.
+     */
+    private function dispatchHandoffEmails(Tenant $tenant): void
+    {
+        $members = TenantUser::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('status', 'active')
+            ->whereIn('role', [UserRole::Owner, UserRole::Admin])
+            ->where('email_notifications_enabled', true)
+            ->with('user')
+            ->get();
+
+        foreach ($members as $membership) {
+            $user = $membership->user;
+
+            NotificationFacade::route('mail', $user->email)
+                ->notify(new HandoffRequestMailNotification(
+                    tenantName: $tenant->name,
+                ));
+        }
     }
 
     private function handleAssigned(InboxConversationChanged $event): void

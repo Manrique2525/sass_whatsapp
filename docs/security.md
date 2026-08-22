@@ -544,3 +544,13 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
         1..100). Bulk mark-all-read returns affected count. No audit for mark-read (UI state).
         Tests NOTIF-API-01..15 + NOTIF-PERM-01..06 + NOTIF-MT-U3-01..10 +
         NOTIF-SEC-U3-01..10 + NOTIF-CON-01..03.
+- [x] (FASE 22 U4) Notification email preferences + handoff email:
+        `email_notifications_enabled` on `tenant_users` (per-user-per-tenant, default false).
+        Only `HandoffRequested` sends email. Only Owners/Admins with preference enabled.
+        Agents never email. `HandoffRequestMailNotification`: ShouldQueue, MailMessage,
+        generic content (no PII — no phone, contact name, message body, AI content).
+        Preference API: `GET/PATCH notification-preferences`. Only modifies authenticated
+        user's own preference. No user_id/tenant_id in body. Cross-tenant blocked (404).
+        Inactive membership denied. Audit for preference changes. Mail idempotency via
+        upstream event. Residual replay risk documented. No frontend in U4.
+        Tests NOTIF-PREF-API-01..08 + NOTIF-PREF-MT-01..06 + NOTIF-MAIL-01..10.

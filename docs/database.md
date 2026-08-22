@@ -52,7 +52,17 @@ tenants
 - **SoftDeletes**: usuario puede descartar; preserva historial de auditoría.
 - **Sin unique constraint** en type+user+conversation — múltiples notificaciones del mismo tipo son legítimas.
 - Migración verificada: PostgreSQL 16 — `migrate:up` completa, `migrate:rollback` revierte, segundo `migrate:up` re-aplica limpiamente.
-```
+
+### tenant_users — FASE 22 U4 (email_preferences)
+
+| Columna | Tipo | Constraint |
+|---|---|---|
+| `email_notifications_enabled` | boolean | NOT NULL, DEFAULT `false` |
+
+- Agregado a tabla existente `tenant_users` vía `Schema::table()` (FASE 22 U4).
+- Per-user-per-tenant: cada membresía tiene su propio valor.
+- Default `false`: sin contrato previo de email, evita spam involuntario (ADR-086).
+- Migración verificada: PostgreSQL 16 — `migrate:up` completa, `migrate:rollback` revierte.
 
 ## 3. Tablas por módulo
 

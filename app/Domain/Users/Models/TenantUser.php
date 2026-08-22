@@ -30,6 +30,7 @@ class TenantUser extends Model
         'user_id',
         'role',
         'status',
+        'email_notifications_enabled',
         'invited_at',
         'joined_at',
     ];
@@ -43,6 +44,7 @@ class TenantUser extends Model
             'tenant_id' => 'string',
             'role' => UserRole::class,
             'status' => TenantMembershipStatus::class,
+            'email_notifications_enabled' => 'boolean',
             'invited_at' => 'datetime',
             'joined_at' => 'datetime',
         ];

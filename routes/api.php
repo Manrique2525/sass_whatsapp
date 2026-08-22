@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\V1\MemberController;
 use App\Http\Controllers\Api\V1\MemberInvitationController;
 use App\Http\Controllers\Api\V1\MessagesController;
 use App\Http\Controllers\Api\V1\NotificationController;
+use App\Http\Controllers\Api\V1\NotificationPreferenceController;
 use App\Http\Controllers\Api\V1\TagController;
 use App\Http\Controllers\Api\V1\TenantController;
 use App\Http\Controllers\Api\V1\TriggerController;
@@ -192,6 +193,10 @@ Route::prefix('v1')->group(function (): void {
                 Route::get('{tenant}/notifications', [NotificationController::class, 'index']);
                 Route::patch('{tenant}/notifications/{notification}/read', [NotificationController::class, 'markRead']);
                 Route::post('{tenant}/notifications/read-all', [NotificationController::class, 'markAllRead']);
+
+                // FASE 22 U4 — Preferencias de notificación.
+                Route::get('{tenant}/notification-preferences', [NotificationPreferenceController::class, 'show']);
+                Route::patch('{tenant}/notification-preferences', [NotificationPreferenceController::class, 'update']);
             });
         });
     });

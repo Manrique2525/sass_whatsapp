@@ -2348,3 +2348,47 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Consistent with all other modules (contacts, conversations, etc.)
   - No information leakage about which tenants or notifications exist
   - Test assertions use `assertNotFound()` for cross-tenant (not `assertForbidden()`)
+
+## ADR-086 · Notification Email Preferences + Handoff Email Semantics (FASE 22 U4)
+
+- **Estado**: Aceptado · FASE 22 U4
+- **Contexto**: FASE 22 U1–U3 created the in-app notification system. Users can view and manage
+  their in-app notifications, but there is no way to receive email alerts for critical events.
+  HandoffRequested events require immediate human attention, but users only discover them
+  by actively checking the inbox. We need email notification support with per-user control.
+- **Decisión**:
+  - **Preference storage**: `email_notifications_enabled` BOOLEAN column on `tenant_users`
+    pivot table. This is per-user-per-tenant (a user can have different preferences in
+    Tenant A vs Tenant B). No new table — extends the existing membership model.
+  - **DDL**: `ALTER TABLE tenant_users ADD COLUMN email_notifications_enabled
+    BOOLEAN NOT NULL DEFAULT false`. Down: drop column.
+  - **Default**: `false` (no existing email contract; avoids surprise spam until users
+    explicitly opt in). Documented in ADR-086.
+  - **Events that send email**: ONLY `HandoffRequested`. No email for ConversationAssigned,
+    Transferred, Claimed. Minimal spam surface.
+  - **Email targets**: Owners and Admins with `email_notifications_enabled = true` and valid
+    email. Agents NEVER receive email (ADR-086).
+  - **Inactive membership**: Excluded (query filters `status = active`).
+  - **Cross-tenant**: Each membership is independent. User enabled on Tenant A does not
+    receive email for Tenant B.
+  - **Mail notification**: `HandoffRequestMailNotification` in
+    `app/Domain/Users/Notifications/`. `final class`, `ShouldQueue`, `MailMessage` standard
+    (no Blade custom). Spanish copy, generic content ("Hay una conversación que requiere
+    atención humana"), no PII (phone, contact name, message body, AI content).
+  - **Preference API**: `GET/PATCH /api/v1/tenants/{tenant}/notification-preferences`.
+    Single field: `email_notifications_enabled`. Only modifies the authenticated user's
+    own preference. No `user_id`/`tenant_id` in body. No new permission — any active member
+    (owner/admin/agent) can modify their own preference.
+  - **Queue + afterCommit**: Mail dispatched via `Notification::route('mail', ...)` inside
+    the existing `CreateNotificationFromInboxChange` listener (already afterCommit from
+    upstream event). `ShouldQueue` ensures async processing.
+  - **Idempotency/replay**: Mail idempotency follows upstream event idempotency (HandoffService).
+    No artificial DDL for email dedup. Residual replay risk documented.
+  - **Audit**: `notification_preferences.updated` for preference changes (not PII). No per-email
+    audit (queue/log covers delivery).
+- **Consecuencias**:
+  - Users control their own email notifications per tenant, reducing spam.
+  - Only critical handoff events trigger email; non-critical events stay in-app only.
+  - No frontend for preferences in U4 (API-only). Frontend can be added later.
+  - The `email_notifications_enabled` column defaults to false, ensuring zero surprise emails
+    on existing memberships.

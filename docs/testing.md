@@ -750,6 +750,20 @@ Tests del endpoint, permisos, aislamiento multi-tenant y seguridad:
 
 Ejecución: `vendor/bin/pest --filter="Notification"`
 
+## 8E. FASE 22 — Notifications Test Suite (U4: Email Preferences + Handoff Email)
+
+### Suite SQLite — Preference API + Multi-Tenancy + Mail (Feature/Notifications/)
+
+Tests de preferencias de notificación y envío de email (FASE 22 U4):
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `NotificationPreferenceApiTest.php` | 8 (NOTIF-PREF-API-01..08) | Default false, enable, disable, invalid type 422, unauth 401, cross-tenant 404, response safe (no IDs), persists per tenant |
+| `NotificationPreferenceMultiTenancyTest.php` | 6 (NOTIF-PREF-MT-01..06) | User A tenant A, same user tenant B independent, cannot edit other user, injection blocked, inactive denied, TenantContext no leak |
+| `NotificationMailTest.php` | 10 (NOTIF-MAIL-01..10) | Owner emailed, admin emailed, agent not emailed, disabled owner not emailed, inactive admin not emailed, cross-tenant not emailed, generic content no PII, no email in body, ShouldQueue, no email on non-handoff |
+
+Ejecución: `vendor/bin/pest --filter="NotificationPreference|NotificationMail"`
+
 ## 8D. FASE 22 — Notifications Full Test Summary
 
 | Category | Tests |
@@ -763,9 +777,12 @@ Ejecución: `vendor/bin/pest --filter="Notification"`
 | Multi-Tenancy U3 | 10 |
 | Security U3 | 10 |
 | Concurrency CAS (U3) | 3 |
-| **Total SQLite** | **114** |
+| Email Preferences API (U4) | 8 |
+| Preference Multi-Tenancy (U4) | 6 |
+| Handoff Email (U4) | 10 |
+| **Total SQLite** | **152** |
 | **Total PostgreSQL** | **21** |
-| **Total** | **135** |
+| **Total** | **173** |
 
 ## 9. Estado de pruebas por fase
 

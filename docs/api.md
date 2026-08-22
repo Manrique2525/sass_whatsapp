@@ -155,6 +155,7 @@ pendiente de la fase de storage).
 | Plans | `GET /api/v1/plans` |
 | Subscriptions | `GET/POST /api/v1/subscriptions`, `GET /api/v1/usage` |
 | Notifications | `GET /api/v1/tenants/{tenant}/notifications`, `PATCH /api/v1/tenants/{tenant}/notifications/{notification}/read`, `POST /api/v1/tenants/{tenant}/notifications/read-all` |
+| Notification Preferences | `GET /api/v1/tenants/{tenant}/notification-preferences`, `PATCH /api/v1/tenants/{tenant}/notification-preferences` |
 | Audit | `GET /api/v1/audit-logs` (solo owner/admin) |
 
 ### 3.4 WhatsApp (implementado en FASE 6)
@@ -461,6 +462,26 @@ Permisos: `notifications.view` (todos los roles: owner/admin/agent). No existe `
 `NotificationResource`: `{id, type, priority, title, body, data, read_at, created_at}` (jamás
 incluye `tenant_id` ni `user_id`). `type` ∈ {`handoff_requested`, `conversation_assigned`,
 `conversation_transferred`, `system`}. `priority` ∈ {`high`, `normal`, `low`}`.
+
+### 3.11 Preferencias de notificación (implementado en FASE 22 U4)
+
+Preferencia por usuario+tenant para recibir emails de notificación. Misma estructura de
+enforcement que §3.10: `{tenant}` debe ser el **activo**; otro tenant → **404** (middleware
+`tenant`); miembresía inactiva → **403**.
+
+Permisos: `notifications.view` (todos los roles: owner/admin/agent). Cualquier miembro activo
+puede modificar SU propia preferencia. No existe `notifications.manage`.
+
+| Método | Ruta | Permiso | Descripción |
+|---|---|---|---|
+| GET | `/api/v1/tenants/{tenant}/notification-preferences` | `notifications.view` | Lee preferencia del usuario autenticado → **200** `{email_notifications_enabled: bool}`. Default: `false` |
+| PATCH | `/api/v1/tenants/{tenant}/notification-preferences` | `notifications.view` | Actualiza `{email_notifications_enabled*: bool}` → **200** `{message, email_notifications_enabled}`. Solo modifica la preferencia del usuario autenticado (no `user_id` en body). Audita `notification_preferences.updated` |
+
+Response: `{email_notifications_enabled: bool}` (sin `tenant_id`, `user_id`, ni membership id).
+
+El email automático se envía únicamente para eventos `HandoffRequested` a owners y admins con
+`email_notifications_enabled = true`. Agentes no reciben email (ADR-086). Contenido genérico
+sin PII. Mail procesado vía queue (`ShouldQueue`).
 
 ## 4. Webhooks (sin auth Bearer; autenticados por firma y dedupe)
 

@@ -21,8 +21,11 @@ y tiene un **tenant activo** seleccionable:
   `nullOnDelete`** desde FASE 3) = tenant activo del usuario (lo usa el middleware `tenant`).
 - `tenants`: `id` (UUID), `name`, `slug` (unique), `status` (enum `TenantStatus`:
   `active`/`suspended`), `timezone`, `locale`, `settings` (json).
-- `tenant_users`: pivot `tenant_id + user_id + role + status`. `role` ∈
-  {`owner`, `admin`, `agent`}; `status` ∈ {`active`, `invited`, `disabled`}.
+- `tenant_users`: pivot `tenant_id + user_id + role + status + email_notifications_enabled`.
+  `role` ∈ {`owner`, `admin`, `agent`}; `status` ∈ {`active`, `invited`, `disabled`};
+  `email_notifications_enabled` (boolean, default `false`, FASE 22 U4) controla si el
+  usuario recibe emails de notificación para este tenant (ADR-086). Cada tenant es
+  independiente (un usuario puede tener emails ON en Tenant A y OFF en Tenant B).
   UNIQUE `(tenant_id, user_id)`. **FK→tenants `cascadeOnDelete`** desde FASE 3.
 - `tenant_invitations` (FASE 4, ADR-027): invitación por email con `token_hash` (sha256),
   `status` ∈ {`pending`, `accepted`, `revoked`, `expired`} y `expires_at` (7 días). Solo se
