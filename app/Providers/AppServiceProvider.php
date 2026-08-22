@@ -20,11 +20,13 @@ use App\Application\Flows\Services\Executors\WebhookNodeExecutor;
 use App\Application\Flows\Services\NodeExecutorRegistry;
 use App\Application\KnowledgeBase\Contracts\KnowledgeSearchServiceInterface;
 use App\Application\KnowledgeBase\Services\KnowledgeSearchService;
+use App\Application\Notifications\Listeners\CreateNotificationFromInboxChange;
 use App\Domain\AI\Contracts\AIProviderInterface;
 use App\Domain\AI\Contracts\EmbeddingProviderInterface;
 use App\Domain\Contacts\Events\TagAssigned;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\WhatsApp\Contracts\WhatsAppProviderInterface;
+use App\Events\InboxConversationChanged;
 use App\Infrastructure\AI\OpenAIEmbeddingProvider;
 use App\Infrastructure\AI\OpenAIProvider;
 use App\Infrastructure\WhatsApp\MetaWhatsAppProvider;
@@ -107,6 +109,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Tenant::class, TenantPolicy::class);
 
         Event::listen(TagAssigned::class, DispatchTagTriggerJob::class);
+
+        Event::listen(InboxConversationChanged::class, CreateNotificationFromInboxChange::class);
 
         Password::defaults(fn () => Password::min(8));
 

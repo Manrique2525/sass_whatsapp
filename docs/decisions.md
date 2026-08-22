@@ -2252,3 +2252,39 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Vitest 399/399. Typecheck 0 errors. Vite build pass.
   - Baseline: 6 pre-existing HandoffFinalTest/HandoffRuntimeTest failures (no relacionado).
   - FASE 22 U1 declarada DONE. U2 (Event Listeners + Notification Dispatch) pendiente.
+
+## ADR-083 · Listener TenantContext Save/Restore (FASE 22 U2)
+
+- **Estado**: Aceptado · FASE 22 U2
+- **Contexto**: `CreateNotificationFromInboxChange` es un listener síncrono para
+  `InboxConversationChanged`. Cuando se dispara dentro de una operación que ya tiene
+  TenantContext activo (ej: `ConversationService::assign()` → dispatch → listener),
+  el listener necesitaba `TenantContext::setId()` para crear notificaciones y
+  `TenantContext::clear()` al finalizar. El `clear()` destruía el contexto del caller,
+  causando `TenantContextMissingException` en operaciones subsiguientes dentro del
+  mismo request (ej: `ConversationService::transfer()` después de `assign()`).
+- **Decisión**: El listener **guarda y restaura** el TenantContext previo en vez de
+  limpiarlo. Patrón:
+  ```php
+  $previousTenantId = TenantContext::id();
+  TenantContext::setId($event->tenant->id);
+  try { /* crear notificaciones */ }
+  finally {
+      if ($previousTenantId !== null) {
+          TenantContext::setId($previousTenantId);
+      } else {
+          TenantContext::clear();
+      }
+  }
+  ```
+  Esto preserva el TenantContext del caller cuando el listener corre síncronamente
+  en el mismo proceso, y limpió correctamente cuando el listener es el primero en
+  establecer contexto (caller no tenía uno).
+- **Consecuencias**:
+  - Sin efectos secundarios en listeners asíncronos/queued (el restore afecta solo
+    al mismo proceso/thread).
+  - Patrón reutilizable para futuros listeners síncronos que manipulen TenantContext.
+  - Los tests de integración (assign→transfer, claim→transfer) ahora pasan sin
+    necesidad de re-establecer TenantContext manualmente en el test.
+  - Los tests que llaman directamente al NotificationService (sin listener) siguen
+    necesitando `TenantContext::setId()` explícito antes de la llamada.

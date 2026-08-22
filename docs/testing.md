@@ -693,6 +693,35 @@ Ejecución:
 docker compose exec -T -e HANDOFF_U2_PG_TEST=1 -e DB_CONNECTION=pgsql -e DB_HOST=postgres -e DB_PORT=5432 -e DB_DATABASE=whatsapp_saas_handoff_u2_test -e DB_USERNAME=saas -e DB_PASSWORD=saas_secret app vendor/bin/pest --configuration=phpunit.pgsql.xml --no-coverage --filter="NotificationPostgresTest"
 ```
 
+## 8B. FASE 22 — Notifications Test Suite (U2: Event Listeners + Dispatch)
+
+### Suite SQLite — Event Listeners + Dispatch (Feature/Notifications/)
+
+Tests de integración: servicios de negocio → listener → notificaciones:
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `NotificationServiceTest.php` | 10 (NOTIF-SVC-01..10) | handleHandoffRequested fan-out por miembro activo, tenant-scoped, inactivo excluido, tipo/prioridad correctos, metadata segura en data JSON, audit record, handoff repetido crea independientes, handleConversationAssigned dirigido, null para inactivo |
+| `NotificationHandoffTest.php` | 10 (NOTIF-HO-01..10) | HandoffService → listener → notificaciones: fan-out 3 miembros, owner/admin/agent reciben, inactivo excluido, otro tenant no notificado, título/body genérico sin PII, prioridad high, data segura (conversation_id), idempotencia de handoff (audit log no duplicado) |
+| `NotificationAssignmentTest.php` | 10 (NOTIF-ASG-01..10) | ConversationService → listener: assign crea notificación al target, otros no reciben, owner no auto-targeted, mismo assign no-op, transfer crea para nuevo agente, previous no recibe, inactivo bloqueado, cross-tenant no notificado, payload seguro, afterCommit persiste |
+| `NotificationMultiTenancyTest.php` | 6 (NOTIF-MT-U2-01..06) | Tenant A targets permitidos dentro de A, A no crea para B, tenant-wide A no visible como B, inactivo en A salteado, event A no crea fila B, secuencial A→B seguro |
+| `NotificationSecurityTest.php` | 8 (NOTIF-SEC-01..08) | Sin PII en title/body, sin PII en audit, sin HTML, sin tenant_id injection via data JSON, sin serialización de user model, sin SQL injection, sin API keys/secrets/tokens |
+
+Ejecución: `vendor/bin/pest --filter="Notification"`
+
+### Suite PostgreSQL U2 (tests/Postgres/Notifications/)
+
+Tests de integración contra PostgreSQL 16 real:
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `NotificationPostgresU2Test.php` | 6 (NOTIF-PG-U2-01..06) | Handoff fan-out correcto en PG, assignment targeted en PG, FK constraint tenant_id, FK constraint user_id, concurrent handoff no viola constraints, cascade delete elimina notificaciones |
+
+Ejecución:
+```bash
+docker compose exec -T -e HANDOFF_U2_PG_TEST=1 -e DB_CONNECTION=pgsql -e DB_HOST=postgres -e DB_PORT=5432 -e DB_DATABASE=whatsapp_saas_handoff_u2_test -e DB_USERNAME=saas -e DB_PASSWORD=saas_secret app vendor/bin/pest --configuration=phpunit.pgsql.xml --no-coverage --filter="NotificationPostgresU2Test"
+```
+
 ## 9. Estado de pruebas por fase
 
 Cada fase declara su estado en `docs/roadmap.md` (PASS/FAIL) usando el formato de reporte

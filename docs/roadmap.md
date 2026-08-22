@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 21 COMPLETADA**. FASE 22 U1 COMPLETADA.
+Estado general: **FASE 21 COMPLETADA**. FASE 22 U1/U2 COMPLETADAS.
 
 ## Fases
 
@@ -28,7 +28,7 @@ Estado general: **FASE 21 COMPLETADA**. FASE 22 U1 COMPLETADA.
 | 19 | Leads | COMPLETADA |
 | 20 | Tags | COMPLETADA |
 | 21 | Analytics | COMPLETADA |
-| 22 | Notificaciones (U1: Data Model DONE) | EN PROGRESO |
+| 22 | Notificaciones (U1: Data Model DONE, U2: Event Listeners DONE) | EN PROGRESO |
 | 23 | Planes | PENDIENTE |
 | 24 | Billing (Stripe) | PENDIENTE |
 | 25 | Usage limits | PENDIENTE |
@@ -2200,3 +2200,23 @@ FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COM
 - Quality gates: PHPStan 0 errors, Pint 624 files clean, vitest 399/399, typecheck 0 errors, build pass, composer audit 0
 - Scope: SOLO data model + domain. NO API, NO listeners, NO email, NO realtime, NO frontend, NO Redis, NO push
 - ADR-082 registrado
+
+### U2 — Event Listeners + Notification Dispatch
+- **Estado**: COMPLETADA
+- `NotificationService` (`app/Application/Notifications/Services/NotificationService.php`): servicio centralizado de creación de notificaciones in-app
+  - `handleHandoffRequested(Tenant, Conversation)`: fan-out a todos los miembros activos (una notificación por usuario)
+  - `handleConversationAssigned(Tenant, Conversation, int $agentId)`: notificación dirigida a un agente específico
+  - Validación de membresía activa antes de crear
+  - Auditoría con payload seguro (sin PII) vía AuditLogger
+- `CreateNotificationFromInboxChange` (`app/Application/Notifications/Listeners/CreateNotificationFromInboxChange.php`): listener síncrono para `InboxConversationChanged`
+  - Escucha `HandoffRequested` → fan-out a todos los miembros activos
+  - Escucha `Assigned` → notificación dirigida al agente target
+  - Escucha `Transferred` → notificación dirigida al nuevo agente
+  - `Claimed`, `BotResumed`, `ConversationUpdated` → ignorados (no generan notificación)
+  - **Save/restore TenantContext**: preserva contexto del caller (ADR-083)
+- Registro en `AppServiceProvider::boot()` via `Event::listen()`
+- Sin Redis, sin queue, sin email, sin broadcast, sin API, sin frontend, sin realtime
+- Tests: 63 SQLite (NOTIF-SVC-01..10, NOTIF-HO-01..10, NOTIF-ASG-01..10, NOTIF-MT-U2-01..06, NOTIF-SEC-01..08, NOTIF-DB-01..15, NOTIF-ENUM-01..04) + 6 PG (NOTIF-PG-U2-01..06) = 69 tests, todos verdes
+- Quality gates: PHPStan 0 errors, Pint 632 files clean, vitest 399/399, typecheck 0 errors, build pass, composer audit 0
+- Scope: SOLO event listeners + dispatch. NO API, NO email, NO realtime, NO frontend, NO Redis, NO push, NO permissions changes
+- ADR-083 registrado

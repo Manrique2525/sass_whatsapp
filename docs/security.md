@@ -527,3 +527,11 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
         (soporta tenant-wide), data JSON sin PII (solo metadata segura), soft deletes
         (audit trail), sin unique constraint (múltiples notificaciones legítimas).
         Tests NOTIF-DB-01..15 (model) + NOTIF-ENUM-01..04 (enums) + NOTIF-PG-01..12 (PG).
+- [x] (FASE 22 U2) Notification dispatch: listener CreateNotificationFromInboxChange
+        solo escucha HandoffRequested/Assigned/Transferred (Claimed/BotResumed/ConversationUpdated
+        ignorados). NotificationService valida membresía activa antes de crear. Fan-out
+        per-user (read_at es por fila). TenantContext save/restore en listener (ADR-083)
+        preserva contexto del caller. AuditLogger registra notification.created con payload
+        seguro (notification_id, type, priority, target_user_id, conversation_id — sin PII).
+        Tests NOTIF-SVC-01..10 + NOTIF-HO-01..10 + NOTIF-ASG-01..10 + NOTIF-MT-U2-01..06
+        + NOTIF-SEC-01..08 + NOTIF-PG-U2-01..06.
