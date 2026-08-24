@@ -2524,3 +2524,59 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Metadata whitelist previene PII leakage silenciosamente (no exception, solo strip).
   - FASE 25 (UsageGuard) consume `currentPeriodSummary()` para enforce quotas.
   - FASE 24 (Stripe) puede extender con facturación basada en el mismo ledger.
+
+## ADR-090 · Billing API Layer (FASE 23 U3)
+
+- **Estado**: Aceptado · FASE 23 U3
+- **Contexto**: U1 estableció el data model (Plan, Subscription, SubscriptionItem, UsageRecord).
+  U2 implementó UsageTrackingService (record, summary, history). U3 expone la capa HTTP:
+  catálogo de planes, gestión de suscripciones y endpoints de uso. Controllers thin,
+  services de aplicación, AuthorizationService (no Policies), patrón FaqController.
+- **Decisión**:
+  - **7 endpoints** bajo `{tenant}/`:
+    - `GET plans` (billing.view) — lista planes activos globales
+    - `GET plans/{plan}` (billing.view) — detalle de plan
+    - `GET subscriptions` (billing.view) — suscripción activa del tenant
+    - `POST subscriptions` (billing.manage) — crear/reemplazar suscripción
+    - `PATCH subscriptions` (billing.manage) — cambiar plan de suscripción
+    - `DELETE subscriptions` (billing.manage) — cancelar suscripción (status=cancelled)
+    - `GET usage` (billing.view) — resumen de uso del periodo actual
+    - `GET usage/history` (billing.view) — historial paginado de uso
+  - **PlanController**: delega a `SubscriptionService::listPlans()` y `showPlan()`.
+    `@mixin Plan` en Resource para PHPStan property resolution.
+  - **SubscriptionController**: delega a `SubscriptionService::assignPlan()`,
+    `changePlan()`, `cancel()`, `currentSubscription()`. Store excluye tenant_id
+    existente; update solo acepta `plan_id`. DELETE usa `cancelled` (U1 define el
+    estado).
+  - **UsageController**: reutiliza `UsageTrackingService::currentPeriodSummary()` y
+    `history()`. Inyecta `AuthorizationService` directamente (no a través de service
+    de dominio). 404 cuando no hay suscripción activa.
+  - **SubscriptionService** (`app/Application/Billing/Services/SubscriptionService.php`):
+    servicio `final` de aplicación. Inyecta `AuthorizationService` + `AuditLogger`.
+    `assignPlan()` cancela soft la existente en la misma transacción y crea la nueva;
+    sincroniza `tenants.plan_id` (denormalized cache). `changePlan()` valida plan
+    diferente; si es el mismo, es no-op. `cancel()` soft-delete + status=cancelled
+    + limpia plan_id.
+  - **FormRequests**: `StoreSubscriptionRequest` (plan_id required uuid),
+    `UpdateSubscriptionRequest` (plan_id required uuid). Autorización en service, no
+    en request.
+  - **Resources**: `PlanResource`, `SubscriptionResource`, `UsageSummaryResource`
+    (acepta UsageSummary VO), `UsageRecordResource`. Todos sin tenant_id en respuesta.
+  - **Exceptions**: `PlanNotFoundException`, `SubscriptionNotActiveException`.
+  - **PlanSeeder registrado** en `DatabaseSeeder` (idempotente via updateOrCreate).
+  - **AuthorizationService pattern**: owner+admin tienen ViewBilling; solo owner tiene
+    ManageBilling. Admin NO puede crear/cambiar/cancelar suscripción (solo ve).
+    Non-member → TenantMiddleware retorna 403.
+  - **Tests**: 45 tests nuevos U3 (BILL-API-PLAN-01..05, BILL-API-SUB-01..11,
+    BILL-API-USG-01..08, BILL-API-PERM-01..10, BILL-API-MT-U3-01..05,
+    BILL-API-SEC-U3-01..06). Total FASE 23: 133 tests.
+  - **Quality gates**: PHPStan 0 errors, Pint fixed (8 style issues), composer audit
+    0 vulnerabilities. PG: 133/133 pass. Regression: 0 new failures (6 pre-existing
+    Handoff failures).
+- **Consecuencias**:
+  - API REST completa para billing. Controllers thin, services orquestan toda lógica.
+  - Plan es global (no tenant-scoped); Subscription y UsageRecord son tenant-scoped.
+  - DELETE/cancel es válido: SubscriptionStatus::cancelled existe en U1.
+  - Admin tiene ViewBilling pero NO ManageBilling (decisión de diseño, no un bug).
+  - FASE 24 (Stripe) extiende con facturación y webhooks; FASE 25 (UsageGuard) consume
+    `currentPeriodSummary()` para enforce quotas.

@@ -815,3 +815,18 @@ Usage metering service tests (FASE 23 U2):
 | Concurrency (BILL-USG-CONC) | 1 (concurrent inserts produce correct SUM) |
 | **Total U2** | **36** |
 | **Total FASE 23 (U1+U2)** | **88** |
+
+## 12. FASE 23 — Billing API Layer Test Suite (U3)
+
+Billing API tests (FASE 23 U3):
+
+| Category | Tests |
+|---|---|
+| Plan API (BILL-API-PLAN) | 5 (list active plans, show plan, 404 nonexistent, 401 unauth, 403 agent) |
+| Subscription API (BILL-API-SUB) | 11 (index null, index active, store create, store invalid 404, store no body 422, store replace existing, patch change, patch no sub 404, patch same plan no-op, delete cancel, delete no sub 404) |
+| Usage API (BILL-API-USG) | 8 (index summary, index 404 no sub, history paginated, history category filter, history date filter, history per_page, 401 unauth, 403 agent) |
+| Permission Matrix (BILL-API-PERM) | 10 (owner plans, admin plans, agent 403 plans, owner manage sub, admin 403 manage, agent 403 manage, owner view usage, admin view usage, agent 403 usage, non-member 403) |
+| Multi-Tenancy (BILL-API-MT-U3) | 5 (A→B sub 404, B→A sub 404, A assign B 404, A usage B 404, A plans B 404) |
+| Security (BILL-API-SEC-U3) | 6 (non-UUID rejected, empty body 422, invalid tenant UUID, invalid plan UUID, no tenant_id in plan response, no tenant_id in usage response) |
+| **Total U3** | **45** |
+| **Total FASE 23 (U1+U2+U3)** | **133** |

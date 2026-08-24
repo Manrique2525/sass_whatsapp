@@ -22,9 +22,12 @@ use App\Http\Controllers\Api\V1\MemberInvitationController;
 use App\Http\Controllers\Api\V1\MessagesController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\NotificationPreferenceController;
+use App\Http\Controllers\Api\V1\PlanController;
+use App\Http\Controllers\Api\V1\SubscriptionController;
 use App\Http\Controllers\Api\V1\TagController;
 use App\Http\Controllers\Api\V1\TenantController;
 use App\Http\Controllers\Api\V1\TriggerController;
+use App\Http\Controllers\Api\V1\UsageController;
 use App\Http\Controllers\Api\V1\WhatsAppController;
 use App\Http\Controllers\Api\Webhooks\FlowWebhookController;
 use App\Http\Controllers\Api\Webhooks\WhatsAppWebhookController;
@@ -198,6 +201,18 @@ Route::prefix('v1')->group(function (): void {
                 // FASE 22 U4 — Preferencias de notificación.
                 Route::get('{tenant}/notification-preferences', [NotificationPreferenceController::class, 'show']);
                 Route::patch('{tenant}/notification-preferences', [NotificationPreferenceController::class, 'update']);
+
+                // FASE 23 U3 — Billing: planes, suscripciones y uso.
+                Route::get('{tenant}/plans', [PlanController::class, 'index']);
+                Route::get('{tenant}/plans/{plan}', [PlanController::class, 'show']);
+
+                Route::get('{tenant}/subscriptions', [SubscriptionController::class, 'index']);
+                Route::post('{tenant}/subscriptions', [SubscriptionController::class, 'store']);
+                Route::patch('{tenant}/subscriptions', [SubscriptionController::class, 'update']);
+                Route::delete('{tenant}/subscriptions', [SubscriptionController::class, 'destroy']);
+
+                Route::get('{tenant}/usage', [UsageController::class, 'index']);
+                Route::get('{tenant}/usage/history', [UsageController::class, 'history']);
             });
         });
     });

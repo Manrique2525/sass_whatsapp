@@ -563,3 +563,16 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
         cross-tenant via scope. Unique constraint previene duplicates. null limit = unlimited
         (no magic numbers). Tests BILL-USG-01..20 + BILL-PERIOD-01..06 + BILL-MT-U2-01..06
         + BILL-USG-SEC-01..07 + BILL-USG-CONC-01.
+- [x] (FASE 23 U3) Billing API layer:
+        Controllers thin (FaqController pattern). AuthorizationService (no Policies):
+        ViewBilling (owner+admin), ManageBilling (owner only). Admin puede ver pero
+        NO gestionar suscripciones. Non-member → 403 (TenantMiddleware). No tenant_id
+        en responses (Resources). Plan es global; Subscription y UsageRecord son tenant-scoped.
+        StoreSubscriptionRequest y UpdateSubscriptionRequest validan plan_id uuid, pero
+        autorización es en service layer. SubscriptionService: assignPlan cancela soft existente
+        y crea nueva en misma transacción; sync tenants.plan_id; audit logged. changePlan valida
+        plan diferente (same plan = no-op). cancel soft-delete + status=cancelled + clear plan_id.
+        UsageController reutiliza UsageTrackingService (U2). 404 when no active subscription.
+        ID: non-UUID plan_id → 404; invalid tenant UUID → 404. Tests BILL-API-PLAN-01..05,
+        BILL-API-SUB-01..11, BILL-API-USG-01..08, BILL-API-PERM-01..10,
+        BILL-API-MT-U3-01..05, BILL-API-SEC-U3-01..06.

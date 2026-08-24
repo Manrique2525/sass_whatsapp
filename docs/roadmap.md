@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 22 COMPLETADA · FASE 23 U2 COMPLETADA**.
+Estado general: **FASE 22 COMPLETADA · FASE 23 U3 COMPLETADA**.
 
 ## Fases
 
@@ -2254,3 +2254,26 @@ FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COM
 - Quality gates: PHPStan 0 errors, Pint 683 files clean, composer audit 0 vulnerabilities
 - Scope: SOLO usage metering service. NO UsageGuard, NO API, NO Stripe, NO frontend, NO Redis
 - ADR-089 registrado
+
+### U3 — Billing API Layer
+- **Estado**: COMPLETADA
+- **Controllers**:
+  - `PlanController` — GET index (billing.view), GET show (billing.view)
+  - `SubscriptionController` — GET index (billing.view), POST store (billing.manage), PATCH update (billing.manage), DELETE destroy (billing.manage)
+  - `UsageController` — GET index (billing.view, summary), GET history (billing.view, paginated)
+- **SubscriptionService** (`app/Application/Billing/Services/SubscriptionService.php`):
+  - `listPlans()`, `showPlan()` — plan catalog (global, authenticated)
+  - `currentSubscription()` — active subscription for tenant
+  - `assignPlan()` — create or replace subscription (cancel existing soft, create new, sync tenants.plan_id)
+  - `changePlan()` — change plan (validates different plan, no-op if same)
+  - `cancel()` — soft delete + status=cancelled + clear tenants.plan_id
+  - All mutations wrapped in DB::transaction, audit logged
+- **FormRequests**: `StoreSubscriptionRequest` (plan_id required uuid), `UpdateSubscriptionRequest` (plan_id required uuid)
+- **Resources**: `PlanResource` (with @mixin Plan), `SubscriptionResource` (with @mixin Subscription), `UsageSummaryResource` (accepts VO), `UsageRecordResource` (with @mixin UsageRecord)
+- **Exceptions**: `PlanNotFoundException`, `SubscriptionNotActiveException`
+- **Routes**: 7 endpoints under `{tenant}/` (GET plans, GET plans/{plan}, GET subscriptions, POST subscriptions, PATCH subscriptions, DELETE subscriptions, GET usage, GET usage/history)
+- **Authorization**: ViewBilling (owner+admin), ManageBilling (owner only). Admin can view but NOT manage subscription.
+- **PlanSeeder registered** in DatabaseSeeder
+- **Tests**: 45 U3 (BILL-API-PLAN-01..05, BILL-API-SUB-01..11, BILL-API-USG-01..08, BILL-API-PERM-01..10, BILL-API-MT-U3-01..05, BILL-API-SEC-U3-01..06). Total FASE 23: 133 tests
+- **Quality gates**: PHPStan 0 errors, Pint clean, composer audit 0 vulnerabilities, PG 133/133 pass, 0 new regression failures
+- ADR-090 registrado
