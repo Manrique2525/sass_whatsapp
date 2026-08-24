@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\TenantMiddleware;
+use App\Domain\Billing\Exceptions\TenantQuotaExceededException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -62,6 +63,20 @@ return Application::configure(basePath: dirname(__DIR__))
                     'code' => 'RATE_LIMITED',
                     'errors' => new stdClass,
                 ], 429);
+            }
+        });
+
+        $exceptions->render(function (TenantQuotaExceededException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json([
+                    'message' => $e->getMessage(),
+                    'code' => 'TENANT_QUOTA_EXCEEDED',
+                    'errors' => [
+                        'category' => $e->category,
+                        'limit' => $e->limit,
+                        'used' => $e->used,
+                    ],
+                ], $e->getCode() ?: 429);
             }
         });
     })->create();

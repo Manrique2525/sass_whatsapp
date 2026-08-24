@@ -565,6 +565,41 @@ Pirámide de tests con prioridad en lo crítico:
 - cuota superada → `TENANT_QUOTA_EXCEEDED` antes de enviar/IA/crear contacto.
 - usage_records incrementan.
 
+### UsageGuard (FASE 25 U1, 48 tests SQLite + 7 tests PG)
+
+#### SQLite — Unit, Commit, Release (UsageGuardTest, 26 tests)
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `UsageGuardTest.php` | USG-U1-UNIT-01..19, USG-U1-COMMIT-01..04, USG-U1-RELEASE-01..03 | remaining(): unlimited/null, blocked/0, limit-usage, accounts for reservations, no subscription → null, full limit. reserve(): active/past-due/pending/cancelled/missing subscription, under/at limit, unlimited, blocked, zero/negative quantity, period boundaries, TTL. commit(): creates usage record, updates status, rejects committed/expired. release(): updates status, no usage created, rejects committed. |
+
+#### SQLite — Idempotency (UsageGuardIdempotencyTest, 6 tests)
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `UsageGuardIdempotencyTest.php` | USG-U1-IDEM-01..06 | Same key → same reservation, committed is idempotent, released allows new, expired allows new, null key creates new, different keys create different. |
+
+#### SQLite — Multi-Tenancy (UsageGuardMultiTenancyTest, 6 tests)
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `UsageGuardMultiTenancyTest.php` | USG-U1-MT-01..06 | Tenant A usage doesn't affect B remaining, same key independent per tenant, commit doesn't affect B, release doesn't affect B, concurrent reserves from different tenants, reservation scoped to correct subscription. |
+
+#### SQLite — Security (UsageGuardSecurityTest, 10 tests)
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `UsageGuardSecurityTest.php` | USG-U1-SEC-01..10 | tenant_id server-derived, category enum only, exception exposes safe fields only, negative/zero quantity rejected, no PII in exception messages, no API keys in source, exception code 429, reservation doesn't expose subscription internals, no hardcoded secrets. |
+
+#### PostgreSQL — Concurrency (UsageGuardConcurrencyTest, 7 tests)
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `UsageGuardConcurrencyTest.php` | USG-U1-PG-CONC-01..07 | Two concurrent reserves at limit boundary — only one succeeds, idempotent concurrent reserve returns same, status transitions atomic, bulk reserves consume quota, TTL expiry enforced, different categories independent, cross-tenant concurrent independent. |
+
+Ejecución SQLite: `vendor/bin/pest --filter="UsageGuard" --no-coverage`
+Ejecución PG: `docker compose exec -T app vendor/bin/pest --configuration=phpunit.pgsql.xml --filter="UsageGuardConcurrency" --no-coverage`
+
 ### Seguridad
 - 401 sin token, 403 sin permiso, 404 en datos ajenos, throttle en login/envío.
 

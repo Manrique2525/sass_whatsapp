@@ -2840,3 +2840,36 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Eventos con errores permanentes (UNIQUE, business logic) no generan retries infinitos.
   - SQLite (tests) y PostgreSQL (producción) ambos soportan la clasificación.
   - El ordenamiento de eventos es estrictamente monótono (sin ties).
+
+## ADR-097 · UsageGuard + Atomic Quota Reservation (FASE 25 U1)
+
+- **Estado**: ACEPTADO · FASE 25 U1
+- **Contexto**: FASE 23 instaló `UsageTrackingService` (append-only ledger, dormante en producción)
+  y el catálogo de `Plan::limits` por categoría. FASE 25 U2-U5 necesitan un guard de cuotas
+  atómico, idempotente y multi-tenant que prevenga over-limit antes de enviar mensajes, ejecutar
+  IA o crear contactos — sin integrares aún con servicios de negocio (MessageService, etc.).
+- **Decisión**:
+  1. **UsageGuard** (`app/Application/Billing/Guards/UsageGuard.php`) expone `remaining()`,
+     `reserve()`, `commit()`, `release()`. Cada `reserve()` adquiere un advisory lock de
+     PostgreSQL (`pg_advisory_xact_lock`) por `(tenant_id, category, period_start)` para serializar
+     reservas concurrentes. La DB es source of truth; no se usa Redis para cuotas.
+  2. **EntitlementResolver** (`app/Application/Billing/Guards/EntitlementResolver.php`) resuelve la
+     suscripción + plan de un tenant. Políticas: Active + PastDue = permitido; Pending/Cancelled =
+     fail-closed; `cancel_at_period_end` = sigue activo para el período actual.
+  3. **UsageReservation** (`app/Domain/Billing/Models/UsageReservation.php`) es un Eloquent model
+     con tabla `usage_reservations`. Estados: `reserved` → `committed` (crea UsageRecord) o
+     `released`. CHECK `quantity > 0`. Idempotencia por `idempotency_key` UNIQUE parcial.
+     `expires_at` permite limpieza de reservas stale.
+  4. **TenantQuotaExceededException** (`app/Domain/Billing/Exceptions/TenantQuotaExceededException.php`):
+     HTTP 429, code `TENANT_QUOTA_EXCEEDED`, safe fields: `category`, `limit`, `used`. No expone
+     tenant_id, subscription_id, plan_id ni provider IDs. Renderer en `bootstrap/app.php`.
+  5. **Limites del U1**: UsageGuard es infraestructura interna. NO se integra con MessageService,
+     SendWhatsAppMessage, FlowExecutionService, AiNodeExecutor, KnowledgeSearchService,
+     ContactService ni InvitationService. NO hay endpoints API. NO hay Redis quota cache. NO hay
+     frontend. NO hay Stripe integration.
+- **Consecuencias**:
+  - Advisory locks en PostgreSQL serializan concurrentes por tenant+categoría+período.
+  - SQLite (tests) omite advisory locks (sin pg_advisory_xact_lock) — la serialización
+    depende del `DB::transaction()`.
+  - La migración `usage_reservations` incluye CHECK constraint y UNIQUE parcial.
+  - Cada módulo futuro (U2: messages, U3: AI, U4: contacts) integra UsageGuard progresivamente.

@@ -31,7 +31,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA**.
 | 22 | Notificaciones (U1: Data Model, U2: Event Listeners, U3: Notification API, U4: Email Preferences, U5: Realtime + Frontend) | COMPLETADA |
 | 23 | Planes (U1: Data Model, U2: Usage Metering, U3: Billing API, U4: Billing Frontend) | COMPLETADA |
 | 24 | Billing (U1: Provider Infrastructure + Mappings, U2: Checkout, U3: Webhooks, U4: Frontend Provider UX, U5: Hardening + Closure) | COMPLETADA |
-| 25 | Usage limits | PENDIENTE |
+| 25 | Usage limits (U1: UsageGuard + Atomic Quota Reservation) | U1 EN PROGRESO |
 | 26 | Auditoría | PENDIENTE |
 | 27 | Seguridad (refuerzo OWASP) | PENDIENTE |
 | 28 | Observabilidad (Sentry, logging) | PENDIENTE |
