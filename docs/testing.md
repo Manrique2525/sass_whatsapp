@@ -830,3 +830,15 @@ Billing API tests (FASE 23 U3):
 | Security (BILL-API-SEC-U3) | 6 (non-UUID rejected, empty body 422, invalid tenant UUID, invalid plan UUID, no tenant_id in plan response, no tenant_id in usage response) |
 | **Total U3** | **45** |
 | **Total FASE 23 (U1+U2+U3)** | **133** |
+
+## 13. FASE 23 — Billing Frontend Test Suite (U4)
+
+Billing frontend tests (FASE 23 U4 — Vitest, jsdom):
+
+| Category | Tests |
+|---|---|
+| API Wrappers (BILL-FE-U4-01..07) | 10 (fetchPlans URL/return, fetchCurrentSubscription URL/null, assignPlan POST, changePlan PATCH, cancelSubscription DELETE, fetchUsageSummary URL/return, fetchUsageHistory URL/filter/params) |
+| Utilities (BILL-FE-U4-17..19) | 20 (categoryLabel Spanish, statusLabel, statusColor, formatCurrency, formatUsageValue, usagePercent, isUnlimited, formatDate, formatDateTime, extractErrorMessage, buildUsageSummary) |
+| Dashboard Page (BILL-FE-U4-08..27) | 20 (render, fetch plans/sub/usage on mount, current plan name, history table, owner manage buttons, admin read-only, agent denied, assign plan dialog, cancel dialog, double-submit, loading state, error state, empty states, unlimited usage, NaN safety, tenant switch, no v-html, no hardcoded prices, security no tenant_id) |
+| **Total U4** | **50** |
+| **Total FASE 23 (U1+U2+U3+U4)** | **183** |

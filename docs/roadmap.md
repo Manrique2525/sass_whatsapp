@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 22 COMPLETADA · FASE 23 U3 COMPLETADA**.
+Estado general: **FASE 22 COMPLETADA · FASE 23 U4 COMPLETADA**.
 
 ## Fases
 
@@ -29,7 +29,7 @@ Estado general: **FASE 22 COMPLETADA · FASE 23 U3 COMPLETADA**.
 | 20 | Tags | COMPLETADA |
 | 21 | Analytics | COMPLETADA |
 | 22 | Notificaciones (U1: Data Model, U2: Event Listeners, U3: Notification API, U4: Email Preferences, U5: Realtime + Frontend) | COMPLETADA |
-| 23 | Planes (U1: Data Model, U2: Usage Metering) | EN PROGRESO |
+| 23 | Planes (U1: Data Model, U2: Usage Metering, U3: Billing API, U4: Billing Frontend) | EN PROGRESO |
 | 24 | Billing (Stripe) | PENDIENTE |
 | 25 | Usage limits | PENDIENTE |
 | 26 | Auditoría | PENDIENTE |
@@ -2277,3 +2277,31 @@ FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COM
 - **Tests**: 45 U3 (BILL-API-PLAN-01..05, BILL-API-SUB-01..11, BILL-API-USG-01..08, BILL-API-PERM-01..10, BILL-API-MT-U3-01..05, BILL-API-SEC-U3-01..06). Total FASE 23: 133 tests
 - **Quality gates**: PHPStan 0 errors, Pint clean, composer audit 0 vulnerabilities, PG 133/133 pass, 0 new regression failures
 - ADR-090 registrado
+
+### U4 — Billing Frontend
+- **Estado**: COMPLETADA
+- **Scope**: Consumo exclusivo de la API de U3. NO Stripe, NO Checkout, NO PaymentIntent, NO tarjetas, NO facturas reales, NO webhooks billing, NO UsageGuard, NO Redis billing cache, NO backend DDL nuevo.
+- **Controller**: `BillingSettingsController` (Inertia, verified+tenant). Thin: pasa user/roles/permissions a Billing.vue.
+- **Módulo frontend `features/billing/`**:
+  - `billingTypes.ts` — interfaces: Plan, PlanLimits, Subscription, SubscriptionPlan, UsageCategorySummary, UsageSummary, UsageRecord, UsageHistoryMeta, BillingActionState
+  - `billingApi.ts` — 7 wrappers: fetchPlans, fetchCurrentSubscription, assignPlan, changePlan, cancelSubscription, fetchUsageSummary, fetchUsageHistory
+  - `billingUtils.ts` — categoryLabel (Spanish), statusLabel/statusColor, formatCurrency, formatUsageValue, usagePercent, isUnlimited, formatDate/DateTime, extractErrorMessage, buildUsageSummary, UsageCategoryItem
+- **Billing.vue** (`Pages/Settings/Billing.vue`):
+  - Plan actual (status badge, precio mensual, fecha fin periodo)
+  - Resumen de uso por categoría con progress bars
+  - Grilla de planes disponibles con "Seleccionar plan" / "Cambiar a este plan"
+  - Tabla de historial de uso con paginación
+  - Dialogs de confirmación (asignar/cambiar/cancelar) con texto explicativo
+  - Gate de permisos: owner ve manage buttons, admin read-only, agent sin billing.view no ve nada
+  - Tenant switch watcher refresca datos
+  - Loading/error/empty states, disabled buttons durante acciones
+  - Responsive (grid 1→3 cols), sin v-html, sin hardcoded prices
+- **Ruta**: `settings/billing` (web.php, verified+tenant)
+- **Nav**: "Billing" link en AppLayout tras Analytics
+- **Tests Vitest** (50):
+  - billingApi.test.ts (10): URL correctness, params, response mapping
+  - billingUtils.test.ts (20): categoryLabel, statusLabel/Color, formatCurrency, formatUsageValue, usagePercent, isUnlimited, formatDate/DateTime, extractErrorMessage, buildUsageSummary
+  - billingDashboard.test.ts (20): render, fetch on mount, owner manage, admin read-only, agent denied, assign/change/cancel dialogs, loading/error/empty states, unlimited usage, NaN safety, tenant switch, no v-html, no hardcoded prices, security no tenant_id in payload
+- **Quality gates**: vue-tsc 0 errors, vite build ok, 501/501 Vitest green, Pint clean, PHPStan 0 errors, composer audit 0 vulnerabilities, 133/133 backend tests green
+- **Total FASE 23**: 133 backend + 50 frontend = **183 tests**
+- ADR-091 registrado

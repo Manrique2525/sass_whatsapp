@@ -576,3 +576,12 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
         ID: non-UUID plan_id → 404; invalid tenant UUID → 404. Tests BILL-API-PLAN-01..05,
         BILL-API-SUB-01..11, BILL-API-USG-01..08, BILL-API-PERM-01..10,
         BILL-API-MT-U3-01..05, BILL-API-SEC-U3-01..06.
+- [x] (FASE 23 U4) Billing frontend:
+        BillingSettingsController is thin (Inertia only). No new backend endpoints.
+        Consumes exclusively U3 API. No v-html, no innerHTML, no eval. Disabled buttons
+        during async actions prevent double-submit. No tenant_id in payloads (URL-derived
+        from page prop). Admin can view but NOT manage (billing.view without billing.manage).
+        Agent without billing.view sees nothing. Tenant switch watcher refreshes all data.
+        Security test verifies assignPlan/changePlan send only plan_id (no tenant_id, user_id,
+        status injection). No hardcoded prices (all from API). No XSS vectors (no raw
+        HTML rendering). Tests BILL-FE-U4-01..27. Total: 50 frontend tests.

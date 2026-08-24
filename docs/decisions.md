@@ -2580,3 +2580,45 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Admin tiene ViewBilling pero NO ManageBilling (decisión de diseño, no un bug).
   - FASE 24 (Stripe) extiende con facturación y webhooks; FASE 25 (UsageGuard) consume
     `currentPeriodSummary()` para enforce quotas.
+
+## ADR-091 · Billing Frontend (FASE 23 U4)
+
+- **Estado**: Aceptado · FASE 23 U4
+- **Contexto**: U1-U3 establecieron el data model, UsageTrackingService y la API layer de
+  billing (7 endpoints REST). No existe interfaz visual. El usuario autorizó U4 como
+  "Billing Frontend" con restricción explícita: NO Stripe, NO Checkout, NO PaymentIntent,
+  NO tarjetas, NO facturas reales, NO UsageGuard, NO backend DDL nuevo.
+- **Decisión**:
+  - **Controller thin** `BillingSettingsController` (Inertia, verified+tenant): pasan user,
+    roles, permissions al componente `Settings/Billing.vue`.
+  - **Módulo `features/billing/`**: `billingTypes.ts` (interfaces TS: Plan, PlanLimits,
+    Subscription, SubscriptionPlan, UsageCategorySummary, UsageSummary, UsageRecord,
+    UsageHistoryMeta, BillingActionState), `billingApi.ts` (7 wrappers sobre window.axios:
+    fetchPlans, fetchCurrentSubscription, assignPlan, changePlan, cancelSubscription,
+    fetchUsageSummary, fetchUsageHistory), `billingUtils.ts` (categoryLabel Spanish,
+    statusLabel/statusColor, formatCurrency, formatUsageValue, usagePercent, isUnlimited,
+    formatDate/formatDateTime, extractErrorMessage, buildUsageSummary, UsageCategoryItem).
+  - **Billing.vue**: página SaaS con: plan actual (status badge, precio, fecha fin), resumen
+    de uso por categoría con progress bars, grilla de planes disponibles con "Seleccionar"/
+    "Cambiar a este plan", tabla de historial con paginación, dialogs de confirmación
+    (asignar/cambiar/cancelar) con texto explicativo, gate de permisos (owner ve manage,
+    admin ve read-only, agent sin billing.view no ve nada), tenant switch watcher que
+    refresca datos, loading/error/empty states, disabled buttons durante acciones,
+    responsive (grid 1→3 cols), sin v-html, sin XSS vector.
+  - **Ruta** `settings/billing` (web.php, verified+tenant, import BillingSettingsController).
+  - **Nav**: "Billing" link en AppLayout tras Analytics.
+  - **Sin cambios backend**: consume únicamente la API existente de U3.
+  - **Tests Vitest** (50): billingApi.test.ts (10: URL correctness, params, returns),
+    billingUtils.test.ts (20: categoryLabel, statusLabel/Color, formatCurrency,
+    formatUsageValue, usagePercent, isUnlimited, formatDate/DateTime, extractErrorMessage,
+    buildUsageSummary), billingDashboard.test.ts (20: render, fetch on mount, owner manage,
+    admin read-only, agent denied, assign/change/cancel dialogs, loading/error/empty states,
+    unlimited usage, NaN safety, tenant switch, no v-html, no hardcoded prices, security
+    no tenant_id in payload).
+  - **Quality gates**: vue-tsc 0 errors, vite build ok, 501/501 Vitest green, Pint ok,
+    PHPStan 0 errors, composer audit 0 vulnerabilities, 133/133 backend tests ok.
+- **Consecuencias**:
+  - Módulo de billing completo en frontend con patrón idéntico a Analytics/Contacts/Conversations.
+  - NO procesa pagos reales (Stripe llega en FASE 24). Los datos de planes son del seeder.
+  - Admin puede ver pero NO gestionar suscripciones (decisión de diseño U3, mantenido en U4).
+  - 50 tests frontend cubren API wrappers, utils, page render, permissions, security, UX.

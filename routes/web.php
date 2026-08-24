@@ -13,6 +13,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\Invitations\InvitationWebController;
 use App\Http\Controllers\Settings\AnalyticsSettingsController;
+use App\Http\Controllers\Settings\BillingSettingsController;
 use App\Http\Controllers\Settings\BusinessProfileSettingsController;
 use App\Http\Controllers\Settings\ContactSettingsController;
 use App\Http\Controllers\Settings\ConversationsController;
@@ -107,4 +108,8 @@ Route::middleware('auth')->group(function (): void {
     Route::get('settings/analytics', [AnalyticsSettingsController::class, 'show'])
         ->middleware(['verified', 'tenant'])
         ->name('settings.analytics');
+
+    Route::get('settings/billing', [BillingSettingsController::class, 'show'])
+        ->middleware(['verified', 'tenant'])
+        ->name('settings.billing');
 });
