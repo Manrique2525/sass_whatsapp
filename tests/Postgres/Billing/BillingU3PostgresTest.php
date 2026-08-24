@@ -8,6 +8,7 @@ use App\Domain\Billing\Models\BillingWebhookEvent;
 use App\Domain\Billing\Models\Plan;
 use App\Domain\Billing\Models\Subscription;
 use App\Domain\Tenants\Models\Tenant;
+use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
@@ -65,6 +66,8 @@ it('BILL-U3-PG-03: provider_updated_at column exists on subscriptions', function
 it('BILL-U3-PG-04: provider_updated_at stores timezone-aware datetime', function (): void {
     $tenant = Tenant::factory()->create();
     $plan = Plan::factory()->create();
+
+    TenantContext::setId($tenant->id);
 
     $sub = Subscription::create([
         'tenant_id' => $tenant->id,

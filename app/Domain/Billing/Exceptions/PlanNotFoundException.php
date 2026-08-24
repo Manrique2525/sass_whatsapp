@@ -13,8 +13,8 @@ use DomainException;
  */
 final class PlanNotFoundException extends DomainException
 {
-    public function __construct()
+    public function __construct(?string $message = null)
     {
-        parent::__construct('Plan no encontrado.');
+        parent::__construct($message ?? 'Plan no encontrado.');
     }
 }

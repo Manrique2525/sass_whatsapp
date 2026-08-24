@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Application\Billing\Services;
 
 use App\Application\Audit\Services\AuditLogger;
-use App\Domain\Billing\Contracts\BillingProviderInterface;
 use App\Domain\Billing\DTOs\ProviderWebhookEvent;
 use App\Domain\Billing\Enums\SubscriptionStatus;
 use App\Domain\Billing\Enums\WebhookEventStatus;
@@ -16,6 +15,7 @@ use App\Domain\Billing\Models\Subscription;
 use App\Domain\Tenants\Models\Tenant;
 use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -58,7 +58,6 @@ final class StripeWebhookService
     private const PROVIDER = 'stripe';
 
     public function __construct(
-        private readonly BillingProviderInterface $provider,
         private readonly AuditLogger $auditLogger,
     ) {}
 
@@ -194,11 +193,7 @@ final class StripeWebhookService
                 ->where('provider_event_id', $event->eventId)
                 ->first();
 
-            if ($existing !== null && $existing->status === WebhookEventStatus::Processed) {
-                return null; // Already processed
-            }
-
-            // If failed/pending, allow reprocessing — return the existing row
+            // Return existing record (pending/failed) for handler to decide reprocessing
             return $existing;
         }
     }
@@ -583,7 +578,7 @@ final class StripeWebhookService
         }
 
         $incomingTs = (int) $event->createdAt;
-        $localTs = $sub->provider_updated_at->timestamp;
+        $localTs = Carbon::parse($sub->provider_updated_at)->getTimestamp();
 
         // Strict inequality: same-second events are NOT newer (prevents resurrection
         // of cancelled subscriptions by stale events with identical timestamps).
@@ -607,6 +602,8 @@ final class StripeWebhookService
     /**
      * Resolve local plan ID from Stripe subscription price ID.
      * Matches against plans.stripe_price_id_monthly or stripe_price_id_yearly.
+     *
+     * @param  array<string, mixed>  $stripeSub
      */
     private function resolvePlanFromStripeSub(array $stripeSub): ?string
     {
@@ -632,6 +629,8 @@ final class StripeWebhookService
 
     /**
      * Resolve plan ID from invoice line items.
+     *
+     * @param  array<string, mixed>  $invoice
      */
     private function resolvePlanFromInvoice(array $invoice): ?string
     {

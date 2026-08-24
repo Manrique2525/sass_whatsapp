@@ -18,6 +18,7 @@ final readonly class ProviderWebhookEvent
         public string $createdAt,
         public string $objectId,
         public ?string $customerId,
+        /** @var array<string, mixed> */
         public array $data,
     ) {}
 
@@ -28,12 +29,12 @@ final readonly class ProviderWebhookEvent
      */
     public static function fromStripe(array $event): self
     {
-        $object = $event['data']['object'] ?? [];
+        $object = $event['data']['object'];
 
         return new self(
-            eventId: (string) ($event['id'] ?? ''),
-            type: (string) ($event['type'] ?? ''),
-            createdAt: (string) ($event['created'] ?? ''),
+            eventId: (string) $event['id'],
+            type: (string) $event['type'],
+            createdAt: (string) $event['created'],
             objectId: (string) ($object['id'] ?? ''),
             customerId: isset($object['customer']) ? (string) $object['customer'] : null,
             data: $object,

@@ -16,6 +16,7 @@ final readonly class BillingCustomerData
         public string $providerCustomerId,
         public string $provider,
         public ?string $email,
+        /** @var array<string, mixed> */
         public array $metadata,
     ) {}
 

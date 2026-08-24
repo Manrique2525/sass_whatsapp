@@ -927,3 +927,67 @@ No new tests added. U5 audited U1–U4 and fixed P1/P2 findings in existing code
 | billingUtils tests | 25/25 pass (updated P1-05 pending label test) |
 | **Total U5** | **No new tests. Existing 252 backend + 532 frontend = all green.** |
 | **Total FASE 23+24** | **329 backend billing + 532 frontend = 861 tests (billing-related subset unchanged)** |
+
+## 19. Pre-U1 Baseline Cleanup — PostgreSQL Harness + PHPStan (FASE 25)
+
+### PostgreSQL Test Harness
+
+**Root cause:** The test database `whatsapp_saas_handoff_u2_test` already existed in Docker PostgreSQL,
+but the `phpunit.pgsql.xml` configuration used Docker service names (`postgres`, `redis`) that only
+resolve from within the Docker network. Tests could not run from the host.
+
+**Fix:** The config was already correct for Docker-internal execution. The documented command is:
+
+```bash
+docker compose exec -T app vendor/bin/pest \
+  --configuration=phpunit.pgsql.xml \
+  --filter="BillingU1|BillingU2|BillingU3" \
+  --no-coverage
+```
+
+**Safety guards** (in `PostgresConcurrencyTestCase`):
+- `HANDOFF_U2_PG_TEST=1` env var required
+- `database.connections.pgsql.host = 'postgres'` (Docker service name)
+- `database.connections.pgsql.database = 'whatsapp_saas_handoff_u2_test'`
+- `redis.default.database = 14` and `redis.cache.database = 14`
+- Runtime check: `SELECT current_database()` must return `whatsapp_saas_handoff_u2_test`
+
+**BILL-U3-PG-04 fix:** Added `TenantContext::setId($tenant->id)` before `Subscription::create()`
+(the `BelongsToTenant` trait requires an active TenantContext for writes).
+
+### PG Billing Tests
+
+| Suite | Tests | Assertions | Status |
+|---|---|---|---|
+| BillingU1PostgresTest | 8 | 13 | PASS |
+| BillingU2PostgresTest | 4 | 5 | PASS |
+| BillingU3PostgresTest | 6 | 7 | PASS (after fix) |
+| **Total PG Billing** | **18** | **25** | **PASS** |
+
+### PHPStan Baseline Cleanup
+
+Reduced from **13 errors to 0**:
+
+| File | Error | Fix |
+|---|---|---|
+| `PlanNotFoundException.php` | Constructor invoked with 1 param, 0 required | Added optional `?string $message = null` parameter |
+| `StripeWebhookService.php` | `$provider` property only written | Removed unused constructor parameter |
+| `StripeWebhookService.php` | `&&` always false + `===` always false | Simplified `recordEvent` duplicate check — return existing for handler to decide |
+| `StripeWebhookService.php` | `->timestamp` on string | Used `Carbon::parse()->getTimestamp()` for explicit typing |
+| `StripeWebhookService.php` | Missing iterable value types (×2) | Added `@param array<string, mixed>` PHPDoc |
+| `BillingCustomerData.php` | Missing iterable value type | Added `@var array<string, mixed>` PHPDoc |
+| `ProviderWebhookEvent.php` | Missing iterable value type | Added `@var array<string, mixed>` PHPDoc |
+| `ProviderWebhookEvent.php` | Redundant `??` (×4) | Removed null coalescing on keys guaranteed by `@param` type |
+
+### Quality Gates
+
+| Gate | Result |
+|---|---|
+| Billing tests (SQLite) | 252/252 PASS |
+| PG billing tests | 18/18 PASS |
+| PHPStan (level 6) | 0 errors |
+| Pint | PASS |
+| vue-tsc | PASS |
+| Vite build | PASS |
+| composer audit | 0 vulnerabilities |
+| npm audit | 0 vulnerabilities |
