@@ -6,12 +6,11 @@ use App\Application\Billing\Guards\EntitlementResolver;
 use App\Application\Billing\Guards\UsageGuard;
 use App\Domain\Billing\Enums\SubscriptionStatus;
 use App\Domain\Billing\Enums\UsageCategory;
-use App\Domain\Billing\Enums\UsageReservationStatus;
+use App\Domain\Billing\Exceptions\InvalidUsageQuantityException;
 use App\Domain\Billing\Exceptions\TenantQuotaExceededException;
 use App\Domain\Billing\Models\Plan;
 use App\Domain\Billing\Models\Subscription;
 use App\Domain\Billing\Models\UsageRecord;
-use App\Domain\Billing\Models\UsageReservation;
 use App\Domain\Tenants\Models\Tenant;
 use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -99,7 +98,7 @@ it('USG-U1-SEC-03: exception exposes only safe fields', function (): void {
 })->group('USG-U1-SEC-03');
 
 it('USG-U1-SEC-04: negative quantity rejected at application level', function (): void {
-    $this->expectException(\App\Domain\Billing\Exceptions\InvalidUsageQuantityException::class);
+    $this->expectException(InvalidUsageQuantityException::class);
 
     $this->guard->reserve(
         tenant: $this->tenant,
@@ -109,7 +108,7 @@ it('USG-U1-SEC-04: negative quantity rejected at application level', function ()
 })->group('USG-U1-SEC-04');
 
 it('USG-U1-SEC-05: zero quantity rejected at application level', function (): void {
-    $this->expectException(\App\Domain\Billing\Exceptions\InvalidUsageQuantityException::class);
+    $this->expectException(InvalidUsageQuantityException::class);
 
     $this->guard->reserve(
         tenant: $this->tenant,

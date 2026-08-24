@@ -36,12 +36,9 @@ final class TenantQuotaExceededException extends DomainException
         return new self($category, $limit, $used);
     }
 
-    /** @var string */
     public readonly string $category;
 
-    /** @var ?int */
     public readonly ?int $limit;
 
-    /** @var int */
     public readonly int $used;
 }

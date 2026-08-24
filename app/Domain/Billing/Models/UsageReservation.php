@@ -19,15 +19,15 @@ use Illuminate\Support\Carbon;
  * @property string $tenant_id
  * @property string $subscription_id
  * @property UsageCategory $category
- * @property \Illuminate\Support\Carbon $period_start
- * @property \Illuminate\Support\Carbon $period_end
+ * @property Carbon $period_start
+ * @property Carbon $period_end
  * @property int $quantity
  * @property string|null $idempotency_key
  * @property UsageReservationStatus $status
- * @property \Illuminate\Support\Carbon $expires_at
- * @property \Illuminate\Support\Carbon $reserved_at
- * @property \Illuminate\Support\Carbon|null $committed_at
- * @property \Illuminate\Support\Carbon|null $released_at
+ * @property Carbon $expires_at
+ * @property Carbon $reserved_at
+ * @property Carbon|null $committed_at
+ * @property Carbon|null $released_at
  */
 final class UsageReservation extends Model
 {

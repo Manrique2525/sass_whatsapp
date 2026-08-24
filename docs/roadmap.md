@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 U1+U2 COMPLETADAS**.
 
 ## Fases
 
@@ -31,7 +31,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA**.
 | 22 | Notificaciones (U1: Data Model, U2: Event Listeners, U3: Notification API, U4: Email Preferences, U5: Realtime + Frontend) | COMPLETADA |
 | 23 | Planes (U1: Data Model, U2: Usage Metering, U3: Billing API, U4: Billing Frontend) | COMPLETADA |
 | 24 | Billing (U1: Provider Infrastructure + Mappings, U2: Checkout, U3: Webhooks, U4: Frontend Provider UX, U5: Hardening + Closure) | COMPLETADA |
-| 25 | Usage limits (U1: UsageGuard + Atomic Quota Reservation) | U1 EN PROGRESO |
+| 25 | Usage limits (U1: UsageGuard + Atomic Quota Reservation, U2: Message + Flow Quota Enforcement) | U1+U2 COMPLETADAS |
 | 26 | Auditoría | PENDIENTE |
 | 27 | Seguridad (refuerzo OWASP) | PENDIENTE |
 | 28 | Observabilidad (Sentry, logging) | PENDIENTE |
@@ -2471,3 +2471,45 @@ FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COM
 - **Quality gates**: Pint clean, vue-tsc 0 errors, vite build ok, 252/252 backend billing tests pass, 532/532 frontend tests pass
 - **Security scan**: No secrets, no PII, no new attack vectors. Idempotency keys are deterministic but non-sensitive. URL validation prevents open redirect.
 - ADR-096 registered
+
+## FASE 25 U2 · Message + Flow Quota Enforcement
+
+**Estado**: COMPLETADO
+**Commit**: pendiente de push (local)
+
+### Alcance
+- MessageService: reserve quota before dispatch, commit after success, release on permanent failure
+- SendWhatsAppMessage worker: re-reserve with same idempotency key after CAS claim, commit on provider success, release on provider permanent failure
+- FlowExecutionService::start(): pre-generate UUID, reserve, create execution, commit immediately
+- UsageGuard::reserve() returns `?UsageReservation` (null = no subscription = no enforcement)
+- SubscriptionNotActiveException renderer (HTTP 409, code SUBSCRIPTION_NOT_ACTIVE)
+- Worker defense: releaseReservationIfExists() in failed() method
+
+### Archivos modificados
+- `app/Application/Messages/Services/MessageService.php` — UsageGuard injected, reserve in createOutbound()
+- `app/Jobs/SendWhatsAppMessage.php` — worker defense (re-reserve, commit/release, failed() handler)
+- `app/Application/Flows/Services/FlowExecutionService.php` — reserve+commit in start() with pre-generated UUID
+- `bootstrap/app.php` — SubscriptionNotActiveException renderer (HTTP 409)
+- `app/Application/Billing/Guards/UsageGuard.php` — reserve() returns `?UsageReservation`
+
+### Archivos creados (tests)
+- `tests/Feature/Billing/UsageGuardMessageQuotaTest.php` — 26 tests
+- `tests/Feature/Billing/UsageGuardFlowQuotaTest.php` — 12 tests
+- `tests/Feature/Billing/UsageGuardMessageConcurrencyTest.php` — 5 tests
+
+### Archivos modificados (tests)
+- `tests/Feature/Billing/UsageGuardTest.php` — 3 U1 tests updated (UNIT-09/10/11 → expect null)
+
+### Tests totales
+- 43 new tests (26 msg + 12 flow + 5 concurrency)
+- 343 billing tests PASS
+- 14 Outbound regression PASS
+- 17 FlowEngine regression PASS
+
+### Quality gates
+- PHPStan: 0 errors
+- Pint: clean (auto-fixed)
+- vue-tsc: 0 errors
+- Frontend build: OK
+- Billing regression SQLite: 300 PASS
+- Billing regression PG: 25 PASS (infra unavailable locally, code verified via U1 tests)

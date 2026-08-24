@@ -7,6 +7,7 @@ use App\Application\Billing\Guards\UsageGuard;
 use App\Domain\Billing\Enums\SubscriptionStatus;
 use App\Domain\Billing\Enums\UsageCategory;
 use App\Domain\Billing\Enums\UsageReservationStatus;
+use App\Domain\Billing\Exceptions\TenantQuotaExceededException;
 use App\Domain\Billing\Models\Plan;
 use App\Domain\Billing\Models\Subscription;
 use App\Domain\Billing\Models\UsageReservation;
@@ -66,7 +67,7 @@ it('USG-U1-PG-CONC-01: two concurrent reserves at limit boundary — only one su
         ]);
     }
 
-    $lockKey = crc32("{$this->tenant->id}:messages:" . Carbon::parse('2026-08-01')->toDateString());
+    $lockKey = crc32("{$this->tenant->id}:messages:".Carbon::parse('2026-08-01')->toDateString());
 
     // Simulate two concurrent requests via two DB connections
     $conn1 = DB::connection('pgsql');
@@ -76,7 +77,7 @@ it('USG-U1-PG-CONC-01: two concurrent reserves at limit boundary — only one su
     $conn2->beginTransaction();
 
     // First connection acquires lock
-    $conn1->select("SELECT pg_advisory_xact_lock(CAST(? AS bigint))", [$lockKey]);
+    $conn1->select('SELECT pg_advisory_xact_lock(CAST(? AS bigint))', [$lockKey]);
 
     // Second connection blocks (but we test this by checking the reservation count)
     $r1 = null;
@@ -89,7 +90,7 @@ it('USG-U1-PG-CONC-01: two concurrent reserves at limit boundary — only one su
             category: UsageCategory::Messages,
             quantity: 1,
         );
-    } catch (\Throwable) {
+    } catch (Throwable) {
         // Should not throw
     }
 
@@ -103,7 +104,7 @@ it('USG-U1-PG-CONC-01: two concurrent reserves at limit boundary — only one su
             category: UsageCategory::Messages,
             quantity: 1,
         );
-    } catch (\App\Domain\Billing\Exceptions\TenantQuotaExceededException) {
+    } catch (TenantQuotaExceededException) {
         // Expected: no quota remaining
     }
 
@@ -123,7 +124,7 @@ it('USG-U1-PG-CONC-01: two concurrent reserves at limit boundary — only one su
 it('USG-U1-PG-CONC-02: idempotent concurrent reserve returns same reservation', function (): void {
     TenantContext::setId($this->tenant->id);
 
-    $key = 'concurrent-idem-' . uniqid();
+    $key = 'concurrent-idem-'.uniqid();
 
     $r1 = $this->guard->reserve(
         tenant: $this->tenant,
@@ -161,7 +162,7 @@ it('USG-U1-PG-CONC-03: reservation status transitions are atomic', function (): 
     try {
         $this->guard->commit($reservation);
         $this->fail('Expected exception');
-    } catch (\InvalidArgumentException) {
+    } catch (InvalidArgumentException) {
         // Expected
     }
 })->group('USG-U1-PG-CONC-03');
@@ -180,7 +181,7 @@ it('USG-U1-PG-CONC-04: bulk reserves consume quota correctly', function (): void
     }
 
     // 6th should fail
-    $this->expectException(\App\Domain\Billing\Exceptions\TenantQuotaExceededException::class);
+    $this->expectException(TenantQuotaExceededException::class);
 
     $this->guard->reserve(
         tenant: $this->tenant,

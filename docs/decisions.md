@@ -2843,7 +2843,7 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
 
 ## ADR-097 · UsageGuard + Atomic Quota Reservation (FASE 25 U1)
 
-- **Estado**: ACEPTADO · FASE 25 U1
+- **Estado**: ACEPTADO · FASE 25 U1+U2
 - **Contexto**: FASE 23 instaló `UsageTrackingService` (append-only ledger, dormante en producción)
   y el catálogo de `Plan::limits` por categoría. FASE 25 U2-U5 necesitan un guard de cuotas
   atómico, idempotente y multi-tenant que prevenga over-limit antes de enviar mensajes, ejecutar
@@ -2872,4 +2872,26 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - SQLite (tests) omite advisory locks (sin pg_advisory_xact_lock) — la serialización
     depende del `DB::transaction()`.
   - La migración `usage_reservations` incluye CHECK constraint y UNIQUE parcial.
-  - Cada módulo futuro (U2: messages, U3: AI, U4: contacts) integra UsageGuard progresivamente.
+   - Cada módulo futuro (U2: messages, U3: AI, U4: contacts) integra UsageGuard progresivamente.
+
+### U2 · Message + Flow Quota Enforcement (extensión de ADR-097)
+
+- **Estado**: ACEPTADO · FASE 25 U2
+- **Contexto**: U1 instaló UsageGuard como infraestructura interna. U2 integra UsageGuard con los
+  chokepoints de negocio: MessageService (outbound), SendWhatsAppMessage (worker), y
+  FlowExecutionService (start). Se necesita enforce atómico con idempotencia, retry safety, y
+  manejo de suscripciones inexistentes.
+- **Decisión**:
+  1. **MessageService** (`app/Application/Messages/Services/MessageService.php`): reserve quota
+     con key `message:{message_id}` (TTL 900s) antes de dispatch. Si no hay suscripción → null →
+     sin enforcement.
+  2. **SendWhatsAppMessage** (`app/Jobs/SendWhatsAppMessage.php`): re-reserva con misma key tras
+     CAS claim. Éxito del provider → commit. Fallo permanente → release. `failed()` llama
+     `releaseReservationIfExists()` antes de `failMessage()`.
+  3. **FlowExecutionService** (`app/Application/Flows/Services/FlowExecutionService.php`): genera
+     UUID pre-creado, reserva con key `flow_execution:{uuid}` (TTL 300s), crea FlowExecution con
+     ID pre-generado, commitea inmediatamente. Start = consumed. Errores posteriores NO liberan.
+  4. **UsageGuard::reserve()** retorna `?UsageReservation` (null = sin suscripción = sin enforcement).
+     Catch `SubscriptionNotFoundException` → null. Consistente con `remaining()` null.
+  5. **SubscriptionNotActiveException** renderer: HTTP 409, code `SUBSCRIPTION_NOT_ACTIVE` en
+     `bootstrap/app.php`.

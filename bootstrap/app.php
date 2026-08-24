@@ -2,9 +2,10 @@
 
 declare(strict_types=1);
 
+use App\Domain\Billing\Exceptions\SubscriptionNotActiveException;
+use App\Domain\Billing\Exceptions\TenantQuotaExceededException;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\TenantMiddleware;
-use App\Domain\Billing\Exceptions\TenantQuotaExceededException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -77,6 +78,16 @@ return Application::configure(basePath: dirname(__DIR__))
                         'used' => $e->used,
                     ],
                 ], $e->getCode() ?: 429);
+            }
+        });
+
+        $exceptions->render(function (SubscriptionNotActiveException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json([
+                    'message' => $e->getMessage(),
+                    'code' => SubscriptionNotActiveException::ERROR_CODE,
+                    'errors' => new stdClass,
+                ], SubscriptionNotActiveException::HTTP_STATUS);
             }
         });
     })->create();

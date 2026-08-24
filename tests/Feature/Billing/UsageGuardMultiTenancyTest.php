@@ -9,7 +9,6 @@ use App\Domain\Billing\Enums\UsageCategory;
 use App\Domain\Billing\Enums\UsageReservationStatus;
 use App\Domain\Billing\Models\Plan;
 use App\Domain\Billing\Models\Subscription;
-use App\Domain\Billing\Models\UsageReservation;
 use App\Domain\Tenants\Models\Tenant;
 use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;

@@ -9,6 +9,8 @@ use App\Domain\Billing\Enums\UsageCategory;
 use App\Domain\Billing\Enums\UsageReservationStatus;
 use App\Domain\Billing\Exceptions\InvalidUsageQuantityException;
 use App\Domain\Billing\Exceptions\PlanNotFoundException;
+use App\Domain\Billing\Exceptions\SubscriptionNotActiveException;
+use App\Domain\Billing\Exceptions\SubscriptionNotFoundException;
 use App\Domain\Billing\Exceptions\TenantQuotaExceededException;
 use App\Domain\Billing\Models\Plan;
 use App\Domain\Billing\Models\Subscription;
@@ -44,7 +46,7 @@ final class UsageGuard
     {
         try {
             [$subscription, $plan, $periodStart, $periodEnd] = $this->entitlementResolver->resolve($tenant);
-        } catch (\App\Domain\Billing\Exceptions\SubscriptionNotFoundException) {
+        } catch (SubscriptionNotFoundException) {
             return null;
         }
 
@@ -70,6 +72,8 @@ final class UsageGuard
      * Advisory lock per (tenant_id, category, period_start) ensures serialization.
      * Idempotent: same idempotency_key returns existing reservation if active.
      *
+     * Returns null if no subscription exists (no quota enforcement).
+     *
      * @throws TenantQuotaExceededException
      * @throws PlanNotFoundException
      * @throws InvalidUsageQuantityException
@@ -80,14 +84,18 @@ final class UsageGuard
         int $quantity,
         ?string $idempotencyKey = null,
         ?int $ttlSeconds = null,
-    ): UsageReservation {
+    ): ?UsageReservation {
         if ($quantity <= 0) {
             throw new InvalidUsageQuantityException(
                 "Reservation quantity must be positive, got {$quantity}.",
             );
         }
 
-        [$subscription, $plan, $periodStart, $periodEnd] = $this->entitlementResolver->resolve($tenant);
+        try {
+            [$subscription, $plan, $periodStart, $periodEnd] = $this->entitlementResolver->resolve($tenant);
+        } catch (SubscriptionNotFoundException) {
+            return null;
+        }
 
         $limit = $plan->getLimit($category->value);
 
@@ -142,7 +150,7 @@ final class UsageGuard
                 if ($currentStatus === SubscriptionStatus::Pending
                     || $currentStatus === SubscriptionStatus::Cancelled
                 ) {
-                    throw new \App\Domain\Billing\Exceptions\SubscriptionNotActiveException;
+                    throw new SubscriptionNotActiveException;
                 }
 
                 $used = $this->computeUsedQuantity($subscription, $tenant->id, $category, $periodStart, $periodEnd);
@@ -208,8 +216,8 @@ final class UsageGuard
         $reservation->committed_at = now();
         $reservation->save();
 
-        /** @var \App\Domain\Tenants\Models\Tenant $tenant */
-        $tenant = \App\Domain\Tenants\Models\Tenant::query()->find($reservation->tenant_id);
+        /** @var Tenant $tenant */
+        $tenant = Tenant::query()->find($reservation->tenant_id);
 
         $usageRecord = new UsageRecord;
         $usageRecord->setAttribute('tenant_id', $reservation->tenant_id);
@@ -298,7 +306,7 @@ final class UsageGuard
     private function acquireAdvisoryLock(int $lockKey): void
     {
         if ($this->isPostgres()) {
-            DB::select("SELECT pg_advisory_xact_lock(CAST(? AS bigint))", [$lockKey]);
+            DB::select('SELECT pg_advisory_xact_lock(CAST(? AS bigint))', [$lockKey]);
         }
     }
 

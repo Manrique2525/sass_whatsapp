@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Application\Flows\Services;
 
 use App\Application\Audit\Services\AuditLogger;
+use App\Application\Billing\Guards\UsageGuard;
 use App\Application\Users\Services\AuthorizationService;
 use App\Domain\Audit\Models\AuditLog;
+use App\Domain\Billing\Enums\UsageCategory;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Flows\Enums\FlowExecutionStatus;
 use App\Domain\Flows\Enums\FlowNodeType;
@@ -29,6 +31,7 @@ use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Persistencia y casos de uso de las ejecuciones de flujos (FASE 11, ADR-037).
@@ -50,6 +53,7 @@ final class FlowExecutionService
         private readonly AuthorizationService $authorization,
         private readonly AuditLogger $auditLogger,
         private readonly ConversationLockContext $lockContext,
+        private readonly UsageGuard $usageGuard,
     ) {}
 
     public function conversationLock(Tenant $tenant, string $conversationId, int $seconds = 150): Lock
@@ -91,7 +95,19 @@ final class FlowExecutionService
             throw new FlowInvalidException('El flujo no tiene nodo de inicio.');
         }
 
+        $executionId = (string) Str::uuid();
+        $idempotencyKey = "flow_execution:{$executionId}";
+
+        $reservation = $this->usageGuard->reserve(
+            tenant: Tenant::query()->find((string) $flow->tenant_id),
+            category: UsageCategory::FlowExecutions,
+            quantity: 1,
+            idempotencyKey: $idempotencyKey,
+            ttlSeconds: 300,
+        );
+
         $execution = FlowExecution::query()->create([
+            'id' => $executionId,
             'flow_id' => $flow->id,
             'conversation_id' => $conversation->id,
             'current_node_id' => $startNode->id,
@@ -100,6 +116,10 @@ final class FlowExecutionService
             'attempts' => 0,
             'last_inbound_message_id' => $inbound?->id,
         ]);
+
+        if ($reservation !== null) {
+            $this->usageGuard->commit($reservation);
+        }
 
         $conversation->forceFill(['flow_execution_id' => $execution->id])->save();
 

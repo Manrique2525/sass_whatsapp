@@ -8,8 +8,7 @@ use App\Domain\Billing\Enums\SubscriptionStatus;
 use App\Domain\Billing\Enums\UsageCategory;
 use App\Domain\Billing\Enums\UsageReservationStatus;
 use App\Domain\Billing\Exceptions\InvalidUsageQuantityException;
-use App\Domain\Billing\Exceptions\PlanNotFoundException;
-use App\Domain\Billing\Exceptions\SubscriptionNotFoundException;
+use App\Domain\Billing\Exceptions\TenantQuotaExceededException;
 use App\Domain\Billing\Models\Plan;
 use App\Domain\Billing\Models\Subscription;
 use App\Domain\Billing\Models\UsageRecord;
@@ -167,40 +166,40 @@ it('USG-U1-UNIT-08: reserve succeeds for past-due subscription', function (): vo
     expect($reservation->status)->toBe(UsageReservationStatus::Reserved);
 })->group('USG-U1-UNIT-08');
 
-it('USG-U1-UNIT-09: reserve fails-closed for pending subscription', function (): void {
+it('USG-U1-UNIT-09: reserve returns null for pending subscription (no quota enforcement)', function (): void {
     $this->subscription->update(['status' => SubscriptionStatus::Pending]);
 
-    $this->expectException(SubscriptionNotFoundException::class);
-
-    $this->guard->reserve(
+    $reservation = $this->guard->reserve(
         tenant: $this->tenant,
         category: UsageCategory::Messages,
         quantity: 5,
     );
+
+    expect($reservation)->toBeNull();
 })->group('USG-U1-UNIT-09');
 
-it('USG-U1-UNIT-10: reserve fails-closed for cancelled subscription', function (): void {
+it('USG-U1-UNIT-10: reserve returns null for cancelled subscription (no quota enforcement)', function (): void {
     $this->subscription->update(['status' => SubscriptionStatus::Cancelled]);
 
-    $this->expectException(SubscriptionNotFoundException::class);
-
-    $this->guard->reserve(
+    $reservation = $this->guard->reserve(
         tenant: $this->tenant,
         category: UsageCategory::Messages,
         quantity: 5,
     );
+
+    expect($reservation)->toBeNull();
 })->group('USG-U1-UNIT-10');
 
-it('USG-U1-UNIT-11: reserve fails-closed when no subscription', function (): void {
+it('USG-U1-UNIT-11: reserve returns null when no subscription (no quota enforcement)', function (): void {
     $this->subscription->delete();
 
-    $this->expectException(SubscriptionNotFoundException::class);
-
-    $this->guard->reserve(
+    $reservation = $this->guard->reserve(
         tenant: $this->tenant,
         category: UsageCategory::Messages,
         quantity: 5,
     );
+
+    expect($reservation)->toBeNull();
 })->group('USG-U1-UNIT-11');
 
 // ──────────────────────────────────────────────
@@ -227,7 +226,7 @@ it('USG-U1-UNIT-13: reserve fails when at exact limit', function (): void {
         'recorded_at' => now(),
     ]);
 
-    $this->expectException(\App\Domain\Billing\Exceptions\TenantQuotaExceededException::class);
+    $this->expectException(TenantQuotaExceededException::class);
 
     $this->guard->reserve(
         tenant: $this->tenant,
@@ -271,7 +270,7 @@ it('USG-U1-UNIT-15: reserve fails for blocked category', function (): void {
     ]);
     $this->subscription->update(['plan_id' => $plan->id]);
 
-    $this->expectException(\App\Domain\Billing\Exceptions\TenantQuotaExceededException::class);
+    $this->expectException(TenantQuotaExceededException::class);
 
     $this->guard->reserve(
         tenant: $this->tenant,
@@ -371,7 +370,7 @@ it('USG-U1-COMMIT-03: commit rejects committed reservation', function (): void {
     );
     $this->guard->commit($reservation);
 
-    $this->expectException(\InvalidArgumentException::class);
+    $this->expectException(InvalidArgumentException::class);
 
     $this->guard->commit($reservation);
 })->group('USG-U1-COMMIT-03');
@@ -385,7 +384,7 @@ it('USG-U1-COMMIT-04: commit rejects expired reservation', function (): void {
         'expires_at' => now()->subMinute(),
     ]);
 
-    $this->expectException(\InvalidArgumentException::class);
+    $this->expectException(InvalidArgumentException::class);
 
     $this->guard->commit($reservation);
 })->group('USG-U1-COMMIT-04');
@@ -433,7 +432,7 @@ it('USG-U1-RELEASE-03: release rejects committed reservation', function (): void
     );
     $this->guard->commit($reservation);
 
-    $this->expectException(\InvalidArgumentException::class);
+    $this->expectException(InvalidArgumentException::class);
 
     $this->guard->release($reservation);
 })->group('USG-U1-RELEASE-03');

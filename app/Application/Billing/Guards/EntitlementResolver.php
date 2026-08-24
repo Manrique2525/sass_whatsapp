@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Application\Billing\Guards;
 
 use App\Domain\Billing\Enums\SubscriptionStatus;
+use App\Domain\Billing\Exceptions\SubscriptionNotFoundException;
 use App\Domain\Billing\Models\Plan;
 use App\Domain\Billing\Models\Subscription;
 use App\Domain\Tenants\Models\Tenant;
@@ -22,7 +23,7 @@ final class EntitlementResolver
     /**
      * @return array{0: Subscription, 1: Plan, 2: Carbon, 3: Carbon}
      *
-     * @throws \App\Domain\Billing\Exceptions\SubscriptionNotFoundException
+     * @throws SubscriptionNotFoundException
      */
     public function resolve(Tenant $tenant): array
     {
@@ -34,7 +35,7 @@ final class EntitlementResolver
             ->first();
 
         if ($subscription === null) {
-            throw new \App\Domain\Billing\Exceptions\SubscriptionNotFoundException(
+            throw new SubscriptionNotFoundException(
                 "No active or past-due subscription found for tenant [{$tenant->id}].",
             );
         }

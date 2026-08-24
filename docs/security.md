@@ -343,6 +343,9 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 ### Límites de uso (backend)
 - `UsageGuard` valida cuota del plan ANTES de: enviar mensaje, ejecutar IA, crear contacto,
   publicar flow, procesar documento KB. Respuesta `TENANT_QUOTA_EXCEEDED`.
+- **U2 chokepoints**: MessageService.createOutbound() reserva antes de dispatch; SendWhatsAppMessage re-reserva con misma key tras CAS claim, commitea en éxito, libera en fallo permanente; FlowExecutionService.start() reserva y commitea inmediatamente. Sin suscripción activa → null → sin enforcement.
+- **Idempotencia**: keys namespaced (`message:{id}`, `flow_execution:{uuid}`). Worker re-reserva con la misma key; si la reservation ya fue committed, retorna la misma (idempotente). Si expiró, U1 crea fresh reservation.
+- **SubscriptionNotActiveException**: HTTP 409, code `SUBSCRIPTION_NOT_ACTIVE`. Renderer en `bootstrap/app.php`.
 
 ### Secreto de tokens de WhatsApp
 - El `access_token` de cada WABA se guarda **cifrado** en `whatsapp_accounts.access_token`

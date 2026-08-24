@@ -565,7 +565,7 @@ Pirámide de tests con prioridad en lo crítico:
 - cuota superada → `TENANT_QUOTA_EXCEEDED` antes de enviar/IA/crear contacto.
 - usage_records incrementan.
 
-### UsageGuard (FASE 25 U1, 48 tests SQLite + 7 tests PG)
+### UsageGuard (FASE 25 U1+U2, 48 U1 SQLite + 7 U1 PG + 43 U2 tests)
 
 #### SQLite — Unit, Commit, Release (UsageGuardTest, 26 tests)
 
@@ -596,6 +596,24 @@ Pirámide de tests con prioridad en lo crítico:
 | Suite | Tests | Cobertura |
 |---|---|---|
 | `UsageGuardConcurrencyTest.php` | USG-U1-PG-CONC-01..07 | Two concurrent reserves at limit boundary — only one succeeds, idempotent concurrent reserve returns same, status transitions atomic, bulk reserves consume quota, TTL expiry enforced, different categories independent, cross-tenant concurrent independent. |
+
+#### U2 — Message Quota Enforcement (UsageGuardMessageQuotaTest, 26 tests)
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `UsageGuardMessageQuotaTest.php` | USG-U2-MSG-01..26 | Reserve before dispatch, null on no subscription, at limit blocks, committed on success, released on provider failure, transient failure doesn't release (U1 holds slot), idempotent retry returns same reservation, tenant isolation, no double-charge, Queue::fake unit tests for reserve-commit-release lifecycle, exception renderer 409. |
+
+#### U2 — Flow Quota Enforcement (UsageGuardFlowQuotaTest, 12 tests)
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `UsageGuardFlowQuotaTest.php` | USG-U2-FLOW-01..12 | Under limit starts, at limit blocks, unlimited plan, zero limit blocked, reserve before creating execution, commit after start, later error doesn't release, duplicate start no double count, tenant isolation, null on pending/cancelled subscription, PastDue allowed, plan downgrade re-check. |
+
+#### U2 — Message Concurrency (UsageGuardMessageConcurrencyTest, 5 tests)
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `UsageGuardMessageConcurrencyTest.php` | USG-U2-MSG-CONC-01..05 | Reserve-commit-release lifecycle, idempotent retry same reservation, cross-tenant independence, category independence, null on missing subscription. |
 
 Ejecución SQLite: `vendor/bin/pest --filter="UsageGuard" --no-coverage`
 Ejecución PG: `docker compose exec -T app vendor/bin/pest --configuration=phpunit.pgsql.xml --filter="UsageGuardConcurrency" --no-coverage`
