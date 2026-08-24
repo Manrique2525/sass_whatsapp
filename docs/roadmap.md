@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 U1+U2+U3 COMPLETADA**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 U1+U2+U3+U4 COMPLETADA**.
 
 ## Fases
 
@@ -30,7 +30,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 U1+U2+U3 COMPLETADA**.
 | 21 | Analytics | COMPLETADA |
 | 22 | Notificaciones (U1: Data Model, U2: Event Listeners, U3: Notification API, U4: Email Preferences, U5: Realtime + Frontend) | COMPLETADA |
 | 23 | Planes (U1: Data Model, U2: Usage Metering, U3: Billing API, U4: Billing Frontend) | COMPLETADA |
-| 24 | Billing (U1: Provider Infrastructure + Mappings, U2: Checkout, U3: Webhooks, U4: Portal, U5: UsageGuard) | EN PROGRESO |
+| 24 | Billing (U1: Provider Infrastructure + Mappings, U2: Checkout, U3: Webhooks, U4: Frontend Provider UX) | EN PROGRESO |
 | 25 | Usage limits | PENDIENTE |
 | 26 | Auditoría | PENDIENTE |
 | 27 | Seguridad (refuerzo OWASP) | PENDIENTE |
@@ -2419,3 +2419,24 @@ FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COM
 - **Tests**: 46 SQLite (7 signature + 12 webhook + 5 ordering + 6 security + 10 sync + 6 multi-tenancy) + 6 PostgreSQL. Total FASE 24: 46 U3 tests + 39 U2 + 32 U1 + 50 frontend = 167 billing tests
 - **Quality gates**: Pint clean, vue-tsc 0 errors, vite build ok, 46/46 U3 tests pass, 252/252 billing tests total
 - ADR-094 registrado
+
+### U4 — Billing Frontend Provider UX
+- **Estado**: COMPLETADA
+- **Scope**: Frontend provider UX adaptation for Stripe real flow. NO new webhook handlers, NO new DDL, NO invoice table, NO notifications, NO refunds, NO tax, NO Stripe.js, NO PaymentIntent, NO SetupIntent, NO UsageGuard, NO quota enforcement, NO FASE 25, NO push.
+- **Modified files**:
+  - `app/Http/Resources/SubscriptionResource.php` — +cancel_at_period_end (exposes existing model field)
+  - `resources/js/features/billing/billingTypes.ts` — +SubscriptionStatus type alias, +past_due to union, +cancel_at_period_end to Subscription
+  - `resources/js/features/billing/billingUtils.ts` — +past_due label/color (Pago vencido, red)
+  - `resources/js/Pages/Settings/Billing.vue` — checkout return feedback, cancel_at_period_end display, actionError top-level, hasActiveSubscription !== 'cancelled'
+  - `resources/js/features/billing/billingUtils.test.ts` — +past_due label/color tests
+  - `resources/js/Pages/Settings/billingDashboard.test.ts` — full rewrite: 52 tests (BILL-FE-U4-08..50)
+- **Design decisions** (see ADR-095):
+  - Checkout → redirect to Stripe (frontend only receives URL, no confirmation)
+  - Return URL = feedback only (NO subscription mutation)
+  - hasActiveSubscription = status !== 'cancelled' (pending/past_due show details)
+  - cancel_at_period_end displayed with period-end message
+  - Portal errors at top level (actionError)
+  - Backend minimal: only SubscriptionResource exposes existing field
+- **Tests**: 52 frontend Vitest (BILL-FE-U4-08..50) + 252 backend billing = 304 billing total
+- **Quality gates**: 532/532 frontend tests pass, vue-tsc 0 errors, vite build ok, Pint clean, 252/252 backend billing tests pass
+- ADR-095 registrado

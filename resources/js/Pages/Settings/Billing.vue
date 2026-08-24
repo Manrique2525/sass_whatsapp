@@ -121,7 +121,7 @@ const goToHistoryPage = (target: number): void => {
   loadHistory(target);
 };
 
-const hasActiveSubscription = computed(() => subscription.value?.status === 'active');
+const hasActiveSubscription = computed(() => subscription.value !== null && subscription.value.status !== 'cancelled');
 
 const isPaidPlan = (plan: Plan): boolean => {
   return plan.price_monthly !== null && plan.price_monthly !== 0;
@@ -236,10 +236,10 @@ onMounted(() => {
   const checkoutStatus = urlParams.get('checkout');
 
   if (checkoutStatus === 'success') {
-    actionSuccess.value = 'Pago iniciado correctamente. Tu plan se activará cuando Stripe confirme el pago (normalmente en unos segundos).';
+    actionSuccess.value = 'El pago fue enviado para confirmación. Estamos actualizando el estado de tu suscripción.';
     window.history.replaceState({}, '', window.location.pathname);
   } else if (checkoutStatus === 'cancelled') {
-    actionSuccess.value = 'El pago no se completó. Puedes intentar de nuevo cuando quieras.';
+    actionSuccess.value = 'El proceso de pago fue cancelado.';
     window.history.replaceState({}, '', window.location.pathname);
   }
 
@@ -271,6 +271,10 @@ onMounted(() => {
 
       <div v-if="actionSuccess" class="rounded-md bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
         {{ actionSuccess }}
+      </div>
+
+      <div v-if="actionError && !showPlanDialog && !showCancelDialog" class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
+        {{ actionError }}
       </div>
 
       <div v-if="!canView" class="rounded-xl border border-zinc-200 bg-white p-8 text-sm text-zinc-500 shadow-sm">
@@ -320,6 +324,9 @@ onMounted(() => {
                   </span>
                   <span class="text-xs text-zinc-400">{{ subscription.plan.slug }}</span>
                 </div>
+                <p v-if="subscription.cancel_at_period_end" class="mt-2 text-xs text-amber-600">
+                  Tu suscripción seguirá activa hasta el final del período actual.
+                </p>
                 <p v-if="subscription.current_period_start && subscription.current_period_end" class="mt-2 text-xs text-zinc-400">
                   Periodo: {{ formatDate(subscription.current_period_start) }} — {{ formatDate(subscription.current_period_end) }}
                 </p>

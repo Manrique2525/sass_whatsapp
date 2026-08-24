@@ -888,3 +888,29 @@ Stripe webhook tests (FASE 24 U3):
 | **Total U3 (SQLite)** | **46** |
 | **Total FASE 24 (U1+U2+U3)** | **124** |
 | **Total FASE 23+24 (U1+U2+U3+U4+U1+U2+U3)** | **277** |
+
+## 17. FASE 24 — Billing Frontend Provider UX Test Suite (U4)
+
+Billing frontend provider UX tests (FASE 24 U4 — Vitest, jsdom):
+
+| Category | Tests |
+|---|---|
+| Page renders (BILL-FE-U4-08) | 1 (renders Billing heading) |
+| Fetch plans/subscription/usage (BILL-FE-U4-09..12) | 6 (calls plans API, calls subscriptions API, shows current plan, calls usage API, calls usage history API, shows history table) |
+| Owner manage / admin read-only / agent denied (BILL-FE-U4-13..15) | 4 (shows select plan button for owner, shows cancel link for owner, hides manage buttons for admin, hides content for agent) |
+| Paid plan dialog / free plan dialog (BILL-FE-U4-16..16b) | 2 (Ir a pagar for paid, Confirmar for free) |
+| Cancel dialog / double-submit (BILL-FE-U4-17..18b) | 3 (cancel confirmation, checkout button not disabled initially, cancel button not disabled initially) |
+| Loading / error / empty states (BILL-FE-U4-19..21) | 5 (loading state, error message on API failure, empty subscription, empty plans, empty usage history) |
+| Unlimited / NaN safety (BILL-FE-U4-22..23) | 2 (∞ for null limits, no NaN in rendered text) |
+| Tenant switch / security (BILL-FE-U4-24..27) | 4 (API calls use current tenant, changePlan sends only plan_id, no v-html, prices from API not template) |
+| Checkout redirect (BILL-FE-U4-28) | 1 (paid plan triggers checkout API call) |
+| Free plan assigns locally (BILL-FE-U4-29) | 1 (free plan uses local assign API) |
+| Checkout return feedback (BILL-FE-U4-30..32) | 3 (success message on checkout=success, cancelled message on checkout=cancelled, success does not set active) |
+| Portal redirect / error / admin rejected (BILL-FE-U4-33..35) | 3 (portal button calls API, admin does not see portal button, portal error handling) |
+| Cancel at period end (BILL-FE-U4-36) | 1 (shows period end message when cancel_at_period_end is true) |
+| Status labels (BILL-FE-U4-37) | 3 (Active, PastDue, Cancelled status labels) |
+| Security: no provider data leaks (BILL-FE-U4-38..44) | 7 (no stripe_price_id in types, no customer ID in page, no Stripe secret in page, no subscription status mutation, no raw provider errors, safe URL validation, XSS-safe rendering) |
+| billingApi functions (BILL-FE-U4-45..47) | 3 (createCheckoutSession payload, createPortalSession request, cancelSubscription DELETE) |
+| Tenant switch / XSS / interval (BILL-FE-U4-48..50) | 3 (tenant switch clears state, no eval/innerHTML, interval pricing visible) |
+| **Total U4** | **52** |
+| **Total FASE 23+24 (U1+U2+U3+U4+U1+U2+U3+U4)** | **329** |

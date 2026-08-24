@@ -638,3 +638,26 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
         BILL-U3-SEC-01..06, BILL-U3-SYNC-01..10, BILL-U3-MT-01..06.
         PostgreSQL tests: BILL-U3-PG-01..06 (not runnable locally).
         Total U3: 46 tests.
+- [x] (FASE 24 U4) Billing Frontend Provider UX:
+        Frontend-only changes. Backend change: SubscriptionResource exposes cancel_at_period_end
+        (existing model field, not new DDL). No new webhook handlers, no new tables, no notifications,
+        no refunds, no UsageGuard, no Stripe.js, no PaymentIntent, no SetupIntent.
+        Checkout flow: frontend calls API → receives checkout_url → redirects to Stripe.
+        Return URL feedback: ?checkout=success → "pago enviado para confirmación" (NOT active),
+        ?checkout=cancelled → informational message. NO local subscription mutation on return.
+        Customer Portal: API returns portal_url → redirect to Stripe Portal.
+        Portal errors displayed at top level (actionError ref).
+        hasActiveSubscription: status !== 'cancelled' (pending/past_due show subscription details).
+        cancel_at_period_end displayed with period-end message.
+        Provider-aware status labels: pending (Procesando), past_due (Pago vencido), active
+        (Activo), cancelled (Cancelado). All Spanish labels. Colors: amber, red, green, gray.
+        checkout payload: only plan_id sent. No tenant_id, no price_id, no amount from client.
+        No hardcoded prices. No v-html. No Stripe secrets in page props.
+        XSS-safe: no script injection, no dangerous rendering.
+        Tests BILL-FE-U4-08..50 (52 tests): page renders, API calls, checkout redirect, portal,
+        return URL feedback, cancel_at_period_end, status labels, loading/error/empty states,
+        security (no tenant_id in payload, no v-html, no hardcoded prices, no secrets),
+        double-submit prevention, tenant switch cleanup, XSS-safe, interval pricing.
+        billingApi tests: createCheckoutSession, createPortalSession, cancelSubscription.
+        billingUtils tests: past_due label/color, all status labels, formatCurrency safety.
+        Total U4: 52 frontend tests. Total FASE 24: 46 U3 + 39 U2 + 32 U1 + 52 U4 = 169 tests.

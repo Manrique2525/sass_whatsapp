@@ -2783,3 +2783,30 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Tenant resolution server-side → no se confía en metadata del cliente.
   - Response 200 siempre para válidos → Stripe no reintenta infinitamente.
   - Duplicados → idempotente via UNIQUE constraint.
+
+## ADR-095 · Billing Frontend Provider UX (FASE 24 U4)
+
+- **Estado**: Aceptado · FASE 24 U4
+- **Contexto**: U2 implementó checkout + portal funcionales pero el frontend trataba todo como
+  sistema propio (botón "Confirmar", status simple, sin flujos de retorno de Stripe). Con U3
+  confirmando pagos vía webhooks, el frontend debe reflejar el flujo real: redirección a Stripe
+  Checkout, Customer Portal, estados `pending`/`past_due`, y feedback post-checkout.
+- **Decisión**:
+  - **Checkout → redirect**: plan de pago abre sesión Checkout vía API → redirección a
+    `checkout_url` de Stripe. El frontend NO confirma el pago; solo feedback post-retorno.
+  - **Customer Portal**: botón "Gestionar facturación" llama a API → redirección a Stripe Portal.
+  - **Return URL feedback**: `?checkout=success` → mensaje "pago enviado para confirmación"
+    (NO "suscripción activada"). `?checkout=cancelled` → mensaje informativo. Sin mutación local.
+  - **Provider-aware status**: `billingUtils` soporta `pending`, `past_due`, `cancelled` con
+    labels y colores en español. `hasActiveSubscription` = status ≠ `cancelled` (pending y
+    past_due muestran detalles de suscripción, no "sin suscripción").
+  - **Cancel at period end**: `cancel_at_period_end` expuesto en SubscriptionResource + UI
+    muestra "Se cancela al final del periodo".
+  - **Top-level error display**: errores de portal/checkout visibles sin scroll.
+  - **Backend mínimo**: solo `SubscriptionResource` modificado (+`cancel_at_period_end`).
+    Sin webhooks nuevos, sin tablas nuevas, sin notifications, sin UsageGuard.
+- **Consecuencias**:
+  - El frontend refleja fielmente el flujo Stripe (redirect → webhook confirmation).
+  - El usuario entiende que el pago está "en proceso" tras volver de Stripe.
+  - `past_due` visible permite que el usuario tome acción antes de suspensión.
+  - El sistema mantiene la separación: frontend = UX, backend = autoridad via webhooks.

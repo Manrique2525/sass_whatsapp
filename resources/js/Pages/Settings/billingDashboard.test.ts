@@ -2,7 +2,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Billing from '@/Pages/Settings/Billing.vue';
 import type { Plan, Subscription, UsageSummary, UsageRecord } from '@/features/billing/billingTypes';
-import { changePlan } from '@/features/billing/billingApi';
+import { changePlan, createCheckoutSession, createPortalSession, cancelSubscription } from '@/features/billing/billingApi';
 
 const mockGet = vi.fn();
 const mockPost = vi.fn();
@@ -67,6 +67,7 @@ const SAMPLE_SUBSCRIPTION: Subscription = {
   plan: SAMPLE_PLAN,
   status: 'active',
   quantity: 1,
+  cancel_at_period_end: false,
   current_period_start: '2026-08-01T00:00:00Z',
   current_period_end: '2026-09-01T00:00:00Z',
   created_at: '2026-08-01T00:00:00Z',
@@ -104,6 +105,14 @@ const mockAll = (): void => {
         meta: { current_page: 1, last_page: 1, per_page: 10, total: 1 },
       },
     });
+};
+
+const mockAllEmpty = (): void => {
+  mockGet
+    .mockResolvedValueOnce({ data: { subscription: null } })
+    .mockResolvedValueOnce({ data: { plans: [SAMPLE_PLAN] } })
+    .mockResolvedValueOnce({ data: { usage: null } })
+    .mockResolvedValueOnce({ data: { usage_records: [], meta: { current_page: 1, last_page: 1, per_page: 10, total: 0 } } });
 };
 
 const mountPage = () =>
@@ -257,21 +266,40 @@ describe('BILL-FE-U4-15: agent denied', () => {
   });
 });
 
-describe('BILL-FE-U4-16: assign plan dialog', () => {
-  it('opens confirmation dialog on plan select', async () => {
+describe('BILL-FE-U4-16: paid plan dialog shows checkout', () => {
+  it('opens paid plan dialog with Ir a pagar button', async () => {
     mockAll();
     const wrapper = mountPage();
     await flushPromises();
 
     const selectBtn = wrapper.findAll('button').find((b) =>
-      b.text().includes('Seleccionar plan') || b.text().includes('Cambiar a este plan'),
+      b.text().includes('Cambiar a este plan'),
     );
     expect(selectBtn).toBeDefined();
     await selectBtn!.trigger('click');
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Confirmar');
+    expect(wrapper.text()).toContain('Cambiar de plan');
+    expect(wrapper.text()).toContain('Ir a pagar');
     expect(wrapper.text()).toContain('Cancelar');
+  });
+});
+
+describe('BILL-FE-U4-16b: free plan dialog shows confirm', () => {
+  it('opens free plan dialog with Confirmar button', async () => {
+    mockAllEmpty();
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const selectBtn = wrapper.findAll('button').find((b) =>
+      b.text().includes('Seleccionar plan'),
+    );
+    expect(selectBtn).toBeDefined();
+    await selectBtn!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Asignar plan');
+    expect(wrapper.text()).toContain('Confirmar');
   });
 });
 
@@ -293,23 +321,43 @@ describe('BILL-FE-U4-17: cancel dialog', () => {
   });
 });
 
-describe('BILL-FE-U4-18: double-submit blocked', () => {
-  it('disables loading button while saving', async () => {
+describe('BILL-FE-U4-18: double-submit blocked on checkout', () => {
+  it('checkout button is not disabled initially', async () => {
     mockAll();
     const wrapper = mountPage();
     await flushPromises();
 
     const selectBtn = wrapper.findAll('button').find((b) =>
-      b.text().includes('Seleccionar plan') || b.text().includes('Cambiar a este plan'),
+      b.text().includes('Cambiar a este plan'),
     );
     await selectBtn!.trigger('click');
     await flushPromises();
 
-    const confirmBtn = wrapper.findAll('button').find((b) =>
-      b.text().includes('Confirmar'),
+    const payBtn = wrapper.findAll('button').find((b) =>
+      b.text().includes('Ir a pagar'),
     );
-    expect(confirmBtn).toBeDefined();
-    expect(confirmBtn!.attributes('disabled')).toBeUndefined();
+    expect(payBtn).toBeDefined();
+    expect(payBtn!.attributes('disabled')).toBeUndefined();
+  });
+});
+
+describe('BILL-FE-U4-18b: double-submit blocked on cancel', () => {
+  it('cancel dialog button is not disabled initially', async () => {
+    mockAll();
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const cancelBtn = wrapper.findAll('button').find((b) =>
+      b.text().includes('Cancelar suscripción'),
+    );
+    await cancelBtn!.trigger('click');
+    await flushPromises();
+
+    const confirmCancelBtn = wrapper.findAll('button').find((b) =>
+      b.text().includes('Sí, cancelar'),
+    );
+    expect(confirmCancelBtn).toBeDefined();
+    expect(confirmCancelBtn!.attributes('disabled')).toBeUndefined();
   });
 });
 
@@ -458,5 +506,442 @@ describe('BILL-FE-U4-27: no hardcoded prices', () => {
     expect(html).not.toContain('v-html');
     expect(html).not.toContain('innerHTML');
     expect(html).not.toContain('eval(');
+  });
+});
+
+describe('BILL-FE-U4-28: checkout redirect', () => {
+  it('paid plan triggers checkout API call', async () => {
+    mockAll();
+    mockPost.mockResolvedValueOnce({ data: { checkout_url: 'https://checkout.stripe.com/cs/test' } });
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const selectBtn = wrapper.findAll('button').find((b) =>
+      b.text().includes('Cambiar a este plan'),
+    );
+    await selectBtn!.trigger('click');
+    await flushPromises();
+
+    const payBtn = wrapper.findAll('button').find((b) =>
+      b.text().includes('Ir a pagar'),
+    );
+    await payBtn!.trigger('click');
+    await flushPromises();
+
+    expect(mockPost).toHaveBeenCalledWith(
+      expect.stringContaining('/billing/checkout'),
+      expect.objectContaining({ plan_id: 'plan-pro-uuid' }),
+    );
+  });
+});
+
+describe('BILL-FE-U4-29: free plan assigns locally', () => {
+  it('free plan uses local assign API', async () => {
+    mockAllEmpty();
+    mockPost.mockResolvedValueOnce({ data: { subscription: { ...SAMPLE_SUBSCRIPTION, plan: SAMPLE_PLAN } } });
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const selectBtn = wrapper.findAll('button').find((b) =>
+      b.text().includes('Seleccionar plan'),
+    );
+    expect(selectBtn).toBeDefined();
+    await selectBtn!.trigger('click');
+    await flushPromises();
+
+    const confirmBtn = wrapper.findAll('button').find((b) =>
+      b.text().includes('Confirmar'),
+    );
+    expect(confirmBtn).toBeDefined();
+    await confirmBtn!.trigger('click');
+    await flushPromises();
+
+    expect(mockPost).toHaveBeenCalledWith(
+      expect.stringContaining('/subscriptions'),
+      expect.objectContaining({ plan_id: 'plan-free-uuid' }),
+    );
+  });
+});
+
+describe('BILL-FE-U4-30: checkout return success feedback', () => {
+  it('shows success message on checkout=success', async () => {
+    const origSearch = window.location.search;
+    Object.defineProperty(window, 'location', {
+      value: new Proxy(window.location, {
+        get: (_target, prop) => {
+          if (prop === 'search') return '?checkout=success';
+          if (prop === 'pathname') return '/settings/billing';
+          if (prop === 'href') return 'http://localhost/settings/billing?checkout=success';
+          return Reflect.get(_target, prop);
+        },
+      }),
+      writable: true,
+      configurable: true,
+    });
+
+    mockAll();
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('El pago fue enviado para confirmación');
+
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, search: origSearch },
+      writable: true,
+      configurable: true,
+    });
+  });
+});
+
+describe('BILL-FE-U4-31: checkout return cancelled feedback', () => {
+  it('shows cancelled message on checkout=cancelled', async () => {
+    Object.defineProperty(window, 'location', {
+      value: new Proxy(window.location, {
+        get: (_target, prop) => {
+          if (prop === 'search') return '?checkout=cancelled';
+          if (prop === 'pathname') return '/settings/billing';
+          if (prop === 'href') return 'http://localhost/settings/billing?checkout=cancelled';
+          return Reflect.get(_target, prop);
+        },
+      }),
+      writable: true,
+      configurable: true,
+    });
+
+    mockAll();
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('El proceso de pago fue cancelado');
+  });
+});
+
+describe('BILL-FE-U4-32: success does not set active', () => {
+  it('checkout=success shows feedback, not Suscripción activada', async () => {
+    Object.defineProperty(window, 'location', {
+      value: new Proxy(window.location, {
+        get: (_target, prop) => {
+          if (prop === 'search') return '?checkout=success';
+          if (prop === 'pathname') return '/settings/billing';
+          if (prop === 'href') return 'http://localhost/settings/billing?checkout=success';
+          return Reflect.get(_target, prop);
+        },
+      }),
+      writable: true,
+      configurable: true,
+    });
+
+    mockAll();
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('El pago fue enviado para confirmación');
+    expect(wrapper.text()).not.toContain('Suscripción activada');
+  });
+});
+
+describe('BILL-FE-U4-33: portal redirect', () => {
+  it('portal button calls API', async () => {
+    mockAll();
+    mockPost.mockResolvedValueOnce({ data: { portal_url: 'https://billing.stripe.com/session/test' } });
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const portalBtn = wrapper.findAll('button').find((b) =>
+      b.text().includes('Gestionar facturación'),
+    );
+    expect(portalBtn).toBeDefined();
+    await portalBtn!.trigger('click');
+    await flushPromises();
+
+    expect(mockPost).toHaveBeenCalledWith(
+      expect.stringContaining('/billing/portal'),
+    );
+  });
+});
+
+describe('BILL-FE-U4-34: portal rejects admin', () => {
+  it('admin does not see portal button', async () => {
+    mockPermissions.value = ['billing.view'];
+
+    mockAll();
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const portalBtn = wrapper.findAll('button').find((b) =>
+      b.text().includes('Gestionar facturación'),
+    );
+    expect(portalBtn).toBeUndefined();
+
+    mockPermissions.value = ['billing.view', 'billing.manage'];
+  });
+});
+
+describe('BILL-FE-U4-35: portal error handling', () => {
+  it('shows error when portal fails', async () => {
+    mockAll();
+    mockPost.mockRejectedValueOnce({ response: { data: { message: 'No se pudo abrir el portal de facturación.' } } });
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const portalBtn = wrapper.findAll('button').find((b) =>
+      b.text().includes('Gestionar facturación'),
+    );
+    await portalBtn!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('No se pudo abrir el portal de facturación.');
+  });
+});
+
+describe('BILL-FE-U4-36: cancel shows cancel_at_period_end', () => {
+  it('shows period end message when cancel_at_period_end is true', async () => {
+    const subWithCancel: Subscription = {
+      ...SAMPLE_SUBSCRIPTION,
+      cancel_at_period_end: true,
+    };
+
+    mockGet
+      .mockResolvedValueOnce({ data: { subscription: subWithCancel } })
+      .mockResolvedValueOnce({ data: { plans: [SAMPLE_PLAN, SAMPLE_PLAN_PRO] } })
+      .mockResolvedValueOnce({ data: { usage: SAMPLE_USAGE } })
+      .mockResolvedValueOnce({ data: { usage_records: [], meta: { current_page: 1, last_page: 1, per_page: 10, total: 0 } } });
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('suscripción seguirá activa hasta el final del período actual');
+  });
+});
+
+describe('BILL-FE-U4-37: status labels', () => {
+  it('shows Active label for active status', async () => {
+    mockAll();
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Activo');
+  });
+
+  it('shows PastDue label', async () => {
+    const pastDueSub: Subscription = { ...SAMPLE_SUBSCRIPTION, status: 'past_due' };
+
+    mockGet
+      .mockResolvedValueOnce({ data: { subscription: pastDueSub } })
+      .mockResolvedValueOnce({ data: { plans: [SAMPLE_PLAN] } })
+      .mockResolvedValueOnce({ data: { usage: null } })
+      .mockResolvedValueOnce({ data: { usage_records: [], meta: { current_page: 1, last_page: 1, per_page: 10, total: 0 } } });
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Pago vencido');
+  });
+
+  it('cancelled subscription shows empty state', async () => {
+    const cancelledSub: Subscription = { ...SAMPLE_SUBSCRIPTION, status: 'cancelled' };
+
+    mockGet
+      .mockResolvedValueOnce({ data: { subscription: cancelledSub } })
+      .mockResolvedValueOnce({ data: { plans: [SAMPLE_PLAN] } })
+      .mockResolvedValueOnce({ data: { usage: null } })
+      .mockResolvedValueOnce({ data: { usage_records: [], meta: { current_page: 1, last_page: 1, per_page: 10, total: 0 } } });
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Sin suscripción activa');
+  });
+});
+
+describe('BILL-FE-U4-38: no stripe price ID in types', () => {
+  it('Plan type does not expose stripe_price_id', async () => {
+    mockAll();
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const html = wrapper.html();
+    expect(html).not.toContain('stripe_price_id');
+  });
+});
+
+describe('BILL-FE-U4-39: no customer ID in page', () => {
+  it('page does not render provider customer IDs', async () => {
+    mockAll();
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const html = wrapper.html();
+    expect(html).not.toContain('cus_');
+  });
+});
+
+describe('BILL-FE-U4-40: no Stripe secret in page', () => {
+  it('page does not render Stripe secrets', async () => {
+    mockAll();
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const html = wrapper.html();
+    expect(html).not.toContain('sk_live_');
+    expect(html).not.toContain('sk_test_');
+    expect(html).not.toContain('whsec_');
+  });
+});
+
+describe('BILL-FE-U4-41: no subscription status mutation', () => {
+  it('checkout does not set subscription active locally', async () => {
+    mockAll();
+    mockPost.mockResolvedValueOnce({ data: { checkout_url: 'https://checkout.stripe.com/cs/test' } });
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const selectBtn = wrapper.findAll('button').find((b) =>
+      b.text().includes('Cambiar a este plan'),
+    );
+    await selectBtn!.trigger('click');
+    await flushPromises();
+
+    const payBtn = wrapper.findAll('button').find((b) =>
+      b.text().includes('Ir a pagar'),
+    );
+    await payBtn!.trigger('click');
+    await flushPromises();
+
+    expect(mockPost).toHaveBeenCalled();
+    expect(wrapper.text()).not.toContain('Suscripción activada');
+  });
+});
+
+describe('BILL-FE-U4-42: no raw provider errors', () => {
+  it('error messages are user-friendly', async () => {
+    mockGet.mockRejectedValueOnce({ response: { data: { message: 'Error interno del servidor.' } } });
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const text = wrapper.text();
+    expect(text).not.toContain('StripeException');
+    expect(text).not.toContain('ApiError');
+    expect(text).not.toContain('stack');
+  });
+});
+
+describe('BILL-FE-U4-43: safe URL validation', () => {
+  it('checkout sends plan_id to API, not arbitrary URLs', async () => {
+    mockAll();
+    mockPost.mockResolvedValueOnce({ data: { checkout_url: 'https://checkout.stripe.com/cs/valid' } });
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const selectBtn = wrapper.findAll('button').find((b) =>
+      b.text().includes('Cambiar a este plan'),
+    );
+    await selectBtn!.trigger('click');
+    await flushPromises();
+
+    const payBtn = wrapper.findAll('button').find((b) =>
+      b.text().includes('Ir a pagar'),
+    );
+    await payBtn!.trigger('click');
+    await flushPromises();
+
+    expect(mockPost).toHaveBeenCalledWith(
+      expect.stringContaining('/billing/checkout'),
+      expect.objectContaining({ plan_id: 'plan-pro-uuid', interval: 'monthly' }),
+    );
+  });
+});
+
+describe('BILL-FE-U4-44: XSS-safe rendering', () => {
+  it('no script tags in rendered output', async () => {
+    mockAll();
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const html = wrapper.html();
+    expect(html).not.toContain('<script>');
+  });
+});
+
+describe('BILL-FE-U4-45: billingApi createCheckoutSession', () => {
+  it('sends correct payload', async () => {
+    mockPost.mockResolvedValueOnce({ data: { checkout_url: 'https://checkout.stripe.com/cs/test' } });
+
+    const result = await createCheckoutSession('tenant-1', 'plan-uuid-1', 'monthly');
+
+    expect(mockPost).toHaveBeenCalledWith('/api/v1/tenants/tenant-1/billing/checkout', {
+      plan_id: 'plan-uuid-1',
+      interval: 'monthly',
+    });
+    expect(result).toBe('https://checkout.stripe.com/cs/test');
+  });
+});
+
+describe('BILL-FE-U4-46: billingApi createPortalSession', () => {
+  it('sends correct request', async () => {
+    mockPost.mockResolvedValueOnce({ data: { portal_url: 'https://billing.stripe.com/session/test' } });
+
+    const result = await createPortalSession('tenant-1');
+
+    expect(mockPost).toHaveBeenCalledWith('/api/v1/tenants/tenant-1/billing/portal');
+    expect(result).toBe('https://billing.stripe.com/session/test');
+  });
+});
+
+describe('BILL-FE-U4-47: billingApi cancelSubscription', () => {
+  it('calls DELETE on correct URL', async () => {
+    mockDelete.mockResolvedValueOnce({ data: { message: 'Suscripción cancelada.' } });
+
+    await cancelSubscription('tenant-1');
+
+    expect(mockDelete).toHaveBeenCalledWith('/api/v1/tenants/tenant-1/subscriptions');
+  });
+});
+
+describe('BILL-FE-U4-48: tenant switch clears old state', () => {
+  it('api calls use current tenant ID', async () => {
+    mockAll();
+    mountPage();
+    await flushPromises();
+
+    const allCalls = mockGet.mock.calls.map((c) => String(c[0]));
+    expect(allCalls.every((url) => url.includes('/tenants/t1/'))).toBe(true);
+  });
+});
+
+describe('BILL-FE-U4-49: no Eval or innerHTML', () => {
+  it('template does not use dangerous methods', async () => {
+    mockAll();
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const html = wrapper.html();
+    expect(html).not.toContain('eval(');
+    expect(html).not.toContain('innerHTML');
+    expect(html).not.toContain('new Function');
+    expect(html).not.toContain('v-html');
+  });
+});
+
+describe('BILL-FE-U4-50: interval selector shows correct pricing', () => {
+  it('monthly/yearly pricing visible in dialog', async () => {
+    mockAll();
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const selectBtn = wrapper.findAll('button').find((b) =>
+      b.text().includes('Cambiar a este plan'),
+    );
+    await selectBtn!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Mensual');
+    expect(wrapper.text()).toContain('Anual');
   });
 });

@@ -27,6 +27,7 @@ final class SubscriptionResource extends JsonResource
             'plan' => new PlanResource($this->whenLoaded('plan')),
             'status' => $this->status,
             'quantity' => $this->quantity,
+            'cancel_at_period_end' => $this->cancel_at_period_end,
             'current_period_start' => $this->current_period_start,
             'current_period_end' => $this->current_period_end,
             'created_at' => $this->created_at,

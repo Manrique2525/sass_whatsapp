@@ -37,11 +37,14 @@ export interface SubscriptionPlan {
   updated_at: string;
 }
 
+export type SubscriptionStatus = 'active' | 'cancelled' | 'pending' | 'past_due';
+
 export interface Subscription {
   id: string;
   plan: SubscriptionPlan;
-  status: 'active' | 'cancelled' | 'pending';
+  status: SubscriptionStatus | string;
   quantity: number;
+  cancel_at_period_end: boolean;
   current_period_start: string | null;
   current_period_end: string | null;
   created_at: string;
