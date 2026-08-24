@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 U1+U2+U3+U4 COMPLETADA**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA**.
 
 ## Fases
 
@@ -30,7 +30,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 U1+U2+U3+U4 COMPLETADA**.
 | 21 | Analytics | COMPLETADA |
 | 22 | Notificaciones (U1: Data Model, U2: Event Listeners, U3: Notification API, U4: Email Preferences, U5: Realtime + Frontend) | COMPLETADA |
 | 23 | Planes (U1: Data Model, U2: Usage Metering, U3: Billing API, U4: Billing Frontend) | COMPLETADA |
-| 24 | Billing (U1: Provider Infrastructure + Mappings, U2: Checkout, U3: Webhooks, U4: Frontend Provider UX) | EN PROGRESO |
+| 24 | Billing (U1: Provider Infrastructure + Mappings, U2: Checkout, U3: Webhooks, U4: Frontend Provider UX, U5: Hardening + Closure) | COMPLETADA |
 | 25 | Usage limits | PENDIENTE |
 | 26 | Auditoría | PENDIENTE |
 | 27 | Seguridad (refuerzo OWASP) | PENDIENTE |
@@ -2440,3 +2440,34 @@ FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COM
 - **Tests**: 52 frontend Vitest (BILL-FE-U4-08..50) + 252 backend billing = 304 billing total
 - **Quality gates**: 532/532 frontend tests pass, vue-tsc 0 errors, vite build ok, Pint clean, 252/252 backend billing tests pass
 - ADR-095 registrado
+
+### U5 — Hardening + Closure
+- **Estado**: COMPLETADA
+- **Scope**: Audit U1–U4, fix P0/P1/P2 findings, run full regression, close FASE 24. NO new features, NO new endpoints, NO new tests (unless fixing existing), NO FASE 25.
+- **Audit results**:
+  - **P0: NONE** — all critical invariants hold (REDIRECT ≠ CONFIRMATION, PlanResource does NOT expose stripe_price_id, P0-ordered webhook idempotency, tenant isolation)
+  - **P1: 5** — all fixed
+  - **P2: 4** — all fixed (small, clear, within scope)
+  - **P3: 11+** — documented, not blocking closure
+- **P1 fixes**:
+  - P1-01: `StripeWebhookService.recordEvent()` — QueryException catch now checks SQLSTATE 23505/23000 (PostgreSQL/SQLite) before treating as duplicate; other DB errors rethrow (was: any QueryException → lost event)
+  - P1-02: `StripeWebhookService.handle()` — transient exceptions (QueryException excluding unique violations, deadlock, connection) rethrow for Stripe 500→retry; only permanent errors (incl. unique violations) return 200
+  - P1-03: `StripeWebhookService.isNewerEvent()` — strict `>` only, no same-second tie (was: tie allowed → stale events could resurrect cancelled subscriptions)
+  - P1-04: `Billing.vue` — cancel flow refetches subscription from API instead of setting `subscription.value = null` locally (was: null mutation made cancel_at_period_end banner unreachable)
+  - P1-05: `billingUtils.ts` — pending label changed from 'Pendiente de pago' to 'Procesando' per U4 spec
+- **P2 fixes**:
+  - P2-01: `CheckoutService` + `StripeProvider` — idempotency keys added to createCheckoutSession (`checkout:{tenant}:{plan}:{interval}`) and createPortalSession (`portal:{tenant}:{timestamp}`)
+  - P2-02: `Billing.vue` — `isSafeRedirectUrl()` validates `https:` protocol before redirect
+  - P2-03: `Billing.vue` — tenant switch watch clears dialog state (showPlanDialog, showCancelDialog, selectedPlan, actionError)
+  - P2-04: `Billing.vue` — `loadHistory` catch resets `historyMeta` to default pagination state
+- **Modified files**:
+  - `app/Application/Billing/Services/StripeWebhookService.php` — P1-01, P1-02, P1-03
+  - `app/Application/Billing/Services/CheckoutService.php` — P2-01 (idempotency keys)
+  - `app/Infrastructure/Billing/StripeProvider.php` — P2-01 (idempotency key passthrough)
+  - `resources/js/Pages/Settings/Billing.vue` — P1-04, P2-02, P2-03, P2-04
+  - `resources/js/features/billing/billingUtils.ts` — P1-05
+  - `resources/js/features/billing/billingUtils.test.ts` — P1-05 test update
+- **Tests**: No new tests. Existing 252/252 backend billing + 532/532 frontend tests all green after fixes.
+- **Quality gates**: Pint clean, vue-tsc 0 errors, vite build ok, 252/252 backend billing tests pass, 532/532 frontend tests pass
+- **Security scan**: No secrets, no PII, no new attack vectors. Idempotency keys are deterministic but non-sensitive. URL validation prevents open redirect.
+- ADR-096 registered

@@ -93,12 +93,15 @@ final class StripeProvider implements BillingProviderInterface
         }
     }
 
+    /**
+     * @param  array{customer: string, price: string, quantity: int, success_url: string, cancel_url: string, idempotency_key?: string, metadata?: array<string, string>}  $params
+     */
     public function createCheckoutSession(array $params): CheckoutSessionData
     {
         $this->assertConfigured();
 
         try {
-            $session = CheckoutSession::create([
+            $createParams = [
                 'mode' => 'subscription',
                 'customer' => $params['customer'],
                 'line_items' => [
@@ -110,7 +113,10 @@ final class StripeProvider implements BillingProviderInterface
                 'success_url' => $params['success_url'],
                 'cancel_url' => $params['cancel_url'],
                 'metadata' => $params['metadata'] ?? [],
-            ]);
+            ];
+
+            $idempotencyKey = $params['idempotency_key'] ?? null;
+            $session = CheckoutSession::create($createParams, $idempotencyKey !== null ? ['idempotency_key' => $idempotencyKey] : []);
 
             return CheckoutSessionData::fromProvider([
                 'id' => $session->id,
@@ -121,15 +127,21 @@ final class StripeProvider implements BillingProviderInterface
         }
     }
 
+    /**
+     * @param  array{customer: string, return_url: string, idempotency_key?: string}  $params
+     */
     public function createPortalSession(array $params): PortalSessionData
     {
         $this->assertConfigured();
 
         try {
-            $session = BillingPortal\Session::create([
+            $createParams = [
                 'customer' => $params['customer'],
                 'return_url' => $params['return_url'],
-            ]);
+            ];
+
+            $idempotencyKey = $params['idempotency_key'] ?? null;
+            $session = BillingPortal\Session::create($createParams, $idempotencyKey !== null ? ['idempotency_key' => $idempotencyKey] : []);
 
             return PortalSessionData::fromProvider([
                 'id' => $session->id,

@@ -2809,4 +2809,34 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - El frontend refleja fielmente el flujo Stripe (redirect → webhook confirmation).
   - El usuario entiende que el pago está "en proceso" tras volver de Stripe.
   - `past_due` visible permite que el usuario tome acción antes de suspensión.
-  - El sistema mantiene la separación: frontend = UX, backend = autoridad via webhooks.
+   - El sistema mantiene la separación: frontend = UX, backend = autoridad via webhooks.
+
+## ADR-096 · Webhook Hardening: Transient vs Permanent Error Classification (FASE 24 U5)
+
+- **Estado**: Aceptado · FASE 24 U5
+- **Contexto**: La auditoría de U5 identificó que `StripeWebhookService.handle()` trataba todos los
+  `QueryException` como duplicados (P1-01) o errores permanentes (P1-02), perdiendo eventos que
+  requerían retry por errores transitorios de BD. Además, la clasificación de errores en `handle()`
+  no distinguía entre violaciones UNIQUE (permanent, no-retry) y otros errores de BD (transient, retry).
+- **Decisión**:
+  - **recordEvent()**: QueryException catch ahora verifica SQLSTATE 23505 (PostgreSQL) o 23000
+    (SQLite) + mensaje text (UNIQUE constraint failed, duplicate key value) antes de tratar como
+    duplicado. Otros QueryException rethrow (antes: todos eran treated como duplicados → eventos
+    perdidos).
+  - **handle()**: Clasificación dual:
+    - UNIQUE violations (SQLSTATE 23505/23000 o mensaje UNIQUE) → return 200 (permanent, no retry)
+    - Otros QueryException + deadlock + connection → rethrow 500 (transient, Stripe retry)
+    - Cualquier otro error → return 200 (permanent business error, no retry)
+  - **isNewerEvent()**: Strict `>` solamente, sin tie-break por mismo timestamp (antes: `>=` permitía
+    tie → stale events podían resucitar suscripciones canceladas).
+  - **Idempotency keys**: checkout (`checkout:{tenant}:{plan}:{interval}`) y portal
+    (`portal:{tenant}:{timestamp}`) ahora incluyen idempotency keys para prevenir sesiones
+    duplicadas en Stripe.
+  - **URL validation**: Frontend valida `https:` protocol antes de redirect a Stripe (previene
+    open redirect).
+  - **Dialog state**: Tenant switch limpia estado de diálogos (previene data leakage cross-tenant).
+- **Consecuencias**:
+  - Eventos con errores transitorios de BD son reintentados por Stripe (500 → retry).
+  - Eventos con errores permanentes (UNIQUE, business logic) no generan retries infinitos.
+  - SQLite (tests) y PostgreSQL (producción) ambos soportan la clasificación.
+  - El ordenamiento de eventos es estrictamente monótono (sin ties).

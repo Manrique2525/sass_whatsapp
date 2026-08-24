@@ -123,6 +123,27 @@ final class StripeWebhookService
                 'error' => $e->getMessage(),
             ]);
 
+            // Rethrow transient DB/network errors so Stripe retries (500 → retry).
+            // Only permanent business errors return 200 (no retry needed).
+            // UNIQUE constraint violations (SQLSTATE 23505 / 23000) are permanent — no retry will fix them.
+            $isTransient = false;
+            if ($e instanceof QueryException) {
+                $code = (string) $e->getCode();
+                $isUniqueViolation = $code === '23505'
+                    || $code === '23000'
+                    || str_contains($e->getMessage(), 'UNIQUE constraint failed')
+                    || str_contains($e->getMessage(), 'duplicate key value');
+
+                $isTransient = ! $isUniqueViolation;
+            } else {
+                $isTransient = str_contains($e->getMessage(), 'deadlock')
+                    || str_contains($e->getMessage(), 'connection');
+            }
+
+            if ($isTransient) {
+                throw $e;
+            }
+
             return true;
         } finally {
             if ($previousTenantId !== null) {
@@ -153,8 +174,21 @@ final class StripeWebhookService
                     'billing_customer_id' => null,
                 ]);
             });
-        } catch (QueryException) {
-            // UNIQUE constraint violation — duplicate event
+        } catch (QueryException $e) {
+            // Only treat UNIQUE constraint violations as duplicate events.
+            // PostgreSQL: SQLSTATE 23505 (unique_violation)
+            // SQLite: SQLSTATE 23000 (integrity_constraint_violation) — broader but
+            //   the only unique insert in this codepath is the idempotency ledger.
+            $code = (string) $e->getCode();
+            $isUniqueViolation = $code === '23505'
+                || $code === '23000'
+                || str_contains($e->getMessage(), 'UNIQUE constraint failed')
+                || str_contains($e->getMessage(), 'duplicate key value');
+
+            if (! $isUniqueViolation) {
+                throw $e;
+            }
+
             $existing = BillingWebhookEvent::query()
                 ->where('provider', self::PROVIDER)
                 ->where('provider_event_id', $event->eventId)
@@ -551,16 +585,9 @@ final class StripeWebhookService
         $incomingTs = (int) $event->createdAt;
         $localTs = $sub->provider_updated_at->timestamp;
 
-        if ($incomingTs > $localTs) {
-            return true;
-        }
-
-        if ($incomingTs === $localTs) {
-            // Tie: allow (idempotency will handle same event)
-            return true;
-        }
-
-        return false;
+        // Strict inequality: same-second events are NOT newer (prevents resurrection
+        // of cancelled subscriptions by stale events with identical timestamps).
+        return $incomingTs > $localTs;
     }
 
     /**

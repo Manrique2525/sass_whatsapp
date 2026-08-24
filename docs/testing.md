@@ -914,3 +914,16 @@ Billing frontend provider UX tests (FASE 24 U4 — Vitest, jsdom):
 | Tenant switch / XSS / interval (BILL-FE-U4-48..50) | 3 (tenant switch clears state, no eval/innerHTML, interval pricing visible) |
 | **Total U4** | **52** |
 | **Total FASE 23+24 (U1+U2+U3+U4+U1+U2+U3+U4)** | **329** |
+
+## 18. FASE 24 — Billing Hardening + Closure (U5)
+
+No new tests added. U5 audited U1–U4 and fixed P1/P2 findings in existing code. All existing tests remain green.
+
+| Category | Notes |
+|---|---|
+| Backend billing tests (U1+U2+U3) | 252/252 pass after P1-01 (SQLSTATE), P1-02 (transient rethrow), P1-03 (ordering) fixes |
+| Frontend billing tests (U4) | 52/52 pass after P1-05 (pending label), P2-02 (URL validation), P2-03 (dialog clear), P2-04 (history error) fixes |
+| billingApi tests | 15/15 pass |
+| billingUtils tests | 25/25 pass (updated P1-05 pending label test) |
+| **Total U5** | **No new tests. Existing 252 backend + 532 frontend = all green.** |
+| **Total FASE 23+24** | **329 backend billing + 532 frontend = 861 tests (billing-related subset unchanged)** |

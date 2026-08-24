@@ -20,7 +20,7 @@ export function statusLabel(status: string): string {
     case 'cancelled':
       return 'Cancelado';
     case 'pending':
-      return 'Pendiente de pago';
+      return 'Procesando';
     case 'past_due':
       return 'Pago vencido';
     default:

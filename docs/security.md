@@ -661,3 +661,16 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
         billingApi tests: createCheckoutSession, createPortalSession, cancelSubscription.
         billingUtils tests: past_due label/color, all status labels, formatCurrency safety.
         Total U4: 52 frontend tests. Total FASE 24: 46 U3 + 39 U2 + 32 U1 + 52 U4 = 169 tests.
+- [x] (FASE 24 U5) Billing Hardening + Closure:
+        Full audit of U1–U4. P0: NONE (all critical invariants hold). P1: 5 fixed. P2: 4 fixed.
+        P1-01: recordEvent() SQLSTATE-aware duplicate detection (23505 PostgreSQL, 23000 SQLite).
+        P1-02: handle() transient vs permanent error classification (unique=permanent, others=transient).
+        P1-03: isNewerEvent() strict > only (no same-second tie → prevents stale event resurrection).
+        P1-04: Cancel flow refetches from API instead of null mutation (cancel_at_period_end visible).
+        P1-05: Pending label → 'Procesando' per spec.
+        P2-01: Idempotency keys for checkout + portal sessions.
+        P2-02: isSafeRedirectUrl() validates https: protocol before redirect.
+        P2-03: Tenant switch clears dialog state (no cross-tenant data leakage).
+        P2-04: loadHistory error resets pagination state.
+        No new tests. No new features. No new endpoints. No new DDL.
+        Total FASE 24: 252 backend billing + 532 frontend = all green.

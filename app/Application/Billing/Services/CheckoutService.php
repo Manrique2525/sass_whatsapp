@@ -96,6 +96,7 @@ final class CheckoutService
             'quantity' => 1,
             'success_url' => "{$appUrl}/settings/billing?checkout=success",
             'cancel_url' => "{$appUrl}/settings/billing?checkout=cancelled",
+            'idempotency_key' => "checkout:{$tenant->id}:{$plan->id}:{$parsedInterval->value}",
             'metadata' => [
                 'tenant_id' => $tenant->id,
                 'plan_id' => $plan->id,
@@ -141,6 +142,7 @@ final class CheckoutService
         $portalData = $this->provider->createPortalSession([
             'customer' => $billingCustomer->provider_customer_id,
             'return_url' => "{$appUrl}/settings/billing",
+            'idempotency_key' => "portal:{$tenant->id}:".time(),
         ]);
 
         $this->auditLogger->record(

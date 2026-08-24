@@ -109,6 +109,7 @@ const loadHistory = async (page_num?: number): Promise<void> => {
     historyPage.value = targetPage;
   } catch {
     historyRecords.value = [];
+    historyMeta.value = { current_page: 1, last_page: 1, per_page: 10, total: 0 };
   } finally {
     historyLoading.value = false;
   }
@@ -135,6 +136,15 @@ const openAssignPlan = (plan: Plan): void => {
   showPlanDialog.value = true;
 };
 
+const isSafeRedirectUrl = (url: string): boolean => {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
 const openPortal = async (): Promise<void> => {
   if (!currentTenantId.value) {
     return;
@@ -145,7 +155,12 @@ const openPortal = async (): Promise<void> => {
 
   try {
     const portalUrl = await createPortalSession(currentTenantId.value);
-    window.location.href = portalUrl;
+    if (isSafeRedirectUrl(portalUrl)) {
+      window.location.href = portalUrl;
+    } else {
+      actionError.value = 'URL de portal inválida.';
+      actionLoading.value = false;
+    }
   } catch (err) {
     actionError.value = extractErrorMessage(err, 'No se pudo abrir el portal de facturación.');
     actionLoading.value = false;
@@ -169,7 +184,12 @@ const confirmPlanAction = async (): Promise<void> => {
         selectedInterval.value,
       );
       showPlanDialog.value = false;
-      window.location.href = checkoutUrl;
+      if (isSafeRedirectUrl(checkoutUrl)) {
+        window.location.href = checkoutUrl;
+      } else {
+        actionError.value = 'URL de checkout inválida.';
+        actionLoading.value = false;
+      }
       return;
     }
 
@@ -209,10 +229,17 @@ const confirmCancel = async (): Promise<void> => {
 
   try {
     await cancelSubscription(currentTenantId.value);
-    subscription.value = null;
-    usage.value = null;
-    actionSuccess.value = 'Suscripción cancelada.';
     showCancelDialog.value = false;
+
+    // Refetch subscription to get accurate cancel_at_period_end state from backend.
+    // Do NOT null locally — backend is source of truth (P1-04 hardening).
+    const [sub, usageSummary] = await Promise.all([
+      fetchCurrentSubscription(currentTenantId.value),
+      fetchUsageSummary(currentTenantId.value).catch(() => null),
+    ]);
+    subscription.value = sub;
+    usage.value = usageSummary;
+    actionSuccess.value = 'Suscripción cancelada.';
   } catch (err) {
     actionError.value = extractErrorMessage(err, 'No se pudo cancelar la suscripción.');
   } finally {
@@ -227,6 +254,10 @@ watch(currentTenantId, () => {
   historyRecords.value = [];
   historyPage.value = 1;
   actionSuccess.value = null;
+  actionError.value = null;
+  showPlanDialog.value = false;
+  showCancelDialog.value = false;
+  selectedPlan.value = null;
   actionError.value = null;
   loadAll();
 });

@@ -46,7 +46,7 @@ interface BillingProviderInterface
     /**
      * Crea una Checkout Session hosted en el proveedor.
      *
-     * @param  array{customer: string, price: string, quantity: int, success_url: string, cancel_url: string, metadata?: array<string, string>}  $params
+     * @param  array{customer: string, price: string, quantity: int, success_url: string, cancel_url: string, idempotency_key?: string, metadata?: array<string, string>}  $params
      *
      * @throws BillingProviderException
      */
@@ -55,7 +55,7 @@ interface BillingProviderInterface
     /**
      * Crea una Portal Session para el customer en el proveedor.
      *
-     * @param  array{customer: string, return_url: string}  $params
+     * @param  array{customer: string, return_url: string, idempotency_key?: string}  $params
      *
      * @throws BillingProviderException
      */
