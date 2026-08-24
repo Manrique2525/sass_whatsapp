@@ -31,6 +31,7 @@ use App\Http\Controllers\Api\V1\TriggerController;
 use App\Http\Controllers\Api\V1\UsageController;
 use App\Http\Controllers\Api\V1\WhatsAppController;
 use App\Http\Controllers\Api\Webhooks\FlowWebhookController;
+use App\Http\Controllers\Api\Webhooks\StripeWebhookController;
 use App\Http\Controllers\Api\Webhooks\WhatsAppWebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -41,6 +42,9 @@ Route::post('webhooks/whatsapp', [WhatsAppWebhookController::class, 'handle']);
 
 Route::post('webhooks/flows/{trigger}', [FlowWebhookController::class, 'handle'])
     ->middleware('throttle:flow-webhook');
+
+// Stripe webhook (public, authenticated by Stripe-Signature, no auth/tenant middleware).
+Route::post('webhooks/stripe', [StripeWebhookController::class, 'handle']);
 
 Route::prefix('v1')->group(function (): void {
     Route::post('auth/register', [AuthController::class, 'register'])

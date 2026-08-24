@@ -49,6 +49,7 @@ final class Subscription extends Model
         'current_period_start',
         'current_period_end',
         'metadata',
+        'provider_updated_at',
     ];
 
     protected function casts(): array
@@ -60,6 +61,7 @@ final class Subscription extends Model
             'current_period_start' => 'datetime',
             'current_period_end' => 'datetime',
             'metadata' => 'array',
+            'provider_updated_at' => 'datetime',
         ];
     }
 

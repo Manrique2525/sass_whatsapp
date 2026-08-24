@@ -16,6 +16,7 @@ use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Models\User;
 use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Traits\FakeBillingProviderMethods;
 
 uses(RefreshDatabase::class);
 
@@ -56,6 +57,8 @@ beforeEach(function (): void {
 it('BILL-U2-SVC-01: createCheckoutSession creates billing customer if missing', function (): void {
     $fakeProvider = new class implements BillingProviderInterface
     {
+        use FakeBillingProviderMethods;
+
         public int $customerCount = 0;
 
         public function createCustomer(array $params): BillingCustomerData
@@ -131,6 +134,8 @@ it('BILL-U2-SVC-02: createCheckoutSession reuses existing billing customer', fun
 
     $fakeProvider = new class implements BillingProviderInterface
     {
+        use FakeBillingProviderMethods;
+
         public int $customerCount = 0;
 
         public function createCustomer(array $params): BillingCustomerData
@@ -194,6 +199,8 @@ it('BILL-U2-SVC-02: createCheckoutSession reuses existing billing customer', fun
 it('BILL-U2-SVC-03: createCheckoutSession throws for non-existent plan', function (): void {
     $fakeProvider = new class implements BillingProviderInterface
     {
+        use FakeBillingProviderMethods;
+
         public function createCustomer(array $params): BillingCustomerData
         {
             return BillingCustomerData::fromProvider(['id' => 'cus', 'provider' => 'stripe']);
@@ -240,6 +247,8 @@ it('BILL-U2-SVC-03: createCheckoutSession throws for non-existent plan', functio
 it('BILL-U2-SVC-04: createCheckoutSession throws for free plan', function (): void {
     $fakeProvider = new class implements BillingProviderInterface
     {
+        use FakeBillingProviderMethods;
+
         public function createCustomer(array $params): BillingCustomerData
         {
             return BillingCustomerData::fromProvider(['id' => 'cus', 'provider' => 'stripe']);
@@ -286,6 +295,8 @@ it('BILL-U2-SVC-04: createCheckoutSession throws for free plan', function (): vo
 it('BILL-U2-SVC-05: createCheckoutSession throws for invalid interval', function (): void {
     $fakeProvider = new class implements BillingProviderInterface
     {
+        use FakeBillingProviderMethods;
+
         public function createCustomer(array $params): BillingCustomerData
         {
             return BillingCustomerData::fromProvider(['id' => 'cus', 'provider' => 'stripe']);
@@ -339,6 +350,8 @@ it('BILL-U2-SVC-06: createCheckoutSession throws when no price configured', func
 
     $fakeProvider = new class implements BillingProviderInterface
     {
+        use FakeBillingProviderMethods;
+
         public function createCustomer(array $params): BillingCustomerData
         {
             return BillingCustomerData::fromProvider(['id' => 'cus', 'provider' => 'stripe']);
@@ -388,6 +401,8 @@ it('BILL-U2-SVC-07: createCheckoutSession throws for unauthorized user (agent)',
 
     $fakeProvider = new class implements BillingProviderInterface
     {
+        use FakeBillingProviderMethods;
+
         public function createCustomer(array $params): BillingCustomerData
         {
             return BillingCustomerData::fromProvider(['id' => 'cus', 'provider' => 'stripe']);
@@ -440,6 +455,8 @@ it('BILL-U2-SVC-08: createPortalSession returns portal URL', function (): void {
 
     $fakeProvider = new class implements BillingProviderInterface
     {
+        use FakeBillingProviderMethods;
+
         public function createCustomer(array $params): BillingCustomerData
         {
             return BillingCustomerData::fromProvider(['id' => 'cus', 'provider' => 'stripe']);
@@ -485,6 +502,8 @@ it('BILL-U2-SVC-08: createPortalSession returns portal URL', function (): void {
 it('BILL-U2-SVC-09: createPortalSession throws when no billing customer exists', function (): void {
     $fakeProvider = new class implements BillingProviderInterface
     {
+        use FakeBillingProviderMethods;
+
         public function createCustomer(array $params): BillingCustomerData
         {
             return BillingCustomerData::fromProvider(['id' => 'cus', 'provider' => 'stripe']);
@@ -535,6 +554,8 @@ it('BILL-U2-SVC-10: createPortalSession throws for admin (not owner)', function 
 
     $fakeProvider = new class implements BillingProviderInterface
     {
+        use FakeBillingProviderMethods;
+
         public function createCustomer(array $params): BillingCustomerData
         {
             return BillingCustomerData::fromProvider(['id' => 'cus', 'provider' => 'stripe']);

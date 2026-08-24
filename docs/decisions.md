@@ -2738,3 +2738,48 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Redirección segura contra open redirect.
   - Residual risks documentados: orphan Stripe customers, double-submit race.
   - Patrón consistente con CheckoutService/BillingCustomerService como orquestadores.
+
+## ADR-094 · Stripe Webhook Ingestion + Subscription Sync
+
+- **Estado**: Aceptado · FASE 24 U3
+- **Contexto**: U2 creó Checkout Sessions en Stripe y Customer Portal, pero la activación de
+  suscripciones y la sincronización de estados de pago dependen exclusivamente de webhooks de
+  Stripe. Sin U3, las suscripciones quedan en estado `pending` indefinidamente, y los pagos
+  exitosos/fallidos no se reflejan en el sistema. P0: REDIRECT DE STRIPE ≠ PAYMENT
+  CONFIRMATION — solo webhooks firmados confirman pago/activan suscripción.
+- **Decisión**:
+  - **Webhook endpoint público**: `POST /api/webhooks/stripe` sin auth Bearer, sin middleware
+    tenant, sin CSRF. Firma verificada vía `BillingProviderInterface::constructWebhookEvent()`.
+  - **Firma**: Stripe-Signature header verificada con `stripe/stripe-php` SDK. El SDK verifica
+    la firma ANTES de parsear JSON; payload malformado con firma inválida produce
+    `SignatureVerificationException`, no un error de parseo.
+  - **DTO (no raw Stripe objects)**: `constructWebhookEvent()` retorna `ProviderWebhookEvent` DTO
+    (eventId, type, createdAt, objectId, customerId, data[]). Ningún objeto Stripe escapa a
+    Infrastructure.
+  - **Tenant resolution**: `customer` event → Stripe customer ID →
+    `BillingCustomer.provider_customer_id` → `tenant_id`. NO se confía en `metadata` del payload
+    (unhint no verificado).
+  - **Idempotencia ledger**: tabla `billing_webhook_events` con `UNIQUE(provider, provider_event_id)`.
+    Eventos duplicados se registran como `Processed` sin mutar datos.
+  - **Event ordering**: columna `provider_updated_at` en `subscriptions`. Un evento con
+    `provider_updated_at` ≤ el valor local es descartado como stale. `cancelled` nunca se
+    resucita por un evento stale.
+  - **Señales de activación**: `checkout.session.completed` crea suscripción `pending` (NO activa).
+    `invoice.paid` es la señal autoritativa de activación → `status = active`.
+  - **`customer.subscription.updated`**: sincroniza plan, status, `current_period_start/end`,
+    `cancel_at_period_end` desde Stripe hacia la suscripción local.
+  - **`customer.subscription.deleted`**: actualiza status a `cancelled`.
+  - **`invoice.payment_failed`**: actualiza status a `past_due`.
+  - **No payload raw almacenado**: solo eventId, type, status, timestamps en el ledger.
+  - **Sin PII en logs/auditoría**: el servicio de logging sanitiza datos sensibles.
+  - **Response siempre `{"received": true}`** para eventos válidos; 400 para firma inválida.
+  - **PastDue agregado** a `SubscriptionStatus` enum (active, pending, cancelled, past_due).
+- **Consecuencias**:
+  - Los pagos exitosos se confirman únicamente vía webhook firmado (P0).
+  - El sistema es idempotente ante reenvíos de Stripe.
+  - El ordering previene la activación por eventos stale.
+  - El ledger permite auditoría y debugging de eventos recibidos.
+  - Sin raw payload storage → minimal attack surface.
+  - Tenant resolution server-side → no se confía en metadata del cliente.
+  - Response 200 siempre para válidos → Stripe no reintenta infinitamente.
+  - Duplicados → idempotente via UNIQUE constraint.

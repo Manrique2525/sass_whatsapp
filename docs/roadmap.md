@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 U1+U2 COMPLETADA**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 U1+U2+U3 COMPLETADA**.
 
 ## Fases
 
@@ -2380,3 +2380,42 @@ FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COM
 - **Tests**: 41 new (5 provider + 10 service + 14 API + 6 multi-tenancy + 6 security + 4 PostgreSQL + 7 Vitest frontend). Total FASE 23+24: 224 billing tests
 - **Quality gates**: pint 727 files clean, vue-tsc 0 errors, vite build ok, composer audit 0 vulnerabilities
 - ADR-093 registrado
+
+### U3 — Webhook Ingestion + Subscription Sync
+- **Estado**: COMPLETADA
+- **Scope**: Stripe webhook endpoint, signature verification, idempotency ledger, tenant resolution from Stripe customer ID, subscription sync, event ordering. NO U4 frontend provider UX, NO invoices UI, NO local invoice snapshots, NO refunds, NO custom card forms, NO Stripe.js, NO UsageGuard, NO quota enforcement, NO Redis billing cache, NO payment notifications, NO FASE 25, NO push.
+- **New files**:
+  - `app/Application/Billing/Services/StripeWebhookService.php` — handle incoming webhook events: resolve tenant, sync subscription, audit
+  - `app/Http/Controllers/Api/Webhooks/StripeWebhookController.php` — public endpoint (no auth/tenant middleware)
+  - `app/Domain/Billing/DTOs/ProviderWebhookEvent.php` — DTO (eventId, type, createdAt, objectId, customerId, data[])
+  - `app/Domain/Billing/Enums/WebhookEventStatus.php` — Pending|Processed|Failed
+  - `app/Domain/Billing/Models/BillingWebhookEvent.php` — idempotency ledger (no BelongsToTenant)
+  - `database/migrations/2026_08_24_100004_create_billing_webhook_events_table.php` — UNIQUE(provider, provider_event_id)
+  - `database/migrations/2026_08_24_100005_add_provider_updated_at_to_subscriptions_table.php`
+  - `database/factories/Domain/Billing/Models/BillingWebhookEventFactory.php`
+  - `tests/Traits/FakeBillingProviderMethods.php` — shared trait for test fakes
+  - `tests/Feature/Billing/BillingU3SignatureTest.php` — 7 tests (SIG-01..07)
+  - `tests/Feature/Billing/BillingU3WebhookTest.php` — 12 tests (WH-01..12)
+  - `tests/Feature/Billing/BillingU3OrderingTest.php` — 5 tests (ORD-01..05)
+  - `tests/Feature/Billing/BillingU3SecurityTest.php` — 6 tests (SEC-01..06)
+  - `tests/Feature/Billing/BillingU3SyncTest.php` — 10 tests (SYNC-01..10)
+  - `tests/Feature/Billing/BillingU3MultiTenancyTest.php` — 6 tests (MT-01..06)
+  - `tests/Postgres/Billing/BillingU3PostgresTest.php` — 6 tests (PG-01..06)
+- **Modified files**:
+  - `app/Domain/Billing/Enums/SubscriptionStatus.php` — +PastDue case
+  - `app/Domain/Billing/Contracts/BillingProviderInterface.php` — +constructWebhookEvent()
+  - `app/Infrastructure/Billing/StripeProvider.php` — constructWebhookEvent() implementation
+  - `app/Domain/Billing/Models/Subscription.php` — +provider_updated_at (U3)
+  - `routes/api.php` — POST webhooks/stripe (no auth/tenant middleware)
+- **DDL**:
+  - billing_webhook_events: NEW TABLE (id uuid PK, provider varchar 50, provider_event_id varchar 255, tenant_id FK nullable, status varchar 20, type varchar 100, object_id varchar 255, provider_created_at timestamp, provider_updated_at timestamp, processed_at timestamp, error_message text nullable, created_at/updated_at). UNIQUE(provider, provider_event_id).
+  - subscriptions: +provider_updated_at (timestamp nullable)
+- **Design decisions** (see ADR-094):
+  - Signature verification via BillingProviderInterface.constructWebhookEvent() → ProviderWebhookEvent DTO (no raw Stripe objects)
+  - Tenant resolution: Stripe customer ID → BillingCustomer.provider_customer_id → tenant_id. NOT from metadata.
+  - Event ordering: provider_updated_at on subscriptions. incoming > local = apply; incoming <= local = no-op. Cancelled must not be resurrected by stale events.
+  - checkout.session.completed: creates pending subscription (does NOT activate). invoice.paid is authoritative activation signal.
+  - No raw payload stored. No PII in logs/audit. Response: always {"received": true} for valid events.
+- **Tests**: 46 SQLite (7 signature + 12 webhook + 5 ordering + 6 security + 10 sync + 6 multi-tenancy) + 6 PostgreSQL. Total FASE 24: 46 U3 tests + 39 U2 + 32 U1 + 50 frontend = 167 billing tests
+- **Quality gates**: Pint clean, vue-tsc 0 errors, vite build ok, 46/46 U3 tests pass, 252/252 billing tests total
+- ADR-094 registrado

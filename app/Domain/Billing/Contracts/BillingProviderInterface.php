@@ -7,6 +7,7 @@ namespace App\Domain\Billing\Contracts;
 use App\Domain\Billing\DTOs\BillingCustomerData;
 use App\Domain\Billing\DTOs\CheckoutSessionData;
 use App\Domain\Billing\DTOs\PortalSessionData;
+use App\Domain\Billing\DTOs\ProviderWebhookEvent;
 use App\Domain\Billing\Exceptions\BillingProviderException;
 
 /**
@@ -64,4 +65,15 @@ interface BillingProviderInterface
      * Obtiene el nombre del provider (ej: 'stripe').
      */
     public function providerName(): string;
+
+    /**
+     * Verify a webhook signature and return the parsed event data.
+     *
+     * Returns ProviderWebhookEvent DTO (safe, no SDK objects).
+     * Throws BillingProviderException if signature is invalid, secret not configured,
+     * or payload is malformed.
+     *
+     * @throws BillingProviderException
+     */
+    public function constructWebhookEvent(string $rawPayload, string $sigHeader): ProviderWebhookEvent;
 }

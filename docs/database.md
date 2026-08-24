@@ -29,6 +29,8 @@ tenants
   ├─ analytics_daily
   └─ conversation_metrics
 
+billing_webhook_events (plataforma, sin tenant_id en constraint de dedupe)
+
 ## 10. FASE 22 — Notifications (DDL)
 
 ### notifications
@@ -77,6 +79,7 @@ tenants
 | `business_profiles` | Perfil de negocio 1:1 (FASE 5, ADR-028) | `tenant_id` UNIQUE FK→tenants `cascadeOnDelete`; `name`, `description`, `category`, `address`, `website`, `email`, `phone`, `working_hours` (JSON). Se crea bajo demanda en la primera lectura |
 | `plans` | Planes (FREE/PRO/BUSINESS) | límites en `limits` JSON |
 | `webhook_events` | Eventos crudos recibidos de Meta (FASE 6, ADR-029) | Nivel plataforma: `provider_event_id` UNIQUE (id global de Meta), `tenant_id` nullable (se resuelve por phone_number_id), `status` (received/enqueued/processed/failed), `event_type` (message/status), `duplicate` |
+| `billing_webhook_events` | Ledger de eventos de Stripe (FASE 24 U3) | Nivel plataforma: `provider` + `provider_event_id` UNIQUE (idempotencia), `tenant_id` nullable (se resuelve por customer ID), `status` (pending/processed/failed), `type` (evento Stripe). Sin payload raw, sin PII, sin BelongsToTenant |
 | `audit_logs` | Auditoría | `tenant_id` nullable, `actor_id`, `action`, `payload` |
 | `failed_jobs`, `cache`, `sessions`, `personal_access_tokens`, `password_reset_tokens` | Framework | estándar |
 
@@ -98,7 +101,7 @@ tenants
 | Leads | `leads` |
 | Knowledge | `knowledge_bases`, `knowledge_documents`, `knowledge_chunks` |
 | FAQ | `faqs` |
-| Billing | `subscriptions`, `subscription_items`, `invoices`, `usage_records` |
+| Billing | `subscriptions`, `subscription_items`, `invoices`, `usage_records`, `billing_customers` |
 | Analytics | `analytics_daily`, `conversation_metrics` |
 | Variables | `conversation_context` (JSON dentro de `conversations`) |
 
@@ -638,3 +641,39 @@ antes de añadir `NOT NULL`.
 | timestamps | | |
 | UNIQUE | (tenant_id, provider) | |
 | UNIQUE | (provider, provider_customer_id) | |
+
+## 12. FASE 24 U3 — Webhook Ingestion DDL
+
+### billing_webhook_events (FASE 24 U3)
+
+| Columna | Tipo | Constraint |
+|---|---|---|
+| `id` | uuid | PK |
+| `provider` | varchar(50) | NOT NULL, DEFAULT 'stripe' |
+| `provider_event_id` | varchar(255) | NOT NULL |
+| `tenant_id` | uuid | NULLABLE, FK→tenants `nullOnDelete` |
+| `status` | varchar(20) | NOT NULL, DEFAULT 'pending' — pending/processed/failed |
+| `type` | varchar(100) | NOT NULL |
+| `object_id` | varchar(255) | NULLABLE |
+| `provider_created_at` | timestamp | NULLABLE |
+| `provider_updated_at` | timestamp | NULLABLE |
+| `processed_at` | timestamp | NULLABLE |
+| `error_message` | text | NULLABLE |
+| `created_at` / `updated_at` | timestamp | — |
+
+- **UNIQUE constraint**: `UNIQUE(provider, provider_event_id)` — idempotencia a nivel de DB. Eventos duplicados se insertan con `ON CONFLICT DO NOTHING` o se detectan antes de procesar.
+- **Índices**: `billing_webhook_events_provider_event_id_unique` (UNIQUE) + `(tenant_id, status)` para queries de ledger.
+- **Sin BelongsToTenant**: esta tabla es de plataforma (como `webhook_events` de WhatsApp). El `tenant_id` se resuelve después del receipt del evento y es nullable hasta que se procesa.
+- **Sin soft deletes**: ledger append-only, preserva historial completo de eventos recibidos.
+- **No payload raw**: solo metadatos del evento (eventId, type, objectId, timestamps). El payload crudo de Stripe no se almacena por seguridad (sin PII).
+
+### subscriptions — provider_updated_at (FASE 24 U3)
+
+| Columna | Tipo | Constraint |
+|---|---|---|
+| `provider_updated_at` | timestamp | NULLABLE |
+
+- Agregado a tabla existente `subscriptions` vía `Schema::table()`.
+- Se actualiza con el `created` timestamp del evento Stripe en cada sincronización.
+- Se usa para event ordering: eventos con `provider_updated_at` ≤ el valor local se descartan como stale.
+- `cancelled` status nunca se resucita por un evento stale (invariante de negocio).

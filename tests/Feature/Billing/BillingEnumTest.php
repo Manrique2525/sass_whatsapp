@@ -19,10 +19,11 @@ use App\Domain\Billing\Enums\UsageCategory;
 it('BILL-ENUM-01: SubscriptionStatus has exact expected cases', function (): void {
     $cases = array_column(SubscriptionStatus::cases(), 'value');
 
-    expect($cases)->toHaveCount(3)
+    expect($cases)->toHaveCount(4)
         ->and($cases)->toContain('active')
         ->and($cases)->toContain('pending')
-        ->and($cases)->toContain('cancelled');
+        ->and($cases)->toContain('cancelled')
+        ->and($cases)->toContain('past_due');
 })->group('BILL-ENUM-01');
 
 it('BILL-ENUM-02: PlanInterval has exact expected cases', function (): void {

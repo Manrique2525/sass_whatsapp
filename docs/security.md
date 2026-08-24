@@ -614,3 +614,27 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
         Tests BILL-U2-PROV-01..05, BILL-U2-SVC-01..10, BILL-U2-API-01..14,
         BILL-U2-MT-01..06, BILL-U2-SEC-01..06, BILL-U2-PG-01..04.
         Frontend tests: BILL-FE-U2-01..03. Total U2: 41 tests.
+- [x] (FASE 24 U3) Stripe Webhook Ingestion + Subscription Sync:
+        Public webhook endpoint POST /api/webhooks/stripe (no auth, no tenant middleware, no CSRF).
+        Signature verification via BillingProviderInterface::constructWebhookEvent() →
+        ProviderWebhookEvent DTO (no raw Stripe objects escape to domain). Stripe SDK checks
+        signature BEFORE parsing JSON — malformed payload with invalid signature produces
+        SignatureVerificationException, not JSON parse error.
+        Tenant resolution: Stripe customer ID → BillingCustomer.provider_customer_id → tenant_id.
+        NOT from metadata (untrusted hint). withoutTenantScope() for cross-tenant query.
+        Idempotency ledger: billing_webhook_events table, UNIQUE(provider, provider_event_id).
+        Duplicate events recorded as Processed without data mutation.
+        Event ordering: provider_updated_at on subscriptions. incoming > local = apply;
+        incoming <= local = no-op. Cancelled status must not be resurrected by stale events.
+        checkout.session.completed creates pending subscription (does NOT activate).
+        invoice.paid is authoritative activation signal → status = active.
+        customer.subscription.updated syncs plan/status/period from Stripe.
+        customer.subscription.deleted → status = cancelled.
+        invoice.payment_failed → status = past_due.
+        PastDue added to SubscriptionStatus enum.
+        No raw payload stored. No PII in logs/audit.
+        Response always {"received": true} for valid events. 400 for invalid signature.
+        Tests BILL-U3-SIG-01..07, BILL-U3-WH-01..12, BILL-U3-ORD-01..05,
+        BILL-U3-SEC-01..06, BILL-U3-SYNC-01..10, BILL-U3-MT-01..06.
+        PostgreSQL tests: BILL-U3-PG-01..06 (not runnable locally).
+        Total U3: 46 tests.

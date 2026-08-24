@@ -12,6 +12,7 @@ use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Models\User;
 use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Traits\FakeBillingProviderMethods;
 
 uses(RefreshDatabase::class);
 
@@ -42,6 +43,8 @@ function sec_portal_url(Tenant $tenant): string
 beforeEach(function (): void {
     $this->app->instance(BillingProviderInterface::class, new class implements BillingProviderInterface
     {
+        use FakeBillingProviderMethods;
+
         public function createCustomer(array $params): BillingCustomerData
         {
             return BillingCustomerData::fromProvider(['id' => 'cus_new', 'provider' => 'stripe']);

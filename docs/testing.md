@@ -872,3 +872,19 @@ Checkout + portal tests (FASE 24 U2):
 | **Frontend Vitest (BILL-FE-U2-01..03)** | **7** (createCheckoutSession URL/params, yearly interval, createPortalSession URL/return, checkout payload security) |
 | **Total U2** | **46** |
 | **Total FASE 23+24 (U1+U2+U3+U4+U1+U2)** | **231** |
+
+## 16. FASE 24 — Stripe Webhook Ingestion + Subscription Sync Test Suite (U3)
+
+Stripe webhook tests (FASE 24 U3):
+
+| Category | Tests |
+|---|---|
+| Signature Verification (BILL-U3-SIG) | 7 (valid signature, invalid signature, malformed payload, missing header, empty body, replay attack, different event types) |
+| Webhook Events (BILL-U3-WH) | 12 (checkout.session.completed creates pending, invoice.paid activates, subscription.updated syncs, subscription.deleted cancels, payment_failed sets past_due, unknown event type skipped, idempotency via unique constraint, customer resolution from BillingCustomer, no tenant middleware, public endpoint, response always received:true, audit log) |
+| Event Ordering (BILL-U3-ORD) | 5 (stale event ignored, future event applied, cancelled not resurrected, same timestamp ignored, provider_updated_at monotonic) |
+| Security (BILL-U3-SEC) | 6 (no auth required, CSRF not checked, tenant not from middleware, no PII in logs, webhook_events ledger does not use BelongsToTenant, subscription sync validates tenant) |
+| Subscription Sync (BILL-U3-SYNC) | 10 (invoice.paid activates pending, invoice.paid updates period, subscription.updated changes plan, subscription.deleted cancels, payment_failed sets past_due, checkout.session.completed creates pending not active, multiple events idempotent, webhook event ledger records all, duplicate event no-op, error in ledger) |
+| Multi-Tenancy (BILL-U3-MT) | 6 (tenant A webhook does not affect B, customer resolution scoped, different tenants independent, cross-tenant customer ID blocked, concurrent webhooks isolated, tenant context set correctly) |
+| **Total U3 (SQLite)** | **46** |
+| **Total FASE 24 (U1+U2+U3)** | **124** |
+| **Total FASE 23+24 (U1+U2+U3+U4+U1+U2+U3)** | **277** |

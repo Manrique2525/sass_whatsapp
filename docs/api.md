@@ -541,13 +541,38 @@ Abre el portal de facturación de Stripe para gestionar suscripción, métodos d
 - Admin/agent → 403 `PERMISSION_DENIED`.
 - No autenticado → 401.
 
+### Stripe Webhook (FASE 24 U3, ADR-094)
+
+Endpoint público para recibir eventos de Stripe (pagos, suscripciones, facturas).
+
+| Método | Ruta | Permiso | Descripción |
+|---|---|---|---|
+| POST | `/api/webhooks/stripe` | Público (firma verificada) | Recibe eventos de Stripe y sincroniza suscripciones |
+
+**Reglas**:
+- Sin autenticación Bearer, sin middleware tenant, sin CSRF. La autenticación es por firma.
+- Firma `Stripe-Signature` verificada con `stripe/stripe-php` SDK → 400 si falla.
+- Tenant resuelto desde `customer` del evento → `BillingCustomer.provider_customer_id` → `tenant_id`.
+- Idempotencia por `event.id` → `billing_webhook_events` UNIQUE constraint.
+- Respuesta: **siempre 200** `{"received": true}` para eventos válidos (Stripe no reintenta).
+- Eventos inválidos/malformados → 400.
+- Eventos duplicados → registrados como procesados sin mutar datos.
+
+**Eventos soportados**:
+- `checkout.session.completed`: crea suscripción `pending` (NO activa).
+- `invoice.pailed`: activa la suscripción (`status = active`), sincroniza periodo.
+- `customer.subscription.updated`: sincroniza plan, status, periodo, cancelación.
+- `customer.subscription.deleted`: marca suscripción `cancelled`.
+- `invoice.payment_failed`: marca suscripción `past_due`.
+- Otros eventos: registrados sin acción (skip).
+
 ## 5. Webhooks (sin auth Bearer; autenticados por firma y dedupe)
 
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/webhooks/whatsapp` | Verificación de Meta (`hub.mode`, `hub.verify_token`, `hub.challenge`). Token correcto → 200 con el challenge en **texto plano**; inválido → 403 (FASE 6) |
 | POST | `/api/webhooks/whatsapp` | Evento de mensaje/estado. Valida `X-Hub-Signature-256` (HMAC-SHA256 sobre el body crudo) → 401 si falla; dedupe por `provider_event_id`; resuelve tenant por `metadata.phone_number_id` y encola el job. Respuesta **siempre 200** para eventos válidos/duplicados/desconocidos (nunca 500) (FASE 6) |
-| POST | `/api/webhooks/stripe` | Eventos de Stripe (invoice, subscription). Firma `Stripe-Signature` + dedupe por `event id` |
+| POST | `/api/webhooks/stripe` | Eventos de Stripe (invoice, subscription). Firma `Stripe-Signature` + dedupe por `event id`. Tenant resuelto desde `BillingCustomer.provider_customer_id`. Respuesta siempre `{"received": true}` para válidos; 400 para firma inválida (FASE 24 U3, ADR-094) |
 | POST | `/api/webhooks/flows/{trigger}` | Webhook público de flujos. Autenticación por `Authorization: Bearer {token}` (SHA-256 hash comparado con `config.token_hash`); tenant resuelto desde el trigger. Idempotencia por `Idempotency-Key` header (409 duplicado). Rate limit 60 req/min por IP. Despacha `StartFlowFromWebhook` job → 202 `{"status": "accepted"}` (FASE 14 U3, ADR-049) |
 
 ## 6. Errores

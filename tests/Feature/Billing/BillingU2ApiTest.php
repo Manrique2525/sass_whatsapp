@@ -12,6 +12,7 @@ use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Models\User;
 use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Traits\FakeBillingProviderMethods;
 
 uses(RefreshDatabase::class);
 
@@ -44,6 +45,8 @@ function makeFakeProvider(): object
 {
     return new class implements BillingProviderInterface
     {
+        use FakeBillingProviderMethods;
+
         public function createCustomer(array $params): BillingCustomerData
         {
             return BillingCustomerData::fromProvider(['id' => 'cus_new', 'provider' => 'stripe']);

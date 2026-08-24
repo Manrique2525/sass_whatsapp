@@ -8,6 +8,7 @@ use App\Domain\Billing\Contracts\BillingProviderInterface;
 use App\Domain\Billing\DTOs\BillingCustomerData;
 use App\Domain\Billing\DTOs\CheckoutSessionData;
 use App\Domain\Billing\DTOs\PortalSessionData;
+use App\Domain\Billing\DTOs\ProviderWebhookEvent;
 use App\Domain\Billing\Exceptions\BillingProviderException;
 use Stripe\BillingPortal;
 use Stripe\Checkout\Session as CheckoutSession;
@@ -159,6 +160,32 @@ final class StripeProvider implements BillingProviderInterface
     public function providerName(): string
     {
         return 'stripe';
+    }
+
+    public function constructWebhookEvent(string $rawPayload, string $sigHeader): ProviderWebhookEvent
+    {
+        if ($this->webhookSecret === '') {
+            throw new BillingProviderException('Stripe webhook secret is not configured. Set STRIPE_WEBHOOK_SECRET in .env.');
+        }
+
+        try {
+            $event = Webhook::constructEvent($rawPayload, $sigHeader, $this->webhookSecret);
+        } catch (SignatureVerificationException $e) {
+            throw new BillingProviderException('Invalid Stripe webhook signature.', false, $e);
+        } catch (\Throwable $e) {
+            throw new BillingProviderException('Malformed Stripe webhook payload.', false, $e);
+        }
+
+        $payload = [
+            'id' => $event->id,
+            'type' => $event->type,
+            'created' => $event->created,
+            'data' => [
+                'object' => (array) $event->data->object,
+            ],
+        ];
+
+        return ProviderWebhookEvent::fromStripe($payload);
     }
 
     private function assertConfigured(): void
