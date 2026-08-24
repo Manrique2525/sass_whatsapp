@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 22 COMPLETADA · FASE 23 U4 COMPLETADA**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 U1 COMPLETADA**.
 
 ## Fases
 
@@ -29,8 +29,8 @@ Estado general: **FASE 22 COMPLETADA · FASE 23 U4 COMPLETADA**.
 | 20 | Tags | COMPLETADA |
 | 21 | Analytics | COMPLETADA |
 | 22 | Notificaciones (U1: Data Model, U2: Event Listeners, U3: Notification API, U4: Email Preferences, U5: Realtime + Frontend) | COMPLETADA |
-| 23 | Planes (U1: Data Model, U2: Usage Metering, U3: Billing API, U4: Billing Frontend) | EN PROGRESO |
-| 24 | Billing (Stripe) | PENDIENTE |
+| 23 | Planes (U1: Data Model, U2: Usage Metering, U3: Billing API, U4: Billing Frontend) | COMPLETADA |
+| 24 | Billing (U1: Provider Infrastructure + Mappings, U2: Checkout, U3: Webhooks, U4: Portal, U5: UsageGuard) | EN PROGRESO |
 | 25 | Usage limits | PENDIENTE |
 | 26 | Auditoría | PENDIENTE |
 | 27 | Seguridad (refuerzo OWASP) | PENDIENTE |
@@ -2305,3 +2305,38 @@ FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COM
 - **Quality gates**: vue-tsc 0 errors, vite build ok, 501/501 Vitest green, Pint clean, PHPStan 0 errors, composer audit 0 vulnerabilities, 133/133 backend tests green
 - **Total FASE 23**: 133 backend + 50 frontend = **183 tests**
 - ADR-091 registrado
+
+### U1 — Provider Infrastructure + Mappings
+- **Estado**: COMPLETADA
+- **Scope**: Solo infraestructura. NO Checkout, NO Webhooks, NO Portal, NO UsageGuard, NO Redis billing, NO notifications billing, NO frontend changes, NO push.
+- **Dependencies installed**: `stripe/stripe-php v21.2.1`
+- **Config**: `config/services.php` → `stripe.secret`, `stripe.webhook_secret`
+- **.env.example**: `STRIPE_SECRET_KEY=`, `STRIPE_WEBHOOK_SECRET=` (ya existían)
+- **New files**:
+  - `app/Domain/Billing/Contracts/BillingProviderInterface.php` — 4 métodos: createCustomer, retrieveCustomer, validatePrice, providerName
+  - `app/Domain/Billing/DTOs/BillingCustomerData.php` — value object puro (providerCustomerId, provider, email, metadata)
+  - `app/Domain/Billing/Exceptions/BillingProviderException.php` — RuntimeException con retryable flag
+  - `app/Infrastructure/Billing/StripeProvider.php` — final class, traduce Stripe exceptions a BillingProviderException
+  - `app/Domain/Billing/Models/BillingCustomer.php` — tenant-scoped, BelongsToTenant
+  - `database/factories/Domain/Billing/models/BillingCustomerFactory.php`
+  - `database/migrations/2026_08_24_100001_add_stripe_price_ids_to_plans_table.php`
+  - `database/migrations/2026_08_24_100002_add_stripe_fields_to_subscriptions_table.php`
+  - `database/migrations/2026_08_24_100003_create_billing_customers_table.php`
+  - `tests/Feature/Billing/BillingU1ModelTest.php` — 18 tests (MOD-01..18)
+  - `tests/Feature/Billing/BillingU1MultiTenancyTest.php` — 6 tests (MT-01..06)
+  - `tests/Feature/Billing/BillingU1ProviderTest.php` — 8 tests (PROV-01..08)
+  - `tests/Postgres/Billing/BillingU1PostgresTest.php` — 8 tests (PG-01..08)
+- **Modified files**:
+  - `app/Domain/Billing/Models/Plan.php` — +stripe_price_id_monthly, +stripe_price_id_yearly in fillable
+  - `app/Domain/Billing/Models/Subscription.php` — +stripe_subscription_id, +cancel_at_period_end in fillable/casts
+  - `app/Domain/Billing/Enums/SubscriptionStatus.php` — +Pending case
+  - `app/Providers/AppServiceProvider.php` — BillingProviderInterface→StripeProvider binding
+  - `database/factories/Domain/Billing/models/SubscriptionFactory.php` — +cancel_at_period_end default
+  - `tests/Feature/Billing/BillingEnumTest.php` — Updated for Pending case (3 cases, values, labels)
+- **DDL**:
+  - plans: +stripe_price_id_monthly (varchar 255 nullable), +stripe_price_id_yearly (varchar 255 nullable)
+  - subscriptions: +stripe_subscription_id (varchar 255 nullable UNIQUE), +cancel_at_period_end (boolean default false)
+  - billing_customers: NEW TABLE (id uuid PK, tenant_id FK CASCADE, provider varchar 50, provider_customer_id varchar 255, timestamps). UNIQUE(tenant_id, provider), UNIQUE(provider, provider_customer_id)
+- **Tests**: 32 U1 new (18 model + 6 multi-tenancy + 8 provider) + 133 existing = 165 billing tests total
+- **Quality gates**: composer audit 0 vulnerabilities, pint 715 files clean, vue-tsc 0 errors, vite build ok
+- ADR-092 registrado

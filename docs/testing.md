@@ -842,3 +842,16 @@ Billing frontend tests (FASE 23 U4 — Vitest, jsdom):
 | Dashboard Page (BILL-FE-U4-08..27) | 20 (render, fetch plans/sub/usage on mount, current plan name, history table, owner manage buttons, admin read-only, agent denied, assign plan dialog, cancel dialog, double-submit, loading state, error state, empty states, unlimited usage, NaN safety, tenant switch, no v-html, no hardcoded prices, security no tenant_id) |
 | **Total U4** | **50** |
 | **Total FASE 23 (U1+U2+U3+U4)** | **183** |
+
+## 14. FASE 24 — Provider Infrastructure + Mappings Test Suite (U1)
+
+Billing provider infrastructure tests (FASE 24 U1):
+
+| Category | Tests |
+|---|---|
+| BillingCustomer model (BILL-U1-MOD-01..18) | 18 (factory create, tenant-scoped, unique tenant+provider, unique provider+customer_id, different providers per tenant, plan stripe columns nullable, plan stripe mass-assignable, subscription stripe nullable, subscription stripe mass-assignable, cancel_at_period_end default, cancel_at_period_end mass-assignable, SubscriptionStatus Pending case, isActive unchanged Pending not active, BillingCustomerData DTO creation, BillingCustomerData fromProvider, BillingProviderException throwable, BillingProviderException retryable, PlanResource no stripe exposure) |
+| Multi-tenancy (BILL-U1-MT-01..06) | 6 (visible to A, invisible to B, cross-tenant provider_customer_id blocked, subscription stripe isolation, FK cascade, index verification) |
+| Provider (BILL-U1-PROV-01..08) | 8 (implements interface, providerName, createCustomer empty key, retrieveCustomer empty key, validatePrice empty key, webhook secret empty, webhook invalid sig, constructor webhook secret) |
+| PostgreSQL (BILL-U1-PG-01..08) | 8 (table exists, columns, valid insert, FK, unique tenant+provider, unique provider+customer_id, cascade delete, plan stripe columns) |
+| **Total U1** | **32** |
+| **Total FASE 23+24 (U1+U2+U3+U4+U1)** | **215** |

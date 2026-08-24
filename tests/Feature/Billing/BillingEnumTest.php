@@ -19,8 +19,9 @@ use App\Domain\Billing\Enums\UsageCategory;
 it('BILL-ENUM-01: SubscriptionStatus has exact expected cases', function (): void {
     $cases = array_column(SubscriptionStatus::cases(), 'value');
 
-    expect($cases)->toHaveCount(2)
+    expect($cases)->toHaveCount(3)
         ->and($cases)->toContain('active')
+        ->and($cases)->toContain('pending')
         ->and($cases)->toContain('cancelled');
 })->group('BILL-ENUM-01');
 
@@ -46,6 +47,7 @@ it('BILL-ENUM-03: UsageCategory has exact expected cases', function (): void {
 
 it('BILL-ENUM-04: SubscriptionStatus values are stable strings', function (): void {
     expect(SubscriptionStatus::Active->value)->toBe('active')
+        ->and(SubscriptionStatus::Pending->value)->toBe('pending')
         ->and(SubscriptionStatus::Cancelled->value)->toBe('cancelled');
 })->group('BILL-ENUM-04');
 
@@ -62,6 +64,7 @@ it('BILL-ENUM-06: UsageCategory values are stable strings', function (): void {
 
 it('BILL-ENUM-07: SubscriptionStatus has labels', function (): void {
     expect(SubscriptionStatus::Active->label())->toBe('Active')
+        ->and(SubscriptionStatus::Pending->label())->toBe('Pending')
         ->and(SubscriptionStatus::Cancelled->label())->toBe('Cancelled');
 })->group('BILL-ENUM-07');
 

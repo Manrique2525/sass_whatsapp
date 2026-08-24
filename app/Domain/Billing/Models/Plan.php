@@ -37,6 +37,8 @@ final class Plan extends Model
         'is_active',
         'price_monthly',
         'price_yearly',
+        'stripe_price_id_monthly',
+        'stripe_price_id_yearly',
         'limits',
         'features',
         'sort_order',

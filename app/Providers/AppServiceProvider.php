@@ -23,12 +23,14 @@ use App\Application\KnowledgeBase\Services\KnowledgeSearchService;
 use App\Application\Notifications\Listeners\CreateNotificationFromInboxChange;
 use App\Domain\AI\Contracts\AIProviderInterface;
 use App\Domain\AI\Contracts\EmbeddingProviderInterface;
+use App\Domain\Billing\Contracts\BillingProviderInterface;
 use App\Domain\Contacts\Events\TagAssigned;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\WhatsApp\Contracts\WhatsAppProviderInterface;
 use App\Events\InboxConversationChanged;
 use App\Infrastructure\AI\OpenAIEmbeddingProvider;
 use App\Infrastructure\AI\OpenAIProvider;
+use App\Infrastructure\Billing\StripeProvider;
 use App\Infrastructure\WhatsApp\MetaWhatsAppProvider;
 use App\Listeners\DispatchTagTriggerJob;
 use App\Policies\TenantPolicy;
@@ -71,6 +73,15 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(KnowledgeSearchServiceInterface::class, KnowledgeSearchService::class);
 
         $this->app->bind(FaqMatcherServiceInterface::class, FaqMatcherService::class);
+
+        $this->app->bind(BillingProviderInterface::class, function (): StripeProvider {
+            $secret = (string) config('services.stripe.secret');
+
+            return new StripeProvider(
+                secretKey: $secret,
+                webhookSecret: (string) config('services.stripe.webhook_secret'),
+            );
+        });
 
         $this->app->bind(EmbeddingProviderInterface::class, function (): OpenAIEmbeddingProvider {
             $config = config('ai.embedding.providers.openai');

@@ -571,6 +571,8 @@ antes de añadir `NOT NULL`.
 | is_active | boolean | default true |
 | price_monthly | decimal(10,2) | default 0 |
 | price_yearly | decimal(10,2) | default 0 |
+| stripe_price_id_monthly | varchar(255) | nullable (FASE 24 U1) |
+| stripe_price_id_yearly | varchar(255) | nullable (FASE 24 U1) |
 | limits | jsonb | nullable |
 | features | jsonb | nullable |
 | sort_order | int | default 0 |
@@ -583,7 +585,9 @@ antes de añadir `NOT NULL`.
 | id | uuid | PK |
 | tenant_id | uuid | FK→tenants CASCADE, NOT NULL |
 | plan_id | uuid | FK→plans NULL ON DELETE, NOT NULL |
+| stripe_subscription_id | varchar(255) | nullable, UNIQUE (FASE 24 U1) |
 | status | varchar(20) | default 'active' |
+| cancel_at_period_end | boolean | default false (FASE 24 U1) |
 | quantity | int | default 1 |
 | current_period_start | timestamp | nullable |
 | current_period_end | timestamp | nullable |
@@ -622,3 +626,15 @@ antes de añadir `NOT NULL`.
 
 - `plan_id` uuid, nullable, FK→plans NULL ON DELETE
 - Denormalized cache de la relación active subscription
+
+### 11.6 billing_customers (tenant-scoped, FASE 24 U1)
+
+| Column | Type | Constraints |
+|---|---|---|
+| id | uuid | PK |
+| tenant_id | uuid | FK→tenants CASCADE, NOT NULL |
+| provider | varchar(50) | NOT NULL |
+| provider_customer_id | varchar(255) | NOT NULL |
+| timestamps | | |
+| UNIQUE | (tenant_id, provider) | |
+| UNIQUE | (provider, provider_customer_id) | |

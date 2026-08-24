@@ -30,6 +30,7 @@ class SubscriptionFactory extends Factory
             'current_period_start' => now()->startOfMonth(),
             'current_period_end' => now()->addMonth()->startOfMonth(),
             'metadata' => [],
+            'cancel_at_period_end' => false,
         ];
     }
 

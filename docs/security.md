@@ -585,3 +585,14 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
         Security test verifies assignPlan/changePlan send only plan_id (no tenant_id, user_id,
         status injection). No hardcoded prices (all from API). No XSS vectors (no raw
         HTML rendering). Tests BILL-FE-U4-01..27. Total: 50 frontend tests.
+- [x] (FASE 24 U1) Stripe provider infrastructure:
+        BillingProviderInterface defined in Domain. StripeProvider in Infrastructure.
+        API key in .env only (STRIPE_SECRET_KEY), read via config('services.stripe.secret').
+        Provider validates key on invocation (not at boot) for backward compat.
+        Price IDs (stripe_price_id_*) NOT exposed via PlanResource/API. No Stripe objects
+        escape to domain/application. BillingProviderException wraps all Stripe errors.
+        billing_customers table scoped by tenant_id + UNIQUE(provider, provider_customer_id).
+        SubscriptionStatus::Pending added but isActive() unchanged (Active only = active).
+        FASE 23 app boots and works with empty STRIPE_SECRET_KEY. Tests: 32 new U1
+        (BILL-U1-MOD-01..18, BILL-U1-MT-01..06, BILL-U1-PROV-01..08, BILL-U1-PG-01..08).
+        No Stripe API calls in tests (config/validation only). Pint clean, composer audit 0.

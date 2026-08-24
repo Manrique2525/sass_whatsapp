@@ -42,7 +42,9 @@ final class Subscription extends Model
     /** @var list<string> */
     protected $fillable = [
         'plan_id',
+        'stripe_subscription_id',
         'status',
+        'cancel_at_period_end',
         'quantity',
         'current_period_start',
         'current_period_end',
@@ -53,6 +55,7 @@ final class Subscription extends Model
     {
         return [
             'status' => SubscriptionStatus::class,
+            'cancel_at_period_end' => 'boolean',
             'quantity' => 'integer',
             'current_period_start' => 'datetime',
             'current_period_end' => 'datetime',

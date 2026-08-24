@@ -2622,3 +2622,48 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - NO procesa pagos reales (Stripe llega en FASE 24). Los datos de planes son del seeder.
   - Admin puede ver pero NO gestionar suscripciones (decisión de diseño U3, mantenido en U4).
   - 50 tests frontend cubren API wrappers, utils, page render, permissions, security, UX.
+
+## ADR-092 · Stripe Provider Infrastructure + Mappings (FASE 24 U1)
+
+- **Estado**: Aceptado · FASE 24 U1
+- **Contexto**: FASE 23 estableció el data model de billing (Plan, Subscription, UsageRecord),
+  UsageTrackingService, API layer (7 endpoints) y frontend (Billing.vue). FASE 24 implementa
+  la integración con Stripe. U1 es la capa de infraestructura: instalar SDK, definir interfaz
+  de proveedor, implementar proveedor Stripe, mapear tenant→customer y plan→price, extender
+  campos en modelos existentes.
+- **Decisión**:
+  - **SDK**: `stripe/stripe-php` directo (NO Laravel Cashier). Cashier agrega complejidad
+    innecesaria para este caso de uso y acopla el dominio a Eloquent extra.
+  - **Interfaz**: `BillingProviderInterface` en `app/Domain/Billing/Contracts/` con 4 métodos:
+    `createCustomer()`, `retrieveCustomer()`, `validatePrice()`, `providerName()`.
+  - **Implementación**: `StripeProvider` en `app/Infrastructure/Billing/` — `final class`,
+    traduce excepciones `Stripe\Exception\ApiErrorException` a `BillingProviderException`.
+    Los objetos de Stripe NUNCA escapan de esta clase.
+  - **DTO**: `BillingCustomerData` — value object puro con `providerCustomerId`, `provider`,
+    `email`, `metadata`. Se usa para transferir datos entre capas.
+  - **billing_customers**: tabla tenant-scoped con `provider` (varchar 50),
+    `provider_customer_id` (varchar 255). UNIQUE(tenant_id, provider) + UNIQUE(provider,
+    provider_customer_id). Sin email (PII redundante). FK cascade on delete.
+  - **Plan price mapping**: columnas nullable `stripe_price_id_monthly`/`stripe_price_id_yearly`
+    en tabla `plans` (aceptable para MVP). Planes free = NULL price IDs.
+  - **Subscription provider fields**: `stripe_subscription_id` (nullable UNIQUE),
+    `cancel_at_period_end` (boolean default false). No `stripe_customer_id` (vive en billing_customers).
+  - **SubscriptionStatus**: extiende con caso `Pending` (trial/awaiting payment). `isActive()`
+    no cambia semántica — solo `Active` = activo.
+  - **Container binding**: `AppServiceProvider` registra `BillingProviderInterface→StripeProvider`
+    siguiendo el patrón existente (AI→OpenAI, WhatsApp→Meta).
+  - **Config**: `config/services.php` sección `stripe` (secret + webhook_secret).
+    `.env.example` ya tenía `STRIPE_SECRET_KEY=` y `STRIPE_WEBHOOK_SECRET=`.
+  - **Seguridad**: API key solo en `.env`, nunca en código. Price IDs no se exponen via API.
+    Provider valida secret al invocar (no al boot). No se valida Stripe secret al arrancar
+    la app (backward compat con STRIPE_SECRET_KEY vacío).
+  - **Backward compat**: app funciona con STRIPE_SECRET_KEY vacío. BillingProviderInterface
+    lanza BillingProviderException si se invoca sin configurar.
+  - **Testing**: Tests de configuración y validación del provider sin llamadas reales a Stripe.
+    Multi-tenancy verificada para billing_customers. 32 tests nuevos U1.
+- **Consecuencias**:
+  - Capa de infraestructura de facturación lista para FASE 24 U2-U5.
+  - Patrón consistente con AIProviderInterface y WhatsAppProviderInterface.
+  - No hay dependencia de Cashier ni Eloquent billing custom.
+  - Price IDs no expuestos — seguridad por diseño.
+  - Provider knockout en config vacío — FASE 23 funciona sin Stripe.
