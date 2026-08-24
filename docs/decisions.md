@@ -2667,3 +2667,74 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - No hay dependencia de Cashier ni Eloquent billing custom.
   - Price IDs no expuestos — seguridad por diseño.
   - Provider knockout en config vacío — FASE 23 funciona sin Stripe.
+
+## ADR-093 · Checkout + Customer Portal (FASE 24 U2)
+
+- **Estado**: Aceptado · FASE 24 U2
+- **Contexto**: U1 estableció la capa de infraestructura (BillingProviderInterface, StripeProvider,
+  billing_customers, price mappings). U2 implementa la sesión de pago y el portal de facturación
+  para el propietario del tenant. U2 NO confirma pagos — eso se hace en U3 via webhooks.
+- **Decisión**:
+  - **No activation from redirect**: Return URLs (`?checkout=success`, `?checkout=cancelled`) son
+    feedback informativo solamente. NO mutan suscripciones. La confirmación de pago vive en U3
+    (webhook `invoice.paid`). P0.
+  - **Free plan bypass**: Si `price_monthly == 0 && price_yearly == 0`, el servicio lanza
+    BillingProviderException con mensaje "Este plan es gratuito. Use la asignación directa."
+    (usando SubscriptionService existente). Si se requiere downgrade paid→free con cancelación
+    en Stripe: defer a U3/U4.
+  - **Backend resolves price ID**: El frontend envía solo `plan_id` (UUID) + `interval`
+    (monthly|yearly). El backend resuelve `stripe_price_id_monthly`/`stripe_price_id_yearly`
+    del plan. NO se exponen price IDs, amounts, o currency al frontend. P0.
+  - **Safe redirect**: Las URLs de checkout/portal se validan como `https://checkout.stripe.com/...`
+    o `https://billing.stripe.com/...`. No open redirect. Frontend redirige con
+    `window.location.href`.
+  - **Checkout idempotencia**: Sin DDL nuevo en U2. Stripe Checkout Session es idempotente por
+    diseño (misma key = misma sesión). Frontend usa disabled button durante redirect. Residual
+    risk: double-submit possible if user clicks fast — documented.
+  - **Race condition (customer creation)**: `BillingCustomerService.ensureCustomer()` ejecuta
+    SELECT → dentro de DB::transaction INSERT. UNIQUE(tenant_id, provider) o
+    UNIQUE(provider, provider_customer_id) violación → catch QueryException → re-read.
+    Si re-read falla → re-throw (rare). Orphan Stripe customers: residual risk, documented.
+  - **Controller thin**: `CheckoutController` (store=checkout, portal) delega a
+    `CheckoutService`. `BillingCustomerService` maneja la resolución tenant→provider customer.
+  - **FormRequest**: `StoreCheckoutRequest` acepta `plan_id` (required uuid) +
+    `interval` (required, in:monthly,yearly). Fields extra (price_id, amount, currency,
+    tenant_id) silently stripped by Laravel validation.
+  - **Authorization**: `billing.manage` = Owner only. Admin = 403. Agent = 403.
+    CheckoutService y PortalService invocan `AuthorizationService->authorize()` internamente.
+  - **Multi-tenancy**: Checkout usa tenant del URL (TenantMiddleware). BillingCustomer
+    resuelto por tenant_id. Cross-tenant → 403/404 (TenantMiddleware + AuthorizationService).
+  - **Routes**: `POST {tenant}/billing/checkout` (store), `POST {tenant}/billing/portal` (portal).
+  - **Frontend**:
+    - `billingApi.ts`: +createCheckoutSession, +createPortalSession.
+    - `billingTypes.ts`: Subscription.status + 'pending'.
+    - `billingUtils.ts`: statusLabel + 'Pendiente de pago', statusColor + 'amber'.
+    - `Billing.vue`: isPaidPlan() helper, interval selector (monthly/yearly) en dialog,
+      redirect a checkout URL para planes paid, portal button "Gestionar facturación",
+      onMounted() lee `?checkout=success|cancelled` → muestra mensaje y limpia URL,
+      confirmPlanAction bifurca: paid→createCheckoutSession→redirect, free→assignPlan/changePlan.
+  - **Config**: `app.url` (para success_url/cancel_url/return_url). Verificado en `.env.example`.
+  - **Testing**:
+    - `BillingU2ProviderTest` (5): Provider interface, config validation, checkout/portal throws.
+    - `BillingU2CheckoutServiceTest` (10): ensureCustomer reuse, free plan bypass, invalid interval,
+      no price configured, authorization (agent/admin denied), portal URL, portal without customer.
+    - `BillingU2ApiTest` (14): owner/admin/agent matrix for checkout+portal, validation, extra fields
+      rejected, billing customer creation, portal response.
+    - `BillingU2MultiTenancyTest` (6): cross-tenant isolation for checkout+portal, unique customers.
+    - `BillingU2SecurityTest` (6): billing.manage matrix, auth required, outsider 403, response
+      containment, idempotent customer creation.
+    - `BillingU2PostgresTest` (4): unique constraints, different providers, unique provider_customer_id,
+      plan stripe columns.
+    - `billingApi.test.ts` (+5): createCheckoutSession, createPortalSession, security.
+    - `billingUtils.test.ts` (+2): pending statusLabel/statusColor.
+    - Total U2: **41 tests** (32 Pest backend + 4 PostgreSQL + 7 Vitest frontend).
+  - **Quality gates**: pint 727 files clean, vue-tsc 0 errors, vite build ok,
+    206/206 billing tests pass, composer audit 0 vulnerabilities.
+- **Consecuencias**:
+  - Propietarios de tenant pueden iniciar checkout y acceder al portal de facturación.
+  - Free plans siguen usando SubscriptionService directamente (sin Stripe).
+  - Los pagos NO se confirman en U2 — esperan U3 webhooks.
+  - Precio y price IDs nunca llegan al frontend (backend-authoritative).
+  - Redirección segura contra open redirect.
+  - Residual risks documentados: orphan Stripe customers, double-submit race.
+  - Patrón consistente con CheckoutService/BillingCustomerService como orquestadores.

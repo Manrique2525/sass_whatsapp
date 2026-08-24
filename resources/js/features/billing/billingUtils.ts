@@ -19,6 +19,8 @@ export function statusLabel(status: string): string {
       return 'Activo';
     case 'cancelled':
       return 'Cancelado';
+    case 'pending':
+      return 'Pendiente de pago';
     default:
       return status;
   }
@@ -30,6 +32,8 @@ export function statusColor(status: string): string {
       return 'bg-emerald-50 text-emerald-700';
     case 'cancelled':
       return 'bg-zinc-100 text-zinc-500';
+    case 'pending':
+      return 'bg-amber-50 text-amber-700';
     default:
       return 'bg-zinc-100 text-zinc-500';
   }

@@ -40,7 +40,7 @@ export interface SubscriptionPlan {
 export interface Subscription {
   id: string;
   plan: SubscriptionPlan;
-  status: 'active' | 'cancelled';
+  status: 'active' | 'cancelled' | 'pending';
   quantity: number;
   current_period_start: string | null;
   current_period_end: string | null;

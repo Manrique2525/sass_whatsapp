@@ -596,3 +596,21 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
         FASE 23 app boots and works with empty STRIPE_SECRET_KEY. Tests: 32 new U1
         (BILL-U1-MOD-01..18, BILL-U1-MT-01..06, BILL-U1-PROV-01..08, BILL-U1-PG-01..08).
         No Stripe API calls in tests (config/validation only). Pint clean, composer audit 0.
+- [x] (FASE 24 U2) Checkout + Customer Portal:
+        CheckoutService + BillingCustomerService. billing.manage = Owner only. Admin = 403.
+        Agent = 403. Free plan bypass → BillingProviderException (no Stripe interaction).
+        Return URLs (?checkout=success|cancelled) = feedback only, NO subscription mutation.
+        Backend resolves price ID server-side (plan_id + interval from client, NO price_id,
+        NO amount, NO currency). Safe redirect validated (checkout.stripe.com or billing.stripe.com).
+        Checkout idempotency: Stripe Session idempotency + frontend disabled button.
+        Customer creation race: UNIQUE(tenant_id, provider) + UNIQUE(provider, provider_customer_id)
+        → QueryException → re-read fallback. Cross-tenant checkout blocked by TenantMiddleware
+        + AuthorizationService. StoreCheckoutRequest strips extra fields (price_id, amount,
+        currency, tenant_id silently rejected by Laravel validation). Portal session requires
+        existing BillingCustomer (422 if missing). BillingCustomerService.ensureCustomer()
+        creates provider customer + DB mapping atomically in DB::transaction.
+        Residual risks documented: orphan Stripe customers (race), double-submit (frontend-only).
+        No Stripe.js, no PaymentIntent, no SetupIntent, no custom card forms.
+        Tests BILL-U2-PROV-01..05, BILL-U2-SVC-01..10, BILL-U2-API-01..14,
+        BILL-U2-MT-01..06, BILL-U2-SEC-01..06, BILL-U2-PG-01..04.
+        Frontend tests: BILL-FE-U2-01..03. Total U2: 41 tests.

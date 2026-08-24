@@ -855,3 +855,20 @@ Billing provider infrastructure tests (FASE 24 U1):
 | PostgreSQL (BILL-U1-PG-01..08) | 8 (table exists, columns, valid insert, FK, unique tenant+provider, unique provider+customer_id, cascade delete, plan stripe columns) |
 | **Total U1** | **32** |
 | **Total FASE 23+24 (U1+U2+U3+U4+U1)** | **215** |
+
+## 15. FASE 24 — Checkout + Customer Portal Test Suite (U2)
+
+Checkout + portal tests (FASE 24 U2):
+
+| Category | Tests |
+|---|---|
+| Provider (BILL-U2-PROV-01..05) | 5 (implements interface checkout, implements interface portal, checkout signature, portal signature, providerName) |
+| CheckoutService (BILL-U2-SVC-01..10) | 10 (create customer if missing, reuse existing customer, non-existent plan, free plan bypass, invalid interval, no price configured, unauthorized agent, portal URL, portal without customer, portal admin denied) |
+| API (BILL-U2-API-01..14) | 14 (owner checkout, response URL, yearly, admin rejected, agent rejected, missing plan_id, missing interval, invalid interval, extra fields stripped, non-existent plan 404, free plan 422, billing customer created, owner portal, admin portal rejected) |
+| Multi-Tenancy (BILL-U2-MT-01..06) | 6 (A→B checkout blocked, B→A checkout blocked, A→B portal blocked, B→A portal blocked, no customer leaking, unique customers per tenant) |
+| Security (BILL-U2-SEC-01..06) | 6 (billing.manage owner/admin/agent matrix, portal owner/admin/agent, unauthenticated 401, outsider 403/404, no price_id in response, idempotent customer creation) |
+| PostgreSQL (BILL-U2-PG-01..04) | 4 (unique tenant+provider, different providers, unique provider_customer_id, plan stripe columns nullable) |
+| **Total U2 (Pest)** | **39** |
+| **Frontend Vitest (BILL-FE-U2-01..03)** | **7** (createCheckoutSession URL/params, yearly interval, createPortalSession URL/return, checkout payload security) |
+| **Total U2** | **46** |
+| **Total FASE 23+24 (U1+U2+U3+U4+U1+U2)** | **231** |

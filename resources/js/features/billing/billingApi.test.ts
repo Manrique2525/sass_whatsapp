@@ -5,6 +5,8 @@ import {
   assignPlan,
   changePlan,
   cancelSubscription,
+  createCheckoutSession,
+  createPortalSession,
   fetchUsageSummary,
   fetchUsageHistory,
 } from './billingApi';
@@ -194,6 +196,59 @@ describe('BILL-FE-U4-07: fetchUsageHistory', () => {
     expect(mockGet).toHaveBeenCalledWith('/api/v1/tenants/tenant-1/usage/history', {
       params: {},
     });
+  });
+});
+
+describe('BILL-FE-U2-01: createCheckoutSession', () => {
+  it('posts to correct URL with plan_id and interval', async () => {
+    mockPost.mockResolvedValueOnce({ data: { checkout_url: 'https://checkout.stripe.com/test' } });
+
+    const result = await createCheckoutSession('tenant-1', 'plan-uuid-1', 'monthly');
+
+    expect(mockPost).toHaveBeenCalledWith('/api/v1/tenants/tenant-1/billing/checkout', {
+      plan_id: 'plan-uuid-1',
+      interval: 'monthly',
+    });
+    expect(result).toBe('https://checkout.stripe.com/test');
+  });
+
+  it('works with yearly interval', async () => {
+    mockPost.mockResolvedValueOnce({ data: { checkout_url: 'https://checkout.stripe.com/test' } });
+
+    const result = await createCheckoutSession('tenant-1', 'plan-uuid-1', 'yearly');
+
+    expect(mockPost).toHaveBeenCalledWith('/api/v1/tenants/tenant-1/billing/checkout', {
+      plan_id: 'plan-uuid-1',
+      interval: 'yearly',
+    });
+    expect(result).toBe('https://checkout.stripe.com/test');
+  });
+});
+
+describe('BILL-FE-U2-02: createPortalSession', () => {
+  it('posts to correct URL and returns portal URL', async () => {
+    mockPost.mockResolvedValueOnce({ data: { portal_url: 'https://billing.stripe.com/test' } });
+
+    const result = await createPortalSession('tenant-1');
+
+    expect(mockPost).toHaveBeenCalledWith('/api/v1/tenants/tenant-1/billing/portal');
+    expect(result).toBe('https://billing.stripe.com/test');
+  });
+});
+
+describe('BILL-FE-U2-03: security — no extra fields in checkout payload', () => {
+  it('checkout sends only plan_id and interval', async () => {
+    mockPost.mockResolvedValueOnce({ data: { checkout_url: 'https://checkout.stripe.com/test' } });
+
+    await createCheckoutSession('tenant-1', 'plan-uuid-1', 'monthly');
+
+    const callArgs = mockPost.mock.calls[0];
+    const body = callArgs[1];
+    expect(Object.keys(body)).toEqual(['plan_id', 'interval']);
+    expect(body).not.toHaveProperty('price_id');
+    expect(body).not.toHaveProperty('amount');
+    expect(body).not.toHaveProperty('currency');
+    expect(body).not.toHaveProperty('tenant_id');
   });
 });
 

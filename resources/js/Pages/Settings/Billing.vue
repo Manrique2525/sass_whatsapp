@@ -17,6 +17,8 @@ import {
   assignPlan,
   changePlan,
   cancelSubscription,
+  createCheckoutSession,
+  createPortalSession,
 } from '@/features/billing/billingApi';
 import {
   statusLabel,
@@ -57,6 +59,7 @@ const actionSuccess = ref<string | null>(null);
 
 const showPlanDialog = ref(false);
 const selectedPlan = ref<Plan | null>(null);
+const selectedInterval = ref<string>('monthly');
 const planAction = ref<'assign' | 'change'>('assign');
 
 const showCancelDialog = ref(false);
@@ -120,11 +123,33 @@ const goToHistoryPage = (target: number): void => {
 
 const hasActiveSubscription = computed(() => subscription.value?.status === 'active');
 
+const isPaidPlan = (plan: Plan): boolean => {
+  return plan.price_monthly !== null && plan.price_monthly !== 0;
+};
+
 const openAssignPlan = (plan: Plan): void => {
   selectedPlan.value = plan;
+  selectedInterval.value = 'monthly';
   planAction.value = hasActiveSubscription.value ? 'change' : 'assign';
   actionError.value = null;
   showPlanDialog.value = true;
+};
+
+const openPortal = async (): Promise<void> => {
+  if (!currentTenantId.value) {
+    return;
+  }
+
+  actionLoading.value = true;
+  actionError.value = null;
+
+  try {
+    const portalUrl = await createPortalSession(currentTenantId.value);
+    window.location.href = portalUrl;
+  } catch (err) {
+    actionError.value = extractErrorMessage(err, 'No se pudo abrir el portal de facturación.');
+    actionLoading.value = false;
+  }
 };
 
 const confirmPlanAction = async (): Promise<void> => {
@@ -137,6 +162,17 @@ const confirmPlanAction = async (): Promise<void> => {
   actionSuccess.value = null;
 
   try {
+    if (isPaidPlan(selectedPlan.value)) {
+      const checkoutUrl = await createCheckoutSession(
+        currentTenantId.value,
+        selectedPlan.value.id,
+        selectedInterval.value,
+      );
+      showPlanDialog.value = false;
+      window.location.href = checkoutUrl;
+      return;
+    }
+
     if (planAction.value === 'assign') {
       subscription.value = await assignPlan(currentTenantId.value, selectedPlan.value.id);
       actionSuccess.value = 'Plan asignado correctamente.';
@@ -195,7 +231,20 @@ watch(currentTenantId, () => {
   loadAll();
 });
 
-onMounted(loadAll);
+onMounted(() => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const checkoutStatus = urlParams.get('checkout');
+
+  if (checkoutStatus === 'success') {
+    actionSuccess.value = 'Pago iniciado correctamente. Tu plan se activará cuando Stripe confirme el pago (normalmente en unos segundos).';
+    window.history.replaceState({}, '', window.location.pathname);
+  } else if (checkoutStatus === 'cancelled') {
+    actionSuccess.value = 'El pago no se completó. Puedes intentar de nuevo cuando quieras.';
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+
+  loadAll();
+});
 </script>
 
 <template>
@@ -402,14 +451,24 @@ onMounted(loadAll);
             <p v-else class="mt-4 text-sm text-zinc-500">No hay planes disponibles.</p>
 
             <div v-if="canManage && hasActiveSubscription" class="mt-4 border-t border-zinc-100 pt-4">
-              <button
-                type="button"
-                :disabled="actionLoading"
-                class="text-sm text-red-600 hover:underline disabled:opacity-50"
-                @click="openCancelDialog"
-              >
-                Cancelar suscripción
-              </button>
+              <div class="flex items-center gap-4">
+                <button
+                  type="button"
+                  :disabled="actionLoading"
+                  class="text-sm text-zinc-600 underline hover:text-zinc-900 disabled:opacity-50"
+                  @click="openPortal"
+                >
+                  Gestionar facturación
+                </button>
+                <button
+                  type="button"
+                  :disabled="actionLoading"
+                  class="text-sm text-red-600 hover:underline disabled:opacity-50"
+                  @click="openCancelDialog"
+                >
+                  Cancelar suscripción
+                </button>
+              </div>
             </div>
           </div>
 
@@ -487,9 +546,50 @@ onMounted(loadAll);
           ¿Confirmas {{ planAction === 'assign' ? 'asignar' : 'cambiar a' }} el plan
           <span class="font-medium text-zinc-900">"{{ selectedPlan.name }}"</span>?
         </p>
-        <p v-if="selectedPlan.price_monthly !== null" class="mt-1 text-xs text-zinc-400">
+        <p v-if="selectedPlan.price_monthly !== null && !isPaidPlan(selectedPlan)" class="mt-1 text-xs text-zinc-400">
           {{ formatCurrency(selectedPlan.price_monthly) }}/mes
         </p>
+
+        <div v-if="selectedPlan && isPaidPlan(selectedPlan)" class="mt-4">
+          <label class="text-xs font-medium text-zinc-500">Periodo de facturación</label>
+          <div class="mt-2 flex gap-2">
+            <button
+              type="button"
+              :class="[
+                'flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors',
+                selectedInterval === 'monthly'
+                  ? 'border-zinc-900 bg-zinc-900 text-white'
+                  : 'border-zinc-300 bg-white text-zinc-700 hover:border-zinc-400',
+              ]"
+              @click="selectedInterval = 'monthly'"
+            >
+              Mensual
+            </button>
+            <button
+              type="button"
+              :class="[
+                'flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors',
+                selectedInterval === 'yearly'
+                  ? 'border-zinc-900 bg-zinc-900 text-white'
+                  : 'border-zinc-300 bg-white text-zinc-700 hover:border-zinc-400',
+              ]"
+              @click="selectedInterval = 'yearly'"
+            >
+              Anual
+            </button>
+          </div>
+          <p class="mt-2 text-xs text-zinc-400">
+            <template v-if="selectedInterval === 'monthly'">
+              {{ formatCurrency(selectedPlan.price_monthly) }}/mes
+            </template>
+            <template v-else-if="selectedPlan.price_yearly !== null">
+              {{ formatCurrency(selectedPlan.price_yearly) }}/año
+              <span v-if="selectedPlan.price_monthly && selectedPlan.price_monthly > 0" class="ml-1 text-emerald-600">
+                (ahorra {{ Math.round((1 - selectedPlan.price_yearly / (selectedPlan.price_monthly * 12)) * 100) }}%)
+              </span>
+            </template>
+          </p>
+        </div>
 
         <div v-if="actionError" class="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
           {{ actionError }}
@@ -509,7 +609,7 @@ onMounted(loadAll);
             class="rounded-md bg-zinc-900 px-5 py-2 text-sm font-semibold text-white hover:bg-zinc-700 disabled:opacity-50"
             @click="confirmPlanAction"
           >
-            {{ actionLoading ? 'Procesando...' : 'Confirmar' }}
+            {{ actionLoading ? 'Procesando...' : (selectedPlan && isPaidPlan(selectedPlan) ? 'Ir a pagar' : 'Confirmar') }}
           </button>
         </div>
       </div>

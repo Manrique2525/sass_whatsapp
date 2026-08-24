@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\PasswordController;
 use App\Http\Controllers\Api\V1\BusinessProfileController;
 use App\Http\Controllers\Api\V1\ChatbotController;
+use App\Http\Controllers\Api\V1\CheckoutController;
 use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\ConversationController;
 use App\Http\Controllers\Api\V1\DocumentController;
@@ -213,6 +214,10 @@ Route::prefix('v1')->group(function (): void {
 
                 Route::get('{tenant}/usage', [UsageController::class, 'index']);
                 Route::get('{tenant}/usage/history', [UsageController::class, 'history']);
+
+                // FASE 24 U2 — Checkout + Portal.
+                Route::post('{tenant}/billing/checkout', [CheckoutController::class, 'store']);
+                Route::post('{tenant}/billing/portal', [CheckoutController::class, 'portal']);
             });
         });
     });

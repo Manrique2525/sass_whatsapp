@@ -32,6 +32,7 @@ describe('statusLabel', () => {
   it('returns correct labels', () => {
     expect(statusLabel('active')).toBe('Activo');
     expect(statusLabel('cancelled')).toBe('Cancelado');
+    expect(statusLabel('pending')).toBe('Pendiente de pago');
     expect(statusLabel('unknown')).toBe('unknown');
   });
 });
@@ -40,6 +41,7 @@ describe('statusColor', () => {
   it('returns correct color classes', () => {
     expect(statusColor('active')).toContain('emerald');
     expect(statusColor('cancelled')).toContain('zinc');
+    expect(statusColor('pending')).toContain('amber');
   });
 });
 

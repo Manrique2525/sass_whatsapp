@@ -154,6 +154,7 @@ pendiente de la fase de storage).
 | Analytics | `GET /api/v1/analytics/overview?from=&to=` |
 | Plans | `GET /api/v1/plans` |
 | Subscriptions | `GET/POST /api/v1/subscriptions`, `GET /api/v1/usage` |
+| Checkout + Portal | `POST /api/v1/tenants/{tenant}/billing/checkout`, `POST /api/v1/tenants/{tenant}/billing/portal` |
 | Notifications | `GET /api/v1/tenants/{tenant}/notifications`, `PATCH /api/v1/tenants/{tenant}/notifications/{notification}/read`, `POST /api/v1/tenants/{tenant}/notifications/read-all` |
 | Notification Preferences | `GET /api/v1/tenants/{tenant}/notification-preferences`, `PATCH /api/v1/tenants/{tenant}/notification-preferences` |
 | Audit | `GET /api/v1/audit-logs` (solo owner/admin) |
@@ -483,7 +484,64 @@ El email automático se envía únicamente para eventos `HandoffRequested` a own
 `email_notifications_enabled = true`. Agentes no reciben email (ADR-086). Contenido genérico
 sin PII. Mail procesado vía queue (`ShouldQueue`).
 
-## 4. Webhooks (sin auth Bearer; autenticados por firma y dedupe)
+## 4. Billing — Checkout + Portal (FASE 24 U2, ADR-093)
+
+### Checkout Session
+
+Crea una sesión de pago hosted en Stripe para un plan de pago. El frontend redirige al usuario
+a la URL devuelta. NO activa la suscripción — eso se hace vía webhook en U3.
+
+| Método | Ruta | Permiso | Descripción |
+|---|---|---|---|
+| POST | `/api/v1/tenants/{tenant}/billing/checkout` | `billing.manage` (owner only) | Crea una Checkout Session de Stripe |
+
+**Request body**:
+```json
+{
+  "plan_id": "uuid",
+  "interval": "monthly|yearly"
+}
+```
+
+**Response 200**:
+```json
+{
+  "checkout_url": "https://checkout.stripe.com/c/pay/cs_..."
+}
+```
+
+**Reglas**:
+- `plan_id`: UUID del plan (requerido). Si no existe → 404.
+- `interval`: `monthly` o `yearly` (requerido). Inválido → 422.
+- Si el plan es gratuito → 422 `CHECKOUT_FAILED`.
+- Si el plan no tiene `stripe_price_id_*` configurado → 422 `CHECKOUT_FAILED`.
+- El backend resuelve el price ID server-side. El frontend NUNCA envía price_id, amount, o currency.
+- Si no existe `billing_customer` para el tenant, se crea automáticamente.
+- Return URLs: `?checkout=success` / `?checkout=cancelled` = feedback informativo, NO mutan la suscripción.
+- Admin/agent → 403 `PERMISSION_DENIED`.
+- No autenticado → 401.
+
+### Customer Portal
+
+Abre el portal de facturación de Stripe para gestionar suscripción, métodos de pago, facturas.
+
+| Método | Ruta | Permiso | Descripción |
+|---|---|---|---|
+| POST | `/api/v1/tenants/{tenant}/billing/portal` | `billing.manage` (owner only) | Crea una Portal Session de Stripe |
+
+**Response 200**:
+```json
+{
+  "portal_url": "https://billing.stripe.com/p/session/bps_..."
+}
+```
+
+**Reglas**:
+- Requiere `billing_customer` existente para el tenant → 422 `PORTAL_FAILED` si no existe.
+- Admin/agent → 403 `PERMISSION_DENIED`.
+- No autenticado → 401.
+
+## 5. Webhooks (sin auth Bearer; autenticados por firma y dedupe)
 
 | Método | Ruta | Descripción |
 |---|---|---|
@@ -492,7 +550,7 @@ sin PII. Mail procesado vía queue (`ShouldQueue`).
 | POST | `/api/webhooks/stripe` | Eventos de Stripe (invoice, subscription). Firma `Stripe-Signature` + dedupe por `event id` |
 | POST | `/api/webhooks/flows/{trigger}` | Webhook público de flujos. Autenticación por `Authorization: Bearer {token}` (SHA-256 hash comparado con `config.token_hash`); tenant resuelto desde el trigger. Idempotencia por `Idempotency-Key` header (409 duplicado). Rate limit 60 req/min por IP. Despacha `StartFlowFromWebhook` job → 202 `{"status": "accepted"}` (FASE 14 U3, ADR-049) |
 
-## 5. Errores
+## 6. Errores
 
 Formato estándar:
 

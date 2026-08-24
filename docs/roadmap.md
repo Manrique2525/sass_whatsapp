@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 U1 COMPLETADA**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 U1+U2 COMPLETADA**.
 
 ## Fases
 
@@ -2340,3 +2340,43 @@ FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COM
 - **Tests**: 32 U1 new (18 model + 6 multi-tenancy + 8 provider) + 133 existing = 165 billing tests total
 - **Quality gates**: composer audit 0 vulnerabilities, pint 715 files clean, vue-tsc 0 errors, vite build ok
 - ADR-092 registrado
+
+### U2 — Checkout + Customer Portal
+- **Estado**: COMPLETADA
+- **Scope**: Checkout session + customer portal. NO webhooks, NO subscription sync, NO payment_failed, NO invoices, NO refunds, NO trials, NO custom card forms, NO Stripe.js, NO PaymentIntent, NO SetupIntent, NO UsageGuard, NO FASE 25, NO push.
+- **New files**:
+  - `app/Application/Billing/Services/BillingCustomerService.php` — tenant→provider customer resolution, ensureCustomer with race handling
+  - `app/Application/Billing/Services/CheckoutService.php` — createCheckoutSession, createPortalSession, free plan bypass, authorization
+  - `app/Domain/Billing/DTOs/CheckoutSessionData.php` — providerSessionId + url
+  - `app/Domain/Billing/DTOs/PortalSessionData.php` — providerSessionId + url
+  - `app/Http/Controllers/Api/V1/CheckoutController.php` — store (checkout) + portal
+  - `app/Http/Requests/Billing/StoreCheckoutRequest.php` — plan_id (uuid) + interval (monthly|yearly)
+  - `tests/Feature/Billing/BillingU2ProviderTest.php` — 5 tests (PROV-01..05)
+  - `tests/Feature/Billing/BillingU2CheckoutServiceTest.php` — 10 tests (SVC-01..10)
+  - `tests/Feature/Billing/BillingU2ApiTest.php` — 14 tests (API-01..14)
+  - `tests/Feature/Billing/BillingU2MultiTenancyTest.php` — 6 tests (MT-01..06)
+  - `tests/Feature/Billing/BillingU2SecurityTest.php` — 6 tests (SEC-01..06)
+  - `tests/Postgres/Billing/BillingU2PostgresTest.php` — 4 tests (PG-01..04)
+- **Modified files**:
+  - `app/Domain/Billing/Contracts/BillingProviderInterface.php` — +createCheckoutSession, +createPortalSession
+  - `app/Infrastructure/Billing/StripeProvider.php` — +createCheckoutSession, +createPortalSession implementations
+  - `app/Application/Billing/Services/CheckoutService.php` — free plan check moved before price_id resolution
+  - `routes/api.php` — +2 routes: POST {tenant}/billing/checkout, POST {tenant}/billing/portal
+  - `resources/js/features/billing/billingApi.ts` — +createCheckoutSession, +createPortalSession
+  - `resources/js/features/billing/billingTypes.ts` — Subscription.status + 'pending'
+  - `resources/js/features/billing/billingUtils.ts` — statusLabel/statusColor + pending/amber
+  - `resources/js/Pages/Settings/Billing.vue` — checkout redirect, portal button, interval selector, return URL feedback
+  - `resources/js/features/billing/billingApi.test.ts` — +5 tests (U2-01..03)
+  - `resources/js/features/billing/billingUtils.test.ts` — +2 tests (pending status)
+- **Routes**: `POST {tenant}/billing/checkout` (billing.manage), `POST {tenant}/billing/portal` (billing.manage)
+- **Design decisions** (see ADR-093):
+  - Return URLs = feedback only (no subscription mutation)
+  - Free plan bypass = BillingProviderException (use SubscriptionService)
+  - Backend resolves price ID server-side (no price_id/amount/currency from client)
+  - Safe redirect validated
+  - Checkout idempotency via Stripe Session + frontend disabled button
+  - Customer creation race handled via UNIQUE constraint + re-read
+  - billing.manage = Owner only (admin = NO, agent = NO)
+- **Tests**: 41 new (5 provider + 10 service + 14 API + 6 multi-tenancy + 6 security + 4 PostgreSQL + 7 Vitest frontend). Total FASE 23+24: 224 billing tests
+- **Quality gates**: pint 727 files clean, vue-tsc 0 errors, vite build ok, composer audit 0 vulnerabilities
+- ADR-093 registrado

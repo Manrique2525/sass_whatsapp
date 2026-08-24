@@ -5,14 +5,16 @@ declare(strict_types=1);
 namespace App\Domain\Billing\Contracts;
 
 use App\Domain\Billing\DTOs\BillingCustomerData;
+use App\Domain\Billing\DTOs\CheckoutSessionData;
+use App\Domain\Billing\DTOs\PortalSessionData;
 use App\Domain\Billing\Exceptions\BillingProviderException;
 
 /**
- * Contrato del proveedor de facturación (FASE 24 U1).
+ * Contrato del proveedor de facturación (FASE 24 U1, extendido U2).
  *
  * El dominio depende de esta interfaz, nunca de un proveedor concreto.
  * Las implementaciones convierten excepciones del SDK a BillingProviderException.
- * Los IDs de Stripe (customer_id, price_id) se manipulan como strings puros;
+ * Los IDs del proveedor se manipulan como strings puros;
  * no se exponen objetos del SDK a domain/application.
  */
 interface BillingProviderInterface
@@ -39,6 +41,24 @@ interface BillingProviderInterface
      * @throws BillingProviderException
      */
     public function validatePrice(string $priceId): bool;
+
+    /**
+     * Crea una Checkout Session hosted en el proveedor.
+     *
+     * @param  array{customer: string, price: string, quantity: int, success_url: string, cancel_url: string, metadata?: array<string, string>}  $params
+     *
+     * @throws BillingProviderException
+     */
+    public function createCheckoutSession(array $params): CheckoutSessionData;
+
+    /**
+     * Crea una Portal Session para el customer en el proveedor.
+     *
+     * @param  array{customer: string, return_url: string}  $params
+     *
+     * @throws BillingProviderException
+     */
+    public function createPortalSession(array $params): PortalSessionData;
 
     /**
      * Obtiene el nombre del provider (ej: 'stripe').

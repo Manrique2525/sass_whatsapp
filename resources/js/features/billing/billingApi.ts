@@ -42,6 +42,25 @@ export async function cancelSubscription(tenantId: string): Promise<void> {
   await window.axios.delete(`/api/v1/tenants/${tenantId}/subscriptions`);
 }
 
+export async function createCheckoutSession(
+  tenantId: string,
+  planId: string,
+  interval: string,
+): Promise<string> {
+  const res = await window.axios.post(`/api/v1/tenants/${tenantId}/billing/checkout`, {
+    plan_id: planId,
+    interval,
+  });
+  return res.data.checkout_url as string;
+}
+
+export async function createPortalSession(
+  tenantId: string,
+): Promise<string> {
+  const res = await window.axios.post(`/api/v1/tenants/${tenantId}/billing/portal`);
+  return res.data.portal_url as string;
+}
+
 export async function fetchUsageSummary(tenantId: string): Promise<UsageSummary> {
   const res = await window.axios.get(`/api/v1/tenants/${tenantId}/usage`);
   return res.data.usage as UsageSummary;
