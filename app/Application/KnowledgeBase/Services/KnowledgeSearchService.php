@@ -7,10 +7,13 @@ namespace App\Application\KnowledgeBase\Services;
 use App\Application\KnowledgeBase\Contracts\KnowledgeSearchServiceInterface;
 use App\Domain\AI\Contracts\EmbeddingProviderInterface;
 use App\Domain\AI\ValueObjects\EmbeddingRequest;
+use App\Domain\Billing\Contracts\UsageGuardInterface;
+use App\Domain\Billing\Enums\UsageCategory;
 use App\Domain\KnowledgeBase\Models\KnowledgeBase;
 use App\Domain\KnowledgeBase\ValueObjects\KnowledgeSearchResult;
 use App\Domain\KnowledgeBase\ValueObjects\RetrievedChunk;
 use App\Domain\KnowledgeBase\ValueObjects\VectorSerializer;
+use App\Domain\Tenants\Models\Tenant;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -26,6 +29,7 @@ final class KnowledgeSearchService implements KnowledgeSearchServiceInterface
 {
     public function __construct(
         private EmbeddingProviderInterface $embeddingProvider,
+        private readonly UsageGuardInterface $usageGuard,
     ) {}
 
     /**
@@ -69,7 +73,7 @@ final class KnowledgeSearchService implements KnowledgeSearchServiceInterface
 
         $kb = $this->resolveKnowledgeBase($tenantId, $knowledgeBaseId);
 
-        $queryVector = $this->embedQuery($query);
+        $queryVector = $this->embedQuery($query, $tenantId);
 
         $serializedQueryVector = VectorSerializer::serialize($queryVector);
 
@@ -162,21 +166,62 @@ final class KnowledgeSearchService implements KnowledgeSearchServiceInterface
     }
 
     /** @return list<float> */
-    private function embedQuery(string $query): array
+    private function embedQuery(string $query, string $tenantId): array
     {
-        $response = $this->embeddingProvider->embed(
-            new EmbeddingRequest(input: [$query]),
-        );
+        $estimatedTokens = max(1, (int) ceil(mb_strlen($query) / 3));
+        $reservation = null;
 
-        $vector = $response->embeddings[0] ?? null;
+        try {
+            $tenant = Tenant::query()->find($tenantId);
 
-        if ($vector === null) {
-            throw new \RuntimeException('Embedding provider returned empty response for query.');
+            if ($tenant !== null) {
+                $reservation = $this->usageGuard->reserve(
+                    tenant: $tenant,
+                    category: UsageCategory::AiTokens,
+                    quantity: $estimatedTokens,
+                    ttlSeconds: 120,
+                );
+            }
+
+            $response = $this->embeddingProvider->embed(
+                new EmbeddingRequest(input: [$query]),
+            );
+
+            if ($reservation !== null) {
+                $this->usageGuard->commitWithActual($reservation, $response->totalInputTokens);
+            } elseif ($tenant !== null && $response->totalInputTokens > 0) {
+                try {
+                    $this->usageGuard->recordDirect(
+                        tenant: $tenant,
+                        category: UsageCategory::AiTokens,
+                        quantity: $response->totalInputTokens,
+                        description: 'rag_embedding_unlimited',
+                    );
+                } catch (\Throwable) {
+                    // Unlimited telemetry is best-effort
+                }
+            }
+
+            $vector = $response->embeddings[0] ?? null;
+
+            if ($vector === null) {
+                throw new \RuntimeException('Embedding provider returned empty response for query.');
+            }
+
+            VectorSerializer::validate($vector);
+
+            return $vector;
+        } catch (\Throwable $e) {
+            if ($reservation !== null) {
+                try {
+                    $this->usageGuard->release($reservation);
+                } catch (\Throwable) {
+                    // Release failure is logged internally by UsageGuard
+                }
+            }
+
+            throw $e;
         }
-
-        VectorSerializer::validate($vector);
-
-        return $vector;
     }
 
     /**

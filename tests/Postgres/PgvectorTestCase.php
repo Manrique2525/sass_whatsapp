@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Postgres;
 
+use App\Domain\Billing\Contracts\UsageGuardInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Fakes\FakeUsageGuard;
 
 /**
  * Base test case for pgvector/FASE 17 PostgreSQL tests.
@@ -21,6 +23,15 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 abstract class PgvectorTestCase extends PostgresConcurrencyTestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        if (config('database.default') === 'pgsql') {
+            app()->instance(UsageGuardInterface::class, new FakeUsageGuard);
+        }
+    }
 
     protected function beforeTruncatingDatabase(): void
     {

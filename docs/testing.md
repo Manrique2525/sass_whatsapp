@@ -626,6 +626,53 @@ Ejecución: `vendor/bin/pest --filter="UsageGuardHotfix" --no-coverage`
 Ejecución SQLite: `vendor/bin/pest --filter="UsageGuard" --no-coverage`
 Ejecución PG: `docker compose exec -T app vendor/bin/pest --configuration=phpunit.pgsql.xml --filter="UsageGuardConcurrency" --no-coverage`
 
+### AI Token Quota Enforcement (FASE 25 U3, 9 PG tests + UsageGuardInterface + FakeUsageGuard)
+
+#### U3 — AI Token Quota Enforcement (backend)
+
+- **UsageGuardInterface extracted** (6 methods): `reserve()`, `commit()`, `release()`, `remaining()`, `recordDirect()`, `canPerformAction()`. `UsageGuard` implements the interface. AppServiceProvider binds `UsageGuardInterface → UsageGuard`.
+- **FakeUsageGuard**: defaults to unlimited (reserve returns null), injectable in tests.
+- **Token semantics** (all three consumers verified correct):
+  - `AiNodeExecutor`: reserves `ceil(mb_strlen(prompt+systemPrompt)/3) + maxTokens` (token estimate), commits `$response->totalTokens` (actual tokens from provider).
+  - `KnowledgeSearchService`: reserves `max(1, ceil(mb_strlen($query)/3))` (token estimate), commits `$response->totalInputTokens` (actual tokens from provider).
+  - `EmbeddingMaterializationService`: reserves `max(1, ceil(mb_strlen(implode('', $inputTexts))/3))` (token estimate), commits `$response->totalInputTokens` (actual tokens from provider).
+- All consumers updated to use `UsageGuardInterface` instead of concrete `UsageGuard`.
+- `FakeUsageGuard` injected in all billing test suites and flow execution tests.
+
+#### PostgreSQL — AI Quota Tests (AiQuotaPostgresTest, UA-PG-01..09)
+
+| Test | Description | Status |
+|---|---|---|
+| UA-PG-01 | reserve→commit→ledger round-trip on real PG | PASS |
+| UA-PG-02 | concurrent reserve at limit — second gets TenantQuotaExceededException | PASS |
+| UA-PG-03 | idempotent same key — returns same reservation, no double charge | PASS |
+| UA-PG-04 | second commit on committed reservation — throws InvalidArgumentException | PASS |
+| UA-PG-05 | actual > reserved (reserve 80, commit 120) — ledger records 120 | PASS |
+| UA-PG-06 | provider failure releases reservation — no usage recorded | PASS |
+| UA-PG-07 | reserve→commit→remaining decremented correctly | PASS |
+| UA-PG-08 | cumulative consumption — two commits accumulate, remaining correct | PASS |
+| UA-PG-09 | unlimited plan — null reservation, recordDirect works, no enforcement | PASS |
+
+Ejecución PG:
+```bash
+docker compose exec -T postgres dropdb -U saas --if-exists --force whatsapp_saas_handoff_u2_test
+docker compose exec -T postgres createdb -U saas -O saas whatsapp_saas_handoff_u2_test
+docker compose exec -T app vendor/bin/pest --configuration=phpunit.pgsql.xml --filter="AiQuotaPostgresTest" --no-coverage
+```
+
+Ejecución PG completa (incluye U3 + baseline):
+```bash
+docker compose exec -T postgres dropdb -U saas --if-exists --force whatsapp_saas_handoff_u2_test
+docker compose exec -T postgres createdb -U saas -O saas whatsapp_saas_handoff_u2_test
+docker compose exec -T app vendor/bin/pest --configuration=phpunit.pgsql.xml --testsuite=PostgresConcurrency --do-not-cache-result
+```
+
+#### PG Regression Analysis (U3)
+
+- **PgvectorTestCase fix**: added `FakeUsageGuard` binding in `setUp()` to prevent `SubscriptionNotFoundException` in KnowledgeSearch/Embedding tests.
+- **U3-caused PG regressions: 0** — all 22 failures in full PG suite are pre-existing (FaqPostgresTest FK, KnowledgeSearchPostgresTest stdClass vs array, EmbeddingMaterializationPostgresTest dimension mismatch, EmbeddingNullableMigrationTest stale column, AnalyticsPostgresTest migration rollback).
+- **PG baseline (post-U3)**: 142 passed, 22 failed (all pre-existing), 0 U3-caused.
+
 ### Seguridad
 - 401 sin token, 403 sin permiso, 404 en datos ajenos, throttle en login/envío.
 

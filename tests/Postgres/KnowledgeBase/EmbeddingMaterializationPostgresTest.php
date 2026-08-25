@@ -9,6 +9,7 @@ use App\Domain\KnowledgeBase\Models\KnowledgeDocument;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Fakes\FakeEmbeddingProvider;
+use Tests\Fakes\FakeUsageGuard;
 use Tests\Postgres\PgvectorTestCase;
 
 /*
@@ -139,6 +140,7 @@ class EmbeddingMaterializationPostgresTest extends PgvectorTestCase
         return new EmbeddingMaterializationService(
             $this->fake,
             app(AuditLogger::class),
+            new FakeUsageGuard,
         );
     }
 

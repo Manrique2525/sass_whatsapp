@@ -20,6 +20,7 @@ use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Fakes\FakeAIProvider;
 use Tests\Fakes\FakeEmbeddingProvider;
+use Tests\Fakes\FakeUsageGuard;
 
 uses(RefreshDatabase::class);
 
@@ -128,7 +129,8 @@ function make_sec_executor(?FakeAIProvider $fake = null): AiNodeExecutor
     return new AiNodeExecutor(
         provider: $fake,
         promptBuilder: new AiPromptBuilder(new VariableResolver),
-        searchService: new KnowledgeSearchService($embeddingFake),
+        searchService: new KnowledgeSearchService($embeddingFake, new FakeUsageGuard),
+        usageGuard: new FakeUsageGuard,
     );
 }
 

@@ -9,13 +9,18 @@ use App\Application\KnowledgeBase\Contracts\KnowledgeSearchServiceInterface;
 use App\Domain\AI\Contracts\AIProviderInterface;
 use App\Domain\AI\Enums\AIErrorCode;
 use App\Domain\AI\Exceptions\AIException;
+use App\Domain\AI\ValueObjects\AIRequest;
 use App\Domain\AI\ValueObjects\TelemetryPayload;
+use App\Domain\Billing\Contracts\UsageGuardInterface;
+use App\Domain\Billing\Enums\UsageCategory;
+use App\Domain\Billing\Models\UsageReservation;
 use App\Domain\Flows\Contracts\NodeExecutorInterface;
 use App\Domain\Flows\Enums\FlowNodeType;
 use App\Domain\Flows\Services\VariableGuard;
 use App\Domain\Flows\ValueObjects\NodeExecutionContext;
 use App\Domain\Flows\ValueObjects\NodeExecutionResult;
 use App\Domain\KnowledgeBase\ValueObjects\KnowledgeContext;
+use App\Domain\Tenants\Models\Tenant;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -55,6 +60,7 @@ final class AiNodeExecutor implements NodeExecutorInterface
         private readonly AIProviderInterface $provider,
         private readonly AiPromptBuilder $promptBuilder,
         private readonly KnowledgeSearchServiceInterface $searchService,
+        private readonly UsageGuardInterface $usageGuard,
     ) {}
 
     public function supports(): FlowNodeType
@@ -99,12 +105,16 @@ final class AiNodeExecutor implements NodeExecutorInterface
             $knowledgeContext,
         );
 
+        $reservation = $this->reserveAiQuota($context, $aiRequest);
+
         $startNs = hrtime(true);
 
         try {
             $response = $this->provider->generateResponse($aiRequest);
             $latencyMs = (int) ((hrtime(true) - $startNs) / 1_000_000);
             $output = $this->sanitizeOutput($response->content);
+
+            $this->reconcileAiUsage($reservation, $response->totalTokens, $context);
 
             if ($output === '') {
                 Log::warning('AI provider returned empty content', [
@@ -133,6 +143,8 @@ final class AiNodeExecutor implements NodeExecutorInterface
         } catch (AIException $e) {
             $latencyMs = (int) ((hrtime(true) - $startNs) / 1_000_000);
 
+            $this->releaseReservation($reservation);
+
             Log::warning('AI provider error in flow node', [
                 'execution_id' => $context->execution->id,
                 'node_id' => $context->node->id,
@@ -144,6 +156,8 @@ final class AiNodeExecutor implements NodeExecutorInterface
 
         } catch (\Throwable $e) {
             $latencyMs = (int) ((hrtime(true) - $startNs) / 1_000_000);
+
+            $this->releaseReservation($reservation);
 
             Log::error('Unexpected error in AI node', [
                 'execution_id' => $context->execution->id,
@@ -394,6 +408,115 @@ final class AiNodeExecutor implements NodeExecutorInterface
             'payload' => $payload,
             'sequence' => $this->nextSequence($context),
         ]);
+    }
+
+    /**
+     * Estimate token consumption for a generation request.
+     *
+     * Formula: estimated input tokens + configured max output tokens.
+     * Input estimation uses mb_strlen / 3 (conservative heuristic for mixed-language content).
+     * This is a deterministic, documented approximation — NOT an exact tokenizer.
+     *
+     * The estimate is intentionally conservative (overestimates) to prevent under-reservation.
+     * Actual usage is reconciled post-call via commitWithActual().
+     */
+    private function estimateGenerationTokens(AIRequest $request): int
+    {
+        $promptLength = mb_strlen($request->prompt) + mb_strlen((string) $request->systemPrompt);
+        $estimatedInputTokens = (int) ceil($promptLength / 3);
+
+        return max(1, $estimatedInputTokens + $request->maxTokens);
+    }
+
+    /**
+     * Reserve AI token quota before the provider call.
+     *
+     * Returns null if unlimited (plan limit is null) — caller proceeds without reservation.
+     * Returns null if tenant has no subscription — caller proceeds (SubscriptionNotFoundException
+     * will be thrown by reserve() for fail-closed behavior).
+     *
+     * The reservation holds budget during the external API call via PostgreSQL advisory lock.
+     * The lock is released when the transaction ends (before the provider call).
+     */
+    private function reserveAiQuota(
+        NodeExecutionContext $context,
+        AIRequest $request,
+    ): ?UsageReservation {
+        $estimatedTokens = $this->estimateGenerationTokens($request);
+        $idempotencyKey = "ai:flow:{$context->execution->id}:{$context->node->id}";
+
+        try {
+            return $this->usageGuard->reserve(
+                tenant: $context->tenant,
+                category: UsageCategory::AiTokens,
+                quantity: $estimatedTokens,
+                idempotencyKey: $idempotencyKey,
+                ttlSeconds: 300,
+            );
+        } catch (\Throwable $e) {
+            Log::warning('AI quota reservation failed', [
+                'execution_id' => $context->execution->id,
+                'node_id' => $context->node->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Reconcile actual token usage after a successful provider call.
+     *
+     * If a reservation was created: commit with actual token count (may differ from estimate).
+     * If unlimited (no reservation): record actual usage directly for telemetry.
+     */
+    private function reconcileAiUsage(
+        ?UsageReservation $reservation,
+        int $actualTokens,
+        NodeExecutionContext $context,
+    ): void {
+        if ($reservation !== null) {
+            $this->usageGuard->commitWithActual($reservation, $actualTokens);
+
+            return;
+        }
+
+        // Unlimited plan: no reservation, but record actual usage for telemetry
+        if ($actualTokens > 0) {
+            try {
+                $this->usageGuard->recordDirect(
+                    tenant: $context->tenant,
+                    category: UsageCategory::AiTokens,
+                    quantity: $actualTokens,
+                    description: 'ai_generation_unlimited',
+                );
+            } catch (\Throwable $e) {
+                Log::warning('AI unlimited telemetry recording failed', [
+                    'execution_id' => $context->execution->id,
+                    'node_id' => $context->node->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Release a reservation (e.g., on provider failure where no tokens were consumed).
+     */
+    private function releaseReservation(?UsageReservation $reservation): void
+    {
+        if ($reservation === null) {
+            return;
+        }
+
+        try {
+            $this->usageGuard->release($reservation);
+        } catch (\Throwable $e) {
+            Log::warning('AI reservation release failed', [
+                'reservation_id' => $reservation->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function sanitizeErrorCode(string $error): string

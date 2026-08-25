@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace App\Application\Messages\Services;
 
 use App\Application\Audit\Services\AuditLogger;
-use App\Application\Billing\Guards\UsageGuard;
 use App\Application\Contacts\Services\ContactService;
 use App\Application\Conversations\Services\ConversationService;
 use App\Application\Flows\Services\ConversationLockContext;
 use App\Application\Flows\Services\FlowExecutionService;
 use App\Application\Users\Services\AuthorizationService;
+use App\Domain\Billing\Contracts\UsageGuardInterface;
 use App\Domain\Billing\Enums\UsageCategory;
 use App\Domain\Conversations\Enums\ConversationStatus;
 use App\Domain\Conversations\Enums\InboxConversationChangeKind;
@@ -77,7 +77,7 @@ final class MessageService
         private readonly FlowExecutionService $flowExecutions,
         private readonly ConversationLockContext $lockContext,
         private readonly MessageOriginClassifier $originClassifier,
-        private readonly UsageGuard $usageGuard,
+        private readonly UsageGuardInterface $usageGuard,
     ) {}
 
     /**

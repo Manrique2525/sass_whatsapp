@@ -19,6 +19,7 @@ use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Fakes\FakeAIProvider;
 use Tests\Fakes\FakeKnowledgeSearchService;
+use Tests\Fakes\FakeUsageGuard;
 
 uses(RefreshDatabase::class);
 uses()->group('RAG-AI');
@@ -118,6 +119,7 @@ function rag_executor(
         provider: $aiFake,
         promptBuilder: new AiPromptBuilder(new VariableResolver),
         searchService: $searchFake,
+        usageGuard: new FakeUsageGuard,
     );
 
     return ['executor' => $executor, 'ai' => $aiFake, 'search' => $searchFake];
@@ -368,6 +370,7 @@ test('RAG-AI-11: Provider failure triggers fallback even with RAG enabled', func
         provider: $aiFake,
         promptBuilder: new AiPromptBuilder(new VariableResolver),
         searchService: $searchFake,
+        usageGuard: new FakeUsageGuard,
     );
 
     $context = rag_ai_context([

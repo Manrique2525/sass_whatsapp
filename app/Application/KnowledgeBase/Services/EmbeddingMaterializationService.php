@@ -7,9 +7,12 @@ namespace App\Application\KnowledgeBase\Services;
 use App\Application\Audit\Services\AuditLogger;
 use App\Domain\AI\Contracts\EmbeddingProviderInterface;
 use App\Domain\AI\ValueObjects\EmbeddingRequest;
+use App\Domain\Billing\Contracts\UsageGuardInterface;
+use App\Domain\Billing\Enums\UsageCategory;
 use App\Domain\KnowledgeBase\Models\KnowledgeChunk;
 use App\Domain\KnowledgeBase\Models\KnowledgeDocument;
 use App\Domain\KnowledgeBase\ValueObjects\VectorSerializer;
+use App\Domain\Tenants\Models\Tenant;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -31,6 +34,7 @@ final class EmbeddingMaterializationService
     public function __construct(
         private readonly EmbeddingProviderInterface $provider,
         private readonly AuditLogger $auditLogger,
+        private readonly UsageGuardInterface $usageGuard,
     ) {}
 
     /**
@@ -67,7 +71,7 @@ final class EmbeddingMaterializationService
 
             $batch = array_slice($pendingChunks, 0, $maxBatchSize);
 
-            $result = $this->processBatch($document, $batch);
+            $result = $this->processBatch($document, $batch, $batches);
 
             $chunksProcessed += $result['processed'];
             $totalTokens += $result['tokens'];
@@ -104,12 +108,12 @@ final class EmbeddingMaterializationService
     }
 
     /**
-     * Procesa un batch de chunks: embed → validate → persist.
+     * Procesa un batch de chunks: reserve quota → embed → validate → persist → reconcile.
      *
      * @param  KnowledgeChunk[]  $batch
      * @return array{processed: int, tokens: int}
      */
-    private function processBatch(KnowledgeDocument $document, array $batch): array
+    private function processBatch(KnowledgeDocument $document, array $batch, int $batchIndex): array
     {
         $inputTexts = array_map(
             fn (KnowledgeChunk $chunk): string => $chunk->content,
@@ -118,18 +122,61 @@ final class EmbeddingMaterializationService
 
         $request = new EmbeddingRequest(input: $inputTexts);
 
-        $response = $this->provider->embed($request);
+        $estimatedTokens = max(1, (int) ceil(mb_strlen(implode('', $inputTexts)) / 3));
+        $idempotencyKey = "embed:doc:{$document->id}:batch:{$batchIndex}";
+        $reservation = null;
 
-        if (count($response->embeddings) !== count($batch)) {
-            return ['processed' => 0, 'tokens' => 0];
+        try {
+            $tenant = Tenant::query()->find($document->tenant_id);
+
+            if ($tenant !== null) {
+                $reservation = $this->usageGuard->reserve(
+                    tenant: $tenant,
+                    category: UsageCategory::AiTokens,
+                    quantity: $estimatedTokens,
+                    idempotencyKey: $idempotencyKey,
+                    ttlSeconds: 120,
+                );
+            }
+
+            $response = $this->provider->embed($request);
+
+            if ($reservation !== null) {
+                $this->usageGuard->commitWithActual($reservation, $response->totalInputTokens);
+            } elseif ($tenant !== null && $response->totalInputTokens > 0) {
+                try {
+                    $this->usageGuard->recordDirect(
+                        tenant: $tenant,
+                        category: UsageCategory::AiTokens,
+                        quantity: $response->totalInputTokens,
+                        description: 'embedding_unlimited',
+                    );
+                } catch (\Throwable) {
+                    // Unlimited telemetry is best-effort
+                }
+            }
+
+            if (count($response->embeddings) !== count($batch)) {
+                return ['processed' => 0, 'tokens' => $response->totalInputTokens];
+            }
+
+            $persisted = $this->persistBatch($document, $batch, $response->embeddings);
+
+            return [
+                'processed' => $persisted,
+                'tokens' => $response->totalInputTokens,
+            ];
+        } catch (\Throwable $e) {
+            if ($reservation !== null) {
+                try {
+                    $this->usageGuard->release($reservation);
+                } catch (\Throwable) {
+                    // Release failure is logged internally by UsageGuard
+                }
+            }
+
+            throw $e;
         }
-
-        $persisted = $this->persistBatch($document, $batch, $response->embeddings);
-
-        return [
-            'processed' => $persisted,
-            'tokens' => $response->totalInputTokens,
-        ];
     }
 
     /**

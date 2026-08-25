@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Application\Billing\Guards;
 
+use App\Domain\Billing\Contracts\UsageGuardInterface;
 use App\Domain\Billing\Enums\SubscriptionStatus;
 use App\Domain\Billing\Enums\UsageCategory;
 use App\Domain\Billing\Enums\UsageReservationStatus;
@@ -27,7 +28,7 @@ use Illuminate\Support\Facades\DB;
  * PostgreSQL advisory lock per (tenant_id, category, period_start) serializes concurrent reservers.
  * Fails closed: any anomaly → exception, never silent pass.
  */
-final class UsageGuard
+final class UsageGuard implements UsageGuardInterface
 {
     public function __construct(
         private readonly EntitlementResolver $entitlementResolver,
@@ -223,6 +224,95 @@ final class UsageGuard
         $usageRecord->setAttribute('quantity', $reservation->quantity);
         $usageRecord->setAttribute('description', null);
         $usageRecord->setAttribute('metadata', ['reservation_id' => $reservation->id]);
+        $usageRecord->setAttribute('recorded_at', now()->toDateTimeString());
+        $usageRecord->save();
+
+        return $usageRecord;
+    }
+
+    /**
+     * Commit a reservation with an actual quantity that may differ from the estimated reservation.
+     *
+     * Used for AI token reconciliation: the reservation holds an estimated budget during the
+     * provider call, but the UsageRecord must reflect the actual tokens consumed.
+     *
+     * If actualQuantity > reservation quantity, the ledger records the higher actual (overshoot
+     * from estimation variance, documented in ADR-097 U3).
+     * If actualQuantity < reservation quantity, only actual is recorded (unused budget released).
+     *
+     * @throws \InvalidArgumentException If reservation is not in 'reserved' status, has expired,
+     *                                   or actualQuantity is not positive.
+     */
+    public function commitWithActual(UsageReservation $reservation, int $actualQuantity): UsageRecord
+    {
+        if ($actualQuantity <= 0) {
+            throw new \InvalidArgumentException(
+                "Cannot commit reservation [{$reservation->id}]: actualQuantity must be positive, got {$actualQuantity}.",
+            );
+        }
+
+        if ($reservation->status !== UsageReservationStatus::Reserved) {
+            throw new \InvalidArgumentException(
+                "Cannot commit reservation [{$reservation->id}]: status is {$reservation->status->value}, expected reserved.",
+            );
+        }
+
+        if ($reservation->isExpired()) {
+            throw new \InvalidArgumentException(
+                "Cannot commit reservation [{$reservation->id}]: reservation has expired.",
+            );
+        }
+
+        $reservation->quantity = $actualQuantity;
+        $reservation->status = UsageReservationStatus::Committed;
+        $reservation->committed_at = now();
+        $reservation->save();
+
+        /** @var Tenant $tenant */
+        $tenant = Tenant::query()->find($reservation->tenant_id);
+
+        $usageRecord = new UsageRecord;
+        $usageRecord->setAttribute('tenant_id', $reservation->tenant_id);
+        $usageRecord->setAttribute('subscription_id', $reservation->subscription_id);
+        $usageRecord->setAttribute('category', $reservation->category);
+        $usageRecord->setAttribute('quantity', $actualQuantity);
+        $usageRecord->setAttribute('description', null);
+        $usageRecord->setAttribute('metadata', ['reservation_id' => $reservation->id]);
+        $usageRecord->setAttribute('recorded_at', now()->toDateTimeString());
+        $usageRecord->save();
+
+        return $usageRecord;
+    }
+
+    /**
+     * Record usage directly without a reservation (for unlimited plan telemetry).
+     *
+     * When a plan has no limit (null), reserve() returns null and no reservation is created.
+     * This method allows recording actual usage for billing visibility and analytics.
+     *
+     * @throws SubscriptionNotFoundException If no active/past-due subscription.
+     */
+    public function recordDirect(
+        Tenant $tenant,
+        UsageCategory $category,
+        int $quantity,
+        ?string $description = null,
+    ): UsageRecord {
+        if ($quantity <= 0) {
+            throw new InvalidUsageQuantityException(
+                "Direct record quantity must be positive, got {$quantity}.",
+            );
+        }
+
+        [$subscription, $plan, $periodStart, $periodEnd] = $this->entitlementResolver->resolve($tenant);
+
+        $usageRecord = new UsageRecord;
+        $usageRecord->setAttribute('tenant_id', $tenant->id);
+        $usageRecord->setAttribute('subscription_id', $subscription->id);
+        $usageRecord->setAttribute('category', $category);
+        $usageRecord->setAttribute('quantity', $quantity);
+        $usageRecord->setAttribute('description', $description);
+        $usageRecord->setAttribute('metadata', []);
         $usageRecord->setAttribute('recorded_at', now()->toDateTimeString());
         $usageRecord->save();
 

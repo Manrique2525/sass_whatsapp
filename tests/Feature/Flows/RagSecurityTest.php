@@ -19,6 +19,7 @@ use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Fakes\FakeAIProvider;
 use Tests\Fakes\FakeKnowledgeSearchService;
+use Tests\Fakes\FakeUsageGuard;
 
 uses(RefreshDatabase::class);
 uses()->group('RAG-SEC');
@@ -122,6 +123,7 @@ function make_rag_sec_executor(
         provider: $aiFake,
         promptBuilder: new AiPromptBuilder(new VariableResolver),
         searchService: $searchFake,
+        usageGuard: new FakeUsageGuard,
     );
 }
 

@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 U1+U2+HOTFIX COMPLETADAS · U3+U4+U5 PENDIENTES**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 U1+U2+HOTFIX+U3 COMPLETADAS · U4+U5 PENDIENTES**.
 
 ## Fases
 
@@ -2513,3 +2513,51 @@ FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COM
 - Frontend build: OK
 - Billing regression SQLite: 300 PASS
 - Billing regression PG: 25 PASS (infra unavailable locally, code verified via U1 tests)
+
+## FASE 25 U3 · AI Token Quota Enforcement
+
+**Estado**: COMPLETADO
+**Commit**: pendiente (cambios sin commit en working tree)
+
+### Alcance
+- UsageGuardInterface extracted (6 methods) — concrete UsageGuard implements it
+- AppServiceProvider binds UsageGuardInterface → UsageGuard
+- FakeUsageGuard created (defaults to unlimited, for tests)
+- AiNodeExecutor: reserves token estimate, commits actual tokens
+- KnowledgeSearchService: reserves token estimate, commits actual tokens
+- EmbeddingMaterializationService: reserves token estimate, commits actual tokens
+- PgvectorTestCase fixed: FakeUsageGuard binding prevents SubscriptionNotFoundException
+- All consumers updated to use UsageGuardInterface
+
+### Archivos modificados
+- `app/Domain/Billing/Contracts/UsageGuardInterface.php` — NEW interface (6 methods)
+- `app/Application/Billing/Guards/UsageGuard.php` — implements UsageGuardInterface
+- `app/Providers/AppServiceProvider.php` — binding UsageGuardInterface → UsageGuard
+- `app/Application/Flows/Services/Executors/AiNodeExecutor.php` — uses UsageGuardInterface
+- `app/Application/Flows/Services/FlowExecutionService.php` — uses UsageGuardInterface
+- `app/Application/Messages/Services/MessageService.php` — uses UsageGuardInterface
+- `app/Application/KnowledgeBase/Services/KnowledgeSearchService.php` — uses UsageGuardInterface
+- `app/Application/KnowledgeBase/Services/EmbeddingMaterializationService.php` — uses UsageGuardInterface
+- `app/Domain/WhatsApp/Jobs/SendWhatsAppMessage.php` — uses UsageGuardInterface
+
+### Archivos creados (tests)
+- `tests/Fakes/FakeUsageGuard.php` — unlimited-plan fake for tests
+- `tests/Postgres/Billing/AiQuotaPostgresTest.php` — 9 PG tests (UA-PG-01..09)
+
+### Archivos modificados (tests)
+- `tests/Postgres/PgvectorTestCase.php` — FakeUsageGuard binding in setUp()
+- All billing test suites updated with FakeUsageGuard
+
+### Tests totales
+- 9 new PG tests (UA-PG-01..09) — ALL PASS on real PostgreSQL
+- 0 U3-caused PG regressions (22 pre-existing failures documented)
+- PG baseline post-U3: 142 passed, 22 failed (pre-existing), 0 U3-caused
+
+### Quality gates
+- PHPStan: 0 errors
+- Pint: clean
+- vue-tsc: 0 errors
+- Frontend build: OK
+- SQLite tests: ~1,529 PASS, 6 pre-existing failures
+- PostgreSQL: 142/164 pass (22 pre-existing, 0 U3-caused)
+- AiQuotaPostgresTest: 9/9 PASS on real PG

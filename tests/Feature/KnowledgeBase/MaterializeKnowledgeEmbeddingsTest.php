@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Tests\Fakes\FakeEmbeddingProvider;
+use Tests\Fakes\FakeUsageGuard;
 
 uses(RefreshDatabase::class);
 
@@ -121,6 +122,7 @@ test('EMB-MAT-01: pending chunks are materialized', function (): void {
     $service = new EmbeddingMaterializationService(
         app(EmbeddingProviderInterface::class),
         app(AuditLogger::class),
+        new FakeUsageGuard,
     );
 
     $result = $service->materialize($doc);
@@ -144,6 +146,7 @@ test('EMB-MAT-02: already embedded chunks are skipped', function (): void {
     $service = new EmbeddingMaterializationService(
         app(EmbeddingProviderInterface::class),
         app(AuditLogger::class),
+        new FakeUsageGuard,
     );
 
     $service->materialize($doc);
@@ -172,6 +175,7 @@ test('EMB-MAT-03: batch size respects max_batch_size config', function (): void 
     $service = new EmbeddingMaterializationService(
         app(EmbeddingProviderInterface::class),
         app(AuditLogger::class),
+        new FakeUsageGuard,
     );
 
     $result = $service->materialize($doc);
@@ -197,6 +201,7 @@ test('EMB-MAT-04: chunks larger than max_batch_size splits into batches', functi
     $service = new EmbeddingMaterializationService(
         app(EmbeddingProviderInterface::class),
         app(AuditLogger::class),
+        new FakeUsageGuard,
     );
 
     $result = $service->materialize($doc);
@@ -221,6 +226,7 @@ test('EMB-MAT-05: preserves chunk order (chunk_index)', function (): void {
     $service = new EmbeddingMaterializationService(
         app(EmbeddingProviderInterface::class),
         app(AuditLogger::class),
+        new FakeUsageGuard,
     );
 
     $service->materialize($doc);
@@ -248,6 +254,7 @@ test('EMB-MAT-06: wrong dimension does not persist', function (): void {
     $service = new EmbeddingMaterializationService(
         app(EmbeddingProviderInterface::class),
         app(AuditLogger::class),
+        new FakeUsageGuard,
     );
 
     $result = $service->materialize($doc);
@@ -271,6 +278,7 @@ test('EMB-MAT-07: provider failure does not partially persist', function (): voi
     $service = new EmbeddingMaterializationService(
         app(EmbeddingProviderInterface::class),
         app(AuditLogger::class),
+        new FakeUsageGuard,
     );
 
     $result = $service->materialize($doc);
@@ -292,6 +300,7 @@ test('EMB-MAT-08: zero chunks does not call provider', function (): void {
     $service = new EmbeddingMaterializationService(
         app(EmbeddingProviderInterface::class),
         app(AuditLogger::class),
+        new FakeUsageGuard,
     );
 
     $result = $service->materialize($doc);
@@ -316,6 +325,7 @@ test('EMB-MAT-09: deleted document stops processing', function (): void {
     $service = new EmbeddingMaterializationService(
         app(EmbeddingProviderInterface::class),
         app(AuditLogger::class),
+        new FakeUsageGuard,
     );
 
     KnowledgeDocument::query()
@@ -346,6 +356,7 @@ test('EMB-MAT-10: total tokens aggregated across batches', function (): void {
     $service = new EmbeddingMaterializationService(
         app(EmbeddingProviderInterface::class),
         app(AuditLogger::class),
+        new FakeUsageGuard,
     );
 
     $result = $service->materialize($doc);
@@ -368,6 +379,7 @@ test('EMB-MAT-11: no content or vectors in audit payload', function (): void {
     $service = new EmbeddingMaterializationService(
         app(EmbeddingProviderInterface::class),
         app(AuditLogger::class),
+        new FakeUsageGuard,
     );
 
     $service->materialize($doc);
@@ -398,6 +410,7 @@ test('EMB-MAT-12: no embedding column returns early', function (): void {
     $service = new EmbeddingMaterializationService(
         app(EmbeddingProviderInterface::class),
         app(AuditLogger::class),
+        new FakeUsageGuard,
     );
 
     $result = $service->materialize($doc);

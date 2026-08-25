@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Application\Flows\Services;
 
 use App\Application\Audit\Services\AuditLogger;
-use App\Application\Billing\Guards\UsageGuard;
 use App\Application\Users\Services\AuthorizationService;
 use App\Domain\Audit\Models\AuditLog;
+use App\Domain\Billing\Contracts\UsageGuardInterface;
 use App\Domain\Billing\Enums\UsageCategory;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Flows\Enums\FlowExecutionStatus;
@@ -53,7 +53,7 @@ final class FlowExecutionService
         private readonly AuthorizationService $authorization,
         private readonly AuditLogger $auditLogger,
         private readonly ConversationLockContext $lockContext,
-        private readonly UsageGuard $usageGuard,
+        private readonly UsageGuardInterface $usageGuard,
     ) {}
 
     public function conversationLock(Tenant $tenant, string $conversationId, int $seconds = 150): Lock

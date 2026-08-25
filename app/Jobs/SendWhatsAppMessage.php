@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Application\Audit\Services\AuditLogger;
-use App\Application\Billing\Guards\UsageGuard;
 use App\Application\Flows\Services\ConversationLockContext;
 use App\Application\Flows\Services\FlowExecutionService;
 use App\Application\Messages\Services\MessageOriginClassifier;
 use App\Application\Messages\Services\MessageService;
+use App\Domain\Billing\Contracts\UsageGuardInterface;
 use App\Domain\Billing\Enums\UsageCategory;
 use App\Domain\Billing\Enums\UsageReservationStatus;
 use App\Domain\Billing\Models\UsageReservation;
@@ -208,7 +208,7 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
         }
 
         $idempotencyKey = "message:{$message->id}";
-        $reservation = app(UsageGuard::class)->reserve(
+        $reservation = app(UsageGuardInterface::class)->reserve(
             tenant: $tenant,
             category: UsageCategory::Messages,
             quantity: 1,
@@ -286,14 +286,14 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
 
             $this->failMessage($tenant, $message, $e->errorCode()->value, $e->getMessage());
             if ($reservation !== null) {
-                app(UsageGuard::class)->release($reservation);
+                app(UsageGuardInterface::class)->release($reservation);
             }
 
             return;
         }
 
         if ($reservation !== null) {
-            app(UsageGuard::class)->commit($reservation);
+            app(UsageGuardInterface::class)->commit($reservation);
         }
 
         $attempt->fill([
@@ -407,7 +407,7 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
 
         if ($reservation !== null) {
             try {
-                app(UsageGuard::class)->release($reservation);
+                app(UsageGuardInterface::class)->release($reservation);
             } catch (Throwable) {
                 // Best-effort release; reservation will expire via TTL
             }
