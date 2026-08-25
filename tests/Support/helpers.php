@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 use App\Application\Flows\Services\FlowEngine;
 use App\Application\Messages\Services\MessageService;
+use App\Domain\Billing\Enums\SubscriptionStatus;
+use App\Domain\Billing\Models\Plan;
+use App\Domain\Billing\Models\Subscription;
 use App\Domain\Contacts\Models\Contact;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Flows\Enums\FlowExecutionStatus;
@@ -175,10 +178,55 @@ function make_chatbot(Tenant $tenant, array $attributes = []): Chatbot
 }
 
 /**
+ * Gives non-billing runtime fixtures an explicit unlimited entitlement.
+ * Billing tests that already define any subscription remain untouched.
+ */
+function ensure_test_usage_entitlement(Tenant $tenant): void
+{
+    if (Subscription::query()
+        ->withoutTenantScope()
+        ->where('tenant_id', $tenant->id)
+        ->exists()) {
+        return;
+    }
+
+    $plan = Plan::factory()->create([
+        'limits' => [
+            'messages' => null,
+            'ai_tokens' => null,
+            'contacts' => null,
+            'flow_executions' => null,
+            'users' => null,
+            'knowledge_documents' => null,
+        ],
+    ]);
+
+    $previousTenantId = TenantContext::id();
+    TenantContext::setId($tenant->id);
+
+    try {
+        Subscription::factory()->create([
+            'tenant_id' => $tenant->id,
+            'plan_id' => $plan->id,
+            'status' => SubscriptionStatus::Active,
+            'current_period_start' => now()->startOfMonth(),
+            'current_period_end' => now()->addMonth()->startOfMonth(),
+        ]);
+    } finally {
+        if ($previousTenantId !== null) {
+            TenantContext::setId($previousTenantId);
+        } else {
+            TenantContext::clear();
+        }
+    }
+}
+
+/**
  * Crea un flujo (draft por defecto) con el TenantContext activo.
  */
 function make_flow(Tenant $tenant, Chatbot $chatbot, array $attributes = []): Flow
 {
+    ensure_test_usage_entitlement($tenant);
     TenantContext::setId($tenant->id);
 
     try {
@@ -304,6 +352,8 @@ function make_flow_execution(Tenant $tenant, Flow $flow, array $attributes = [])
  */
 function make_inbound_message(Tenant $tenant, string $body, string $from = '15550000001'): Message
 {
+    ensure_test_usage_entitlement($tenant);
+
     $result = app(MessageService::class)->handleInboundMessage($tenant, [
         'id' => 'wamid-'.(string) Str::uuid(),
         'from' => $from,
@@ -360,6 +410,7 @@ function make_contact(Tenant $tenant, array $attributes = []): Contact
  */
 function make_conversation(Tenant $tenant, Contact $contact, array $attributes = []): Conversation
 {
+    ensure_test_usage_entitlement($tenant);
     TenantContext::setId($tenant->id);
 
     try {

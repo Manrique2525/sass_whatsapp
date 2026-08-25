@@ -36,6 +36,8 @@ afterEach(function (): void {
 
 function make_inbound_for_faq(Tenant $tenant, string $body, string $type = 'text'): Message
 {
+    ensure_test_usage_entitlement($tenant);
+
     $payload = [
         'id' => 'wamid-'.(string) Str::uuid(),
         'from' => '15550000001',

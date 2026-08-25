@@ -8,6 +8,7 @@ use App\Application\Flows\Services\FlowExecutionService;
 use App\Domain\Billing\Enums\SubscriptionStatus;
 use App\Domain\Billing\Enums\UsageCategory;
 use App\Domain\Billing\Enums\UsageReservationStatus;
+use App\Domain\Billing\Exceptions\SubscriptionNotFoundException;
 use App\Domain\Billing\Exceptions\TenantQuotaExceededException;
 use App\Domain\Billing\Models\Plan;
 use App\Domain\Billing\Models\Subscription;
@@ -231,17 +232,18 @@ it('USG-U2-FLOW-09: tenant isolation (flow execution)', function (): void {
 // FLOW-10..12: Entitlement
 // ──────────────────────────────────────────────
 
-it('USG-U2-FLOW-10: Pending/Cancelled subscription returns null (no enforcement)', function (): void {
+it('USG-U2-FLOW-10: Pending/Cancelled subscription throws SubscriptionNotFoundException (fail-closed)', function (): void {
     $this->subscription->update(['status' => SubscriptionStatus::Pending]);
 
     TenantContext::setId($this->tenant->id);
-    $reservation = $this->guard->reserve(
+
+    $this->expectException(SubscriptionNotFoundException::class);
+
+    $this->guard->reserve(
         tenant: $this->tenant,
         category: UsageCategory::FlowExecutions,
         quantity: 1,
     );
-
-    expect($reservation)->toBeNull();
 });
 
 it('USG-U2-FLOW-11: PastDue subscription allowed', function (): void {

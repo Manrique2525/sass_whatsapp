@@ -8,6 +8,7 @@ use App\Application\Messages\Services\MessageService;
 use App\Domain\Billing\Enums\SubscriptionStatus;
 use App\Domain\Billing\Enums\UsageCategory;
 use App\Domain\Billing\Enums\UsageReservationStatus;
+use App\Domain\Billing\Exceptions\SubscriptionNotFoundException;
 use App\Domain\Billing\Exceptions\TenantQuotaExceededException;
 use App\Domain\Billing\Models\Plan;
 use App\Domain\Billing\Models\Subscription;
@@ -318,40 +319,40 @@ it('USG-U2-MSG-12: PastDue subscription allowed', function (): void {
         ->and($reservation->status)->toBe(UsageReservationStatus::Reserved);
 });
 
-it('USG-U2-MSG-13: Pending subscription returns null (no enforcement)', function (): void {
+it('USG-U2-MSG-13: Pending subscription throws SubscriptionNotFoundException (fail-closed)', function (): void {
     $this->subscription->update(['status' => SubscriptionStatus::Pending]);
 
-    $reservation = $this->guard->reserve(
+    $this->expectException(SubscriptionNotFoundException::class);
+
+    $this->guard->reserve(
         tenant: $this->tenant,
         category: UsageCategory::Messages,
         quantity: 1,
     );
-
-    expect($reservation)->toBeNull();
 });
 
-it('USG-U2-MSG-14: Cancelled subscription returns null (no enforcement)', function (): void {
+it('USG-U2-MSG-14: Cancelled subscription throws SubscriptionNotFoundException (fail-closed)', function (): void {
     $this->subscription->update(['status' => SubscriptionStatus::Cancelled]);
 
-    $reservation = $this->guard->reserve(
+    $this->expectException(SubscriptionNotFoundException::class);
+
+    $this->guard->reserve(
         tenant: $this->tenant,
         category: UsageCategory::Messages,
         quantity: 1,
     );
-
-    expect($reservation)->toBeNull();
 });
 
-it('USG-U2-MSG-15: missing subscription returns null (no enforcement)', function (): void {
+it('USG-U2-MSG-15: missing subscription throws SubscriptionNotFoundException (fail-closed)', function (): void {
     $this->subscription->delete();
 
-    $reservation = $this->guard->reserve(
+    $this->expectException(SubscriptionNotFoundException::class);
+
+    $this->guard->reserve(
         tenant: $this->tenant,
         category: UsageCategory::Messages,
         quantity: 1,
     );
-
-    expect($reservation)->toBeNull();
 });
 
 it('USG-U2-MSG-16: cancel_at_period_end still active for current period', function (): void {

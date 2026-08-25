@@ -43,6 +43,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
  * Persistencia de mensajes (FASE 9, ADR-032).
@@ -259,9 +260,18 @@ final class MessageService
             throw new \InvalidArgumentException('El actor del mensaje no es miembro activo del tenant.');
         }
 
-        // `withId()` no limpia un contexto ya activo (p. ej. el del motor de
-        // flujos); solo setea/limpia si no había ninguno.
-        $message = TenantContext::withId($tenant->id, function () use ($conversation, $body, $origin, $actor, $metadata): Message {
+        $messageId = (string) Str::uuid();
+        $idempotencyKey = "message:{$messageId}";
+
+        $reservation = TenantContext::withId($tenant->id, fn () => $this->usageGuard->reserve(
+            tenant: $tenant,
+            category: UsageCategory::Messages,
+            quantity: 1,
+            idempotencyKey: $idempotencyKey,
+            ttlSeconds: 900,
+        ));
+
+        $message = TenantContext::withId($tenant->id, function () use ($conversation, $body, $origin, $actor, $metadata, $messageId): Message {
             $message = new Message([
                 'conversation_id' => $conversation->id,
                 'direction' => MessageDirection::Outbound,
@@ -274,19 +284,14 @@ final class MessageService
                     'attempt_tracking' => 'message_id_v1',
                 ]),
             ]);
-            $message->forceFill(['sent_by_user_id' => $actor?->id]);
+            $message->forceFill([
+                'id' => $messageId,
+                'sent_by_user_id' => $actor?->id,
+            ]);
             $message->save();
 
             return $message;
         });
-
-        $reservation = TenantContext::withId($tenant->id, fn () => $this->usageGuard->reserve(
-            tenant: $tenant,
-            category: UsageCategory::Messages,
-            quantity: 1,
-            idempotencyKey: "message:{$message->id}",
-            ttlSeconds: 900,
-        ));
 
         $this->bumpConversationTimestamps($tenant, $conversation->id);
 

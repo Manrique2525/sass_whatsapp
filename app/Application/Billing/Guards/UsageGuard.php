@@ -38,17 +38,13 @@ final class UsageGuard
      * Compute remaining quota for a category in the current billing period.
      *
      * Returns null if unlimited (plan limit is null).
-     * Returns null if no subscription exists (fail-closed → treat as unlimited to avoid blocking).
      *
+     * @throws SubscriptionNotFoundException No active/past-due subscription (fail-closed).
      * @throws PlanNotFoundException
      */
     public function remaining(Tenant $tenant, UsageCategory $category): ?int
     {
-        try {
-            [$subscription, $plan, $periodStart, $periodEnd] = $this->entitlementResolver->resolve($tenant);
-        } catch (SubscriptionNotFoundException) {
-            return null;
-        }
+        [$subscription, $plan, $periodStart, $periodEnd] = $this->entitlementResolver->resolve($tenant);
 
         $limit = $plan->getLimit($category->value);
 
@@ -72,8 +68,9 @@ final class UsageGuard
      * Advisory lock per (tenant_id, category, period_start) ensures serialization.
      * Idempotent: same idempotency_key returns existing reservation if active.
      *
-     * Returns null if no subscription exists (no quota enforcement).
+     * Returns null if plan limit is null (unlimited — no reservation needed).
      *
+     * @throws SubscriptionNotFoundException No active/past-due subscription (fail-closed).
      * @throws TenantQuotaExceededException
      * @throws PlanNotFoundException
      * @throws InvalidUsageQuantityException
@@ -91,13 +88,13 @@ final class UsageGuard
             );
         }
 
-        try {
-            [$subscription, $plan, $periodStart, $periodEnd] = $this->entitlementResolver->resolve($tenant);
-        } catch (SubscriptionNotFoundException) {
-            return null;
-        }
+        [$subscription, $plan, $periodStart, $periodEnd] = $this->entitlementResolver->resolve($tenant);
 
         $limit = $plan->getLimit($category->value);
+
+        if ($limit === null) {
+            return null;
+        }
 
         $effectiveTtl = $ttlSeconds ?? $this->defaultReservationTtlSeconds;
         $expiresAt = now()->addSeconds($effectiveTtl);
@@ -157,7 +154,7 @@ final class UsageGuard
                 $reserved = $this->computeActiveReservedQuantity($tenant->id, $category, $periodStart, $periodEnd);
                 $totalUsed = $used + $reserved;
 
-                if ($limit !== null && $limit === 0) {
+                if ($limit === 0) {
                     throw TenantQuotaExceededException::forQuota(
                         $category->value,
                         $limit,
@@ -165,7 +162,7 @@ final class UsageGuard
                     );
                 }
 
-                if ($limit !== null && $totalUsed + $quantity > $limit) {
+                if ($totalUsed + $quantity > $limit) {
                     throw TenantQuotaExceededException::forQuota(
                         $category->value,
                         $limit,

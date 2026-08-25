@@ -7,6 +7,7 @@ use App\Application\Billing\Guards\UsageGuard;
 use App\Domain\Billing\Enums\SubscriptionStatus;
 use App\Domain\Billing\Enums\UsageCategory;
 use App\Domain\Billing\Enums\UsageReservationStatus;
+use App\Domain\Billing\Exceptions\SubscriptionNotFoundException;
 use App\Domain\Billing\Models\Plan;
 use App\Domain\Billing\Models\Subscription;
 use App\Domain\Tenants\Models\Tenant;
@@ -171,19 +172,16 @@ it('USG-U2-MSG-CONC-04: message and flow categories are independent', function (
     expect($rFlow)->not->toBeNull();
 });
 
-it('USG-U2-MSG-CONC-05: null reservation on missing subscription does not affect other tenants', function (): void {
+it('USG-U2-MSG-CONC-05: missing subscription throws SubscriptionNotFoundException (fail-closed)', function (): void {
     $tenantNoSub = Tenant::factory()->create();
 
     TenantContext::setId($tenantNoSub->id);
-    $rNoSub = $this->guard->reserve(
+
+    $this->expectException(SubscriptionNotFoundException::class);
+
+    $this->guard->reserve(
         tenant: $tenantNoSub,
         category: UsageCategory::Messages,
         quantity: 1,
     );
-
-    expect($rNoSub)->toBeNull();
-
-    TenantContext::setId($this->tenant->id);
-    $remaining = $this->guard->remaining($this->tenant, UsageCategory::Messages);
-    expect($remaining)->toBe(5);
 });

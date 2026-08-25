@@ -36,6 +36,8 @@ afterEach(function (): void {
 
 function sec_inbound(Tenant $tenant, string $body): Message
 {
+    ensure_test_usage_entitlement($tenant);
+
     return app(MessageService::class)->handleInboundMessage($tenant, [
         'id' => 'wamid-'.(string) Str::uuid(),
         'from' => '15550000001',

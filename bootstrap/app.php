@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domain\Billing\Exceptions\SubscriptionNotActiveException;
+use App\Domain\Billing\Exceptions\SubscriptionNotFoundException;
 use App\Domain\Billing\Exceptions\TenantQuotaExceededException;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\TenantMiddleware;
@@ -88,6 +89,16 @@ return Application::configure(basePath: dirname(__DIR__))
                     'code' => SubscriptionNotActiveException::ERROR_CODE,
                     'errors' => new stdClass,
                 ], SubscriptionNotActiveException::HTTP_STATUS);
+            }
+        });
+
+        $exceptions->render(function (SubscriptionNotFoundException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json([
+                    'message' => 'No hay una suscripción activa para este tenant.',
+                    'code' => 'SUBSCRIPTION_NOT_FOUND',
+                    'errors' => new stdClass,
+                ], 409);
             }
         });
     })->create();

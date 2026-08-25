@@ -8,6 +8,7 @@ use App\Domain\Billing\Enums\SubscriptionStatus;
 use App\Domain\Billing\Enums\UsageCategory;
 use App\Domain\Billing\Enums\UsageReservationStatus;
 use App\Domain\Billing\Exceptions\InvalidUsageQuantityException;
+use App\Domain\Billing\Exceptions\SubscriptionNotFoundException;
 use App\Domain\Billing\Exceptions\TenantQuotaExceededException;
 use App\Domain\Billing\Models\Plan;
 use App\Domain\Billing\Models\Subscription;
@@ -123,13 +124,13 @@ it('USG-U1-UNIT-04: remaining accounts for active reservations', function (): vo
     expect($remaining)->toBe(80);
 })->group('USG-U1-UNIT-04');
 
-it('USG-U1-UNIT-05: remaining returns null when no subscription', function (): void {
+it('USG-U1-UNIT-05: remaining throws SubscriptionNotFoundException when no subscription', function (): void {
     $tenantC = Tenant::factory()->create();
     TenantContext::setId($tenantC->id);
 
-    $remaining = $this->guard->remaining($tenantC, UsageCategory::Messages);
+    $this->expectException(SubscriptionNotFoundException::class);
 
-    expect($remaining)->toBeNull();
+    $this->guard->remaining($tenantC, UsageCategory::Messages);
 })->group('USG-U1-UNIT-05');
 
 it('USG-U1-UNIT-06: remaining returns full limit when no usage', function (): void {
@@ -166,40 +167,40 @@ it('USG-U1-UNIT-08: reserve succeeds for past-due subscription', function (): vo
     expect($reservation->status)->toBe(UsageReservationStatus::Reserved);
 })->group('USG-U1-UNIT-08');
 
-it('USG-U1-UNIT-09: reserve returns null for pending subscription (no quota enforcement)', function (): void {
+it('USG-U1-UNIT-09: reserve throws SubscriptionNotFoundException for pending subscription (fail-closed)', function (): void {
     $this->subscription->update(['status' => SubscriptionStatus::Pending]);
 
-    $reservation = $this->guard->reserve(
+    $this->expectException(SubscriptionNotFoundException::class);
+
+    $this->guard->reserve(
         tenant: $this->tenant,
         category: UsageCategory::Messages,
         quantity: 5,
     );
-
-    expect($reservation)->toBeNull();
 })->group('USG-U1-UNIT-09');
 
-it('USG-U1-UNIT-10: reserve returns null for cancelled subscription (no quota enforcement)', function (): void {
+it('USG-U1-UNIT-10: reserve throws SubscriptionNotFoundException for cancelled subscription (fail-closed)', function (): void {
     $this->subscription->update(['status' => SubscriptionStatus::Cancelled]);
 
-    $reservation = $this->guard->reserve(
+    $this->expectException(SubscriptionNotFoundException::class);
+
+    $this->guard->reserve(
         tenant: $this->tenant,
         category: UsageCategory::Messages,
         quantity: 5,
     );
-
-    expect($reservation)->toBeNull();
 })->group('USG-U1-UNIT-10');
 
-it('USG-U1-UNIT-11: reserve returns null when no subscription (no quota enforcement)', function (): void {
+it('USG-U1-UNIT-11: reserve throws SubscriptionNotFoundException when no subscription (fail-closed)', function (): void {
     $this->subscription->delete();
 
-    $reservation = $this->guard->reserve(
+    $this->expectException(SubscriptionNotFoundException::class);
+
+    $this->guard->reserve(
         tenant: $this->tenant,
         category: UsageCategory::Messages,
         quantity: 5,
     );
-
-    expect($reservation)->toBeNull();
 })->group('USG-U1-UNIT-11');
 
 // ──────────────────────────────────────────────
@@ -254,7 +255,7 @@ it('USG-U1-UNIT-14: reserve succeeds with unlimited plan', function (): void {
         quantity: 999999,
     );
 
-    expect($reservation->status)->toBe(UsageReservationStatus::Reserved);
+    expect($reservation)->toBeNull();
 })->group('USG-U1-UNIT-14');
 
 it('USG-U1-UNIT-15: reserve fails for blocked category', function (): void {
