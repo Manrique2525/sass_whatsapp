@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 AUDIT COMPLETADA · FASE 26 U1 COMPLETADA · FASE 26 U2-U4 PENDIENTE**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 AUDIT COMPLETADA · FASE 26 U1 COMPLETADA · FASE 26 U2 COMPLETADA · FASE 26 U3-U4 PENDIENTE**.
 
 ## Fases
 
@@ -32,7 +32,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA
 | 23 | Planes (U1: Data Model, U2: Usage Metering, U3: Billing API, U4: Billing Frontend) | COMPLETADA |
 | 24 | Billing (U1: Provider Infrastructure + Mappings, U2: Checkout, U3: Webhooks, U4: Frontend Provider UX, U5: Hardening + Closure) | COMPLETADA |
 | 25 | Usage limits (U1: UsageGuard + Atomic Quota Reservation, U2: Message + Flow Quota Enforcement, U2-HOTFIX: fail-closed missing entitlement, U3: AI Token Enforcement, U4: Capacity Limits, U5: Hardening + Closure) | COMPLETADA |
-| 26 | Auditoría + Seguridad (U1: Deployment Gate + Rate Limiting, U2: Billing atomicity + Job hardening, U3: Job timeout + error handling, U4: Frontend security) | EN PROGRESO (U1 COMPLETADA) |
+| 26 | Auditoría + Seguridad (U1: Deployment Gate + Rate Limiting, U2: Billing atomicity + UsageGuard hardening, U3: Job timeout + error handling, U4: Frontend security) | EN PROGRESO (U1-U2 COMPLETADA) |
 | 27 | Seguridad (refuerzo OWASP) | PENDIENTE |
 | 28 | Observabilidad (Sentry, logging) | PENDIENTE |
 | 29 | Testing global + cobertura | PENDIENTE |

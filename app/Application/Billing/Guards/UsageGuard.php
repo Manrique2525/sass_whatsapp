@@ -194,6 +194,11 @@ final class UsageGuard implements UsageGuardInterface
     /**
      * Mark a reservation as committed and create a usage record atomically.
      *
+     * Row-level lock (SELECT ... FOR UPDATE) on the reservation prevents concurrent
+     * commit() or release() on the same reservation. Precondition checks run inside
+     * the lock scope so the second concurrent caller sees the already-committed state
+     * and fails safely.
+     *
      * Both writes occur within a single DB transaction to prevent crash between
      * reservation commit and ledger write (exactly-once guarantee).
      *
@@ -204,30 +209,32 @@ final class UsageGuard implements UsageGuardInterface
      */
     public function commit(UsageReservation $reservation): UsageRecord
     {
-        if ($reservation->status !== UsageReservationStatus::Reserved) {
-            throw new \InvalidArgumentException(
-                "Cannot commit reservation [{$reservation->id}]: status is {$reservation->status->value}, expected reserved.",
-            );
-        }
-
-        if ($reservation->isExpired()) {
-            throw new \InvalidArgumentException(
-                "Cannot commit reservation [{$reservation->id}]: reservation has expired.",
-            );
-        }
-
         return DB::transaction(function () use ($reservation): UsageRecord {
-            $reservation->status = UsageReservationStatus::Committed;
-            $reservation->committed_at = now();
-            $reservation->save();
+            $locked = $this->lockReservation($reservation);
+
+            if ($locked->status !== UsageReservationStatus::Reserved) {
+                throw new \InvalidArgumentException(
+                    "Cannot commit reservation [{$locked->id}]: status is {$locked->status->value}, expected reserved.",
+                );
+            }
+
+            if ($locked->isExpired()) {
+                throw new \InvalidArgumentException(
+                    "Cannot commit reservation [{$locked->id}]: reservation has expired.",
+                );
+            }
+
+            $locked->status = UsageReservationStatus::Committed;
+            $locked->committed_at = now();
+            $locked->save();
 
             $usageRecord = new UsageRecord;
-            $usageRecord->setAttribute('tenant_id', $reservation->tenant_id);
-            $usageRecord->setAttribute('subscription_id', $reservation->subscription_id);
-            $usageRecord->setAttribute('category', $reservation->category);
-            $usageRecord->setAttribute('quantity', $reservation->quantity);
+            $usageRecord->setAttribute('tenant_id', $locked->tenant_id);
+            $usageRecord->setAttribute('subscription_id', $locked->subscription_id);
+            $usageRecord->setAttribute('category', $locked->category);
+            $usageRecord->setAttribute('quantity', $locked->quantity);
             $usageRecord->setAttribute('description', null);
-            $usageRecord->setAttribute('metadata', ['reservation_id' => $reservation->id]);
+            $usageRecord->setAttribute('metadata', ['reservation_id' => $locked->id]);
             $usageRecord->setAttribute('recorded_at', now()->toDateTimeString());
             $usageRecord->save();
 
@@ -240,6 +247,9 @@ final class UsageGuard implements UsageGuardInterface
      *
      * Used for AI token reconciliation: the reservation holds an estimated budget during the
      * provider call, but the UsageRecord must reflect the actual tokens consumed.
+     *
+     * Row-level lock (SELECT ... FOR UPDATE) on the reservation prevents concurrent
+     * commit/reconcile on the same reservation.
      *
      * Both writes occur within a single DB transaction to prevent crash between
      * reservation commit and ledger write (exactly-once guarantee).
@@ -262,31 +272,33 @@ final class UsageGuard implements UsageGuardInterface
             );
         }
 
-        if ($reservation->status !== UsageReservationStatus::Reserved) {
-            throw new \InvalidArgumentException(
-                "Cannot commit reservation [{$reservation->id}]: status is {$reservation->status->value}, expected reserved.",
-            );
-        }
-
-        if ($reservation->isExpired()) {
-            throw new \InvalidArgumentException(
-                "Cannot commit reservation [{$reservation->id}]: reservation has expired.",
-            );
-        }
-
         return DB::transaction(function () use ($reservation, $actualQuantity): UsageRecord {
-            $reservation->quantity = $actualQuantity;
-            $reservation->status = UsageReservationStatus::Committed;
-            $reservation->committed_at = now();
-            $reservation->save();
+            $locked = $this->lockReservation($reservation);
+
+            if ($locked->status !== UsageReservationStatus::Reserved) {
+                throw new \InvalidArgumentException(
+                    "Cannot commit reservation [{$locked->id}]: status is {$locked->status->value}, expected reserved.",
+                );
+            }
+
+            if ($locked->isExpired()) {
+                throw new \InvalidArgumentException(
+                    "Cannot commit reservation [{$locked->id}]: reservation has expired.",
+                );
+            }
+
+            $locked->quantity = $actualQuantity;
+            $locked->status = UsageReservationStatus::Committed;
+            $locked->committed_at = now();
+            $locked->save();
 
             $usageRecord = new UsageRecord;
-            $usageRecord->setAttribute('tenant_id', $reservation->tenant_id);
-            $usageRecord->setAttribute('subscription_id', $reservation->subscription_id);
-            $usageRecord->setAttribute('category', $reservation->category);
+            $usageRecord->setAttribute('tenant_id', $locked->tenant_id);
+            $usageRecord->setAttribute('subscription_id', $locked->subscription_id);
+            $usageRecord->setAttribute('category', $locked->category);
             $usageRecord->setAttribute('quantity', $actualQuantity);
             $usageRecord->setAttribute('description', null);
-            $usageRecord->setAttribute('metadata', ['reservation_id' => $reservation->id]);
+            $usageRecord->setAttribute('metadata', ['reservation_id' => $locked->id]);
             $usageRecord->setAttribute('recorded_at', now()->toDateTimeString());
             $usageRecord->save();
 
@@ -332,24 +344,59 @@ final class UsageGuard implements UsageGuardInterface
     /**
      * Release a reservation (cancel without recording usage).
      *
+     * Row-level lock (SELECT ... FOR UPDATE) on the reservation prevents concurrent
+     * commit() or release() on the same reservation.
+     *
      * @throws \InvalidArgumentException If reservation is not in 'reserved' status.
      */
     public function release(UsageReservation $reservation): void
     {
-        if ($reservation->status !== UsageReservationStatus::Reserved) {
-            throw new \InvalidArgumentException(
-                "Cannot release reservation [{$reservation->id}]: status is {$reservation->status->value}, expected reserved.",
-            );
-        }
+        DB::transaction(function () use ($reservation): void {
+            $locked = $this->lockReservation($reservation);
 
-        $reservation->status = UsageReservationStatus::Released;
-        $reservation->released_at = now();
-        $reservation->save();
+            if ($locked->status !== UsageReservationStatus::Reserved) {
+                throw new \InvalidArgumentException(
+                    "Cannot release reservation [{$locked->id}]: status is {$locked->status->value}, expected reserved.",
+                );
+            }
+
+            $locked->status = UsageReservationStatus::Released;
+            $locked->released_at = now();
+            $locked->save();
+        });
     }
 
     // ──────────────────────────────────────────────
     // Private helpers
     // ──────────────────────────────────────────────
+
+    /**
+     * Lock a reservation row for update (SELECT ... FOR UPDATE).
+     *
+     * Returns a fresh Eloquent model with the locked row. On PostgreSQL this uses
+     * row-level locking; on SQLite it returns the row without locking (SQLite uses
+     * database-level locking — sufficient for unit-test concurrency semantics).
+     */
+    private function lockReservation(UsageReservation $reservation): UsageReservation
+    {
+        if ($this->isPostgres()) {
+            $row = UsageReservation::query()
+                ->withoutTenantScope()
+                ->where('id', $reservation->id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($row === null) {
+                throw new \InvalidArgumentException(
+                    "Reservation [{$reservation->id}] not found.",
+                );
+            }
+
+            return $row;
+        }
+
+        return $reservation->fresh() ?? $reservation;
+    }
 
     private function computeUsedQuantity(
         Subscription $subscription,

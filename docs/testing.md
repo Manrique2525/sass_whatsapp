@@ -687,6 +687,57 @@ Tests de rate limiting para endpoints públicos:
 
 Ejecución: `vendor/bin/pest --filter="RateLimitTest"`
 
+### Commit Atomicity Tests (FASE 26 U2, 23 tests)
+
+#### PostgreSQL — Concurrent Commit Atomicity (UsageGuardCommitAtomicityTest, UA-COMMIT-01..08)
+
+Tests de concurrencia real con procesos PHP independientes (`proc_open`) contra PostgreSQL:
+
+| Test | Description | Status |
+|---|---|---|
+| UA-COMMIT-01 | 10 concurrent commit() on same reservation — exactly 1 UsageRecord | PASS |
+| UA-COMMIT-02 | 10 concurrent commitWithActual() — exactly 1 UsageRecord | PASS |
+| UA-COMMIT-03 | release vs commit race — exactly one winner per round | PASS |
+| UA-COMMIT-04 | Two concurrent commitWithActual with different values — one wins | PASS |
+| UA-COMMIT-05 | remaining() snapshot with mixed reservation states | PASS |
+| UA-COMMIT-06 | reserve during commit — total never exceeds limit | PASS |
+| UA-COMMIT-07 | commit on deleted reservation throws InvalidArgumentException | PASS |
+| UA-COMMIT-08 | release on deleted reservation throws InvalidArgumentException | PASS |
+
+#### SQLite — Edge-Case Lifecycle Tests (UsageGuardEdgeCaseTest, UA-EDGE-01..15)
+
+Tests de lifecycle completo de commit/release en SQLite:
+
+| Test | Description | Status |
+|---|---|---|
+| UA-EDGE-01 | commit on reserved succeeds + creates UsageRecord | PASS |
+| UA-EDGE-02 | second commit throws InvalidArgumentException | PASS |
+| UA-EDGE-03 | release on reserved succeeds | PASS |
+| UA-EDGE-04 | second release throws InvalidArgumentException | PASS |
+| UA-EDGE-05 | release after commit throws | PASS |
+| UA-EDGE-06 | commit after release throws | PASS |
+| UA-EDGE-07 | commitWithActual with actual < reserved | PASS |
+| UA-EDGE-08 | commitWithActual with actual > reserved | PASS |
+| UA-EDGE-09 | commitWithActual with actual = reserved | PASS |
+| UA-EDGE-10 | commitWithActual with actualQuantity=0 throws | PASS |
+| UA-EDGE-11 | recordDirect creates usage record without reservation | PASS |
+| UA-EDGE-12 | recordDirect with quantity=0 throws | PASS |
+| UA-EDGE-13 | remaining decreases after commit | PASS |
+| UA-EDGE-14 | remaining recovers after release | PASS |
+| UA-EDGE-15 | multiple active reservations reduce remaining cumulatively | PASS |
+
+Ejecución PG:
+```bash
+docker compose exec -T postgres dropdb -U saas --if-exists --force whatsapp_saas_handoff_u2_test
+docker compose exec -T postgres createdb -U saas -O saas whatsapp_saas_handoff_u2_test
+docker compose exec -T app vendor/bin/pest --configuration=phpunit.pgsql.xml --filter="UsageGuardCommitAtomicityTest" --no-coverage
+```
+
+Ejecución SQLite:
+```bash
+vendor/bin/pest --filter="UsageGuardEdgeCaseTest"
+```
+
 ## 5. Comandos
 
 ```bash

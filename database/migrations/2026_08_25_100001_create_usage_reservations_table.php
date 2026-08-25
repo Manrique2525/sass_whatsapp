@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -40,9 +41,11 @@ return new class extends Migration
                 'usage_reservations_idempotency_active_idx',
             );
             $table->index(['tenant_id', 'category', 'status', 'expires_at'], 'usage_reservations_active_idx');
-        });
 
-        DB::statement('ALTER TABLE usage_reservations ADD CONSTRAINT usage_reservations_quantity_positive CHECK (quantity > 0)');
+            if (config('database.default') === 'pgsql') {
+                DB::statement('ALTER TABLE usage_reservations ADD CONSTRAINT usage_reservations_quantity_positive CHECK (quantity > 0)');
+            }
+        });
     }
 
     public function down(): void

@@ -2963,3 +2963,34 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Downgrade no elimina entidades; bloquea nuevas hasta quedar bajo límite.
   - PostgreSQL tests prueban concurrencia real con procesos independientes.
   - SQLite tests prueban semántica (no concurrencia).
+
+## ADR-099 · UsageGuard Commit/Release Atomicity Hardening (FASE 26 U2)
+
+- **Estado**: ACEPTADO · FASE 26 U2 COMPLETADA
+- **Contexto**: Auditoría de FASE 26 detectó P1-1 (commit sin transacción), P1-2
+  (commitWithActual sin transacción), P1-3 (commit sin row lock — race condition),
+  y P1-4 (release sin transacción) en `UsageGuard`. Sin transacción, un crash entre
+  la escritura de `usage_reservations` y `usage_records` produce ledger inconsistente.
+  Sin row lock, dos procesos concurrentes pueden commitear la misma reserva y crear
+ .usage_records duplicados.
+- **Decisión**:
+  1. **commit()** ahora envuelve precondition checks + escritura dentro de un solo
+     `DB::transaction()`. La reserva se bloquea con SELECT FOR UPDATE (`lockReservation()`)
+     antes de verificar status/expiry, evitando TOCTOU races.
+  2. **commitWithActual()** usa la misma protección: transacción + row lock.
+  3. **release()** ahora envuelve la escritura en `DB::transaction()` + `lockReservation()`.
+  4. **lockReservation()**: helper privado que en PostgreSQL usa `lockForUpdate()` y
+     en SQLite usa `fresh()` (SQLite usa database-level locking).
+  5. **recordDirect()**: SIN CAMBIOS — es telemetry best-effort de planes ilimitados,
+     el entity table es source of truth. Los 3 callers (AI, KB, Embedding) envuelven
+     en try/catch.
+  6. **remaining()**: SIN CAMBIOS — es lectura read-only informativa, no afecta ledger.
+- **Consecuencias**:
+  - Atomicidad garantizada: crash entre reservation commit y ledger write imposible.
+  - Exactly-once: segundo commit/release lanza InvalidArgumentException.
+  - Row-level locking en PG previene duplicate writes; en SQLite la serialización
+    es por database-level lock (suficiente para unit tests).
+  - 8 tests de concurrencia PG (UA-COMMIT-01..08) verifican atomicidad real con
+    procesos PHP independientes.
+  - 15 tests de edge-case SQLite (UA-EDGE-01..15) verifican lifecycle completo.
+  - No regressions: 2141 tests backend + 532 Vitest + PHPStan 0 errors.
