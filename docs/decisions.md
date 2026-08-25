@@ -2843,7 +2843,7 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
 
 ## ADR-097 · UsageGuard + Atomic Quota Reservation (FASE 25 U1)
 
-- **Estado**: ACEPTADO · FASE 25 U1+U2+HOTFIX · U3+U4+U5 PENDIENTES
+- **Estado**: ACEPTADO · FASE 25 U1+U2+HOTFIX+U3+U4+U5 COMPLETADO
 - **Contexto**: FASE 23 instaló `UsageTrackingService` (append-only ledger, dormante en producción)
   y el catálogo de `Plan::limits` por categoría. FASE 25 necesita un guard de cuotas
   atómico, idempotente y multi-tenant que prevenga over-limit antes de enviar mensajes, ejecutar
@@ -2935,7 +2935,7 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
 
 ## ADR-098 · Tenant Capacity Limits (FASE 25 U4)
 
-- **Estado**: ACEPTADO · FASE 25 U4
+- **Estado**: ACEPTADO · FASE 25 U4+U5 COMPLETADO
 - **Contexto**: El SaaS necesita límites de capacidad por tenant (contactos, usuarios,
   documentos KB) que se enforcement en tiempo real. El ledger de periodic usage
   (`usage_records`) no sirve para capacity porque no refleja entidades actuales;

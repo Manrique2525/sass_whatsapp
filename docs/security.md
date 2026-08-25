@@ -690,6 +690,16 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - **Tests**: 36 SQLite (CAP-U4-CONTACT-01..15, USER-01..11, KB-01..10) +
   6 PostgreSQL concurrency (CAP-U4-PG-CONTACT-01..02, USER-01, KB-01,
   LOCK-01..02).
+- [x] (FASE 25 U5) Hardening + Closure:
+        Audit U1–U4, fix P0/P1 findings, close FASE 25.
+        P0: commit()/commitWithActual() not atomic → DB::transaction() wrapper.
+        P0: Usage API reported used:0 for capacity categories → computeCurrentCapacityCounts().
+        P1: TagNodeExecutor Dispatcher → Contracts\Events\Dispatcher.
+        P1: isPostgres() consistency in UsageGuard (DB::connection()->getDriverName()).
+        P1: FaqHardeningTest, MessageApiTest, ReprocessOutboxTest missing FakeCapacityGuard (U4 regressions).
+        Dead code removed: unused Tenant::find() in commit/commitWithActual().
+        PHPStan: 0 errors, Pint: PASS, 2,207 tests all green.
+        Security scan: 0 vulnerabilities (composer + npm), secrets/PII clean.
 - [x] (FASE 24 U5) Billing Hardening + Closure:
         Full audit of U1–U4. P0: NONE (all critical invariants hold). P1: 5 fixed. P2: 4 fixed.
         P1-01: recordEvent() SQLSTATE-aware duplicate detection (23505 PostgreSQL, 23000 SQLite).

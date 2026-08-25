@@ -1101,3 +1101,36 @@ Reduced from **13 errors to 0**:
 | Vite build | PASS |
 | composer audit | 0 vulnerabilities |
 | npm audit | 0 vulnerabilities |
+
+## 20. FASE 25 U5 — Hardening + Closure
+
+### Final Quality Gates (U5)
+
+| Gate | Result |
+|---|---|
+| Unit tests (SQLite) | 444/444 PASS |
+| Billing tests (SQLite) | 395/395 PASS |
+| Feature tests (SQLite) | 830/830 PASS |
+| PG Capacity concurrency | 6/6 PASS |
+| Frontend (Vitest) | 532/532 PASS |
+| **Total** | **2,207 tests PASS** |
+| PHPStan | 0 errors |
+| Pint | PASS |
+| vue-tsc | PASS |
+| Vite build | PASS |
+| composer audit | 0 vulnerabilities |
+| npm audit | 0 vulnerabilities |
+| Secrets/PII scan | clean |
+
+### Fixes Applied
+
+| Fix | Severity | Description |
+|---|---|---|
+| commit() atomicity | P0 | UsageGuard::commit()/commitWithActual() wrapped in DB::transaction() |
+| Dead code | P0 | Removed unused Tenant::find() from commit()/commitWithActual() |
+| Usage API capacity | P0 | computeCurrentCapacityCounts() — /usage reports real counts |
+| TagNodeExecutor | P1 | Dispatcher → Contracts\Events\Dispatcher |
+| FaqHardeningTest | P1 | FakeCapacityGuard binding (U4 regression) |
+| MessageApiTest | P1 | FakeCapacityGuard binding (U4 regression) |
+| ReprocessOutboxTest | P1 | FakeCapacityGuard binding (U4 regression) |
+| isPostgres() | P1 | config → DB::connection()->getDriverName() in UsageGuard |

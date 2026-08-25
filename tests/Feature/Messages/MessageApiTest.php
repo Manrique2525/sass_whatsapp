@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Application\Conversations\Services\ConversationService;
+use App\Domain\Billing\Contracts\CapacityGuardInterface;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Messages\Enums\MessageDirection;
 use App\Domain\Messages\Enums\MessageStatus;
@@ -20,8 +21,13 @@ use App\Jobs\SendWhatsAppMessage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
+use Tests\Fakes\FakeCapacityGuard;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    app()->instance(CapacityGuardInterface::class, new FakeCapacityGuard);
+});
 
 /*
 |--------------------------------------------------------------------------

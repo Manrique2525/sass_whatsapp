@@ -8,6 +8,7 @@ use App\Application\Faq\Services\FaqReplyService;
 use App\Application\Flows\Services\FlowEngine;
 use App\Application\Messages\Services\MessageService;
 use App\Domain\Audit\Models\AuditLog;
+use App\Domain\Billing\Contracts\CapacityGuardInterface;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Faq\Enums\FaqStatus;
 use App\Domain\Faq\Models\Faq;
@@ -24,9 +25,14 @@ use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Str;
+use Tests\Fakes\FakeCapacityGuard;
 use Tests\Fakes\FakeFaqMatcherService;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    app()->instance(CapacityGuardInterface::class, new FakeCapacityGuard);
+});
 
 afterEach(function (): void {
     TenantContext::clear();

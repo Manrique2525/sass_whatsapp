@@ -192,7 +192,13 @@ final class UsageGuard implements UsageGuardInterface
     }
 
     /**
-     * Mark a reservation as committed and create a usage record.
+     * Mark a reservation as committed and create a usage record atomically.
+     *
+     * Both writes occur within a single DB transaction to prevent crash between
+     * reservation commit and ledger write (exactly-once guarantee).
+     *
+     * recorded_at uses now() to guarantee uniqueness within the UNIQUE constraint
+     * on (tenant_id, subscription_id, category, recorded_at).
      *
      * @throws \InvalidArgumentException If reservation is not in 'reserved' status or has expired.
      */
@@ -210,24 +216,23 @@ final class UsageGuard implements UsageGuardInterface
             );
         }
 
-        $reservation->status = UsageReservationStatus::Committed;
-        $reservation->committed_at = now();
-        $reservation->save();
+        return DB::transaction(function () use ($reservation): UsageRecord {
+            $reservation->status = UsageReservationStatus::Committed;
+            $reservation->committed_at = now();
+            $reservation->save();
 
-        /** @var Tenant $tenant */
-        $tenant = Tenant::query()->find($reservation->tenant_id);
+            $usageRecord = new UsageRecord;
+            $usageRecord->setAttribute('tenant_id', $reservation->tenant_id);
+            $usageRecord->setAttribute('subscription_id', $reservation->subscription_id);
+            $usageRecord->setAttribute('category', $reservation->category);
+            $usageRecord->setAttribute('quantity', $reservation->quantity);
+            $usageRecord->setAttribute('description', null);
+            $usageRecord->setAttribute('metadata', ['reservation_id' => $reservation->id]);
+            $usageRecord->setAttribute('recorded_at', now()->toDateTimeString());
+            $usageRecord->save();
 
-        $usageRecord = new UsageRecord;
-        $usageRecord->setAttribute('tenant_id', $reservation->tenant_id);
-        $usageRecord->setAttribute('subscription_id', $reservation->subscription_id);
-        $usageRecord->setAttribute('category', $reservation->category);
-        $usageRecord->setAttribute('quantity', $reservation->quantity);
-        $usageRecord->setAttribute('description', null);
-        $usageRecord->setAttribute('metadata', ['reservation_id' => $reservation->id]);
-        $usageRecord->setAttribute('recorded_at', now()->toDateTimeString());
-        $usageRecord->save();
-
-        return $usageRecord;
+            return $usageRecord;
+        });
     }
 
     /**
@@ -235,6 +240,12 @@ final class UsageGuard implements UsageGuardInterface
      *
      * Used for AI token reconciliation: the reservation holds an estimated budget during the
      * provider call, but the UsageRecord must reflect the actual tokens consumed.
+     *
+     * Both writes occur within a single DB transaction to prevent crash between
+     * reservation commit and ledger write (exactly-once guarantee).
+     *
+     * recorded_at uses now() to guarantee uniqueness within the UNIQUE constraint
+     * on (tenant_id, subscription_id, category, recorded_at).
      *
      * If actualQuantity > reservation quantity, the ledger records the higher actual (overshoot
      * from estimation variance, documented in ADR-097 U3).
@@ -263,25 +274,24 @@ final class UsageGuard implements UsageGuardInterface
             );
         }
 
-        $reservation->quantity = $actualQuantity;
-        $reservation->status = UsageReservationStatus::Committed;
-        $reservation->committed_at = now();
-        $reservation->save();
+        return DB::transaction(function () use ($reservation, $actualQuantity): UsageRecord {
+            $reservation->quantity = $actualQuantity;
+            $reservation->status = UsageReservationStatus::Committed;
+            $reservation->committed_at = now();
+            $reservation->save();
 
-        /** @var Tenant $tenant */
-        $tenant = Tenant::query()->find($reservation->tenant_id);
+            $usageRecord = new UsageRecord;
+            $usageRecord->setAttribute('tenant_id', $reservation->tenant_id);
+            $usageRecord->setAttribute('subscription_id', $reservation->subscription_id);
+            $usageRecord->setAttribute('category', $reservation->category);
+            $usageRecord->setAttribute('quantity', $actualQuantity);
+            $usageRecord->setAttribute('description', null);
+            $usageRecord->setAttribute('metadata', ['reservation_id' => $reservation->id]);
+            $usageRecord->setAttribute('recorded_at', now()->toDateTimeString());
+            $usageRecord->save();
 
-        $usageRecord = new UsageRecord;
-        $usageRecord->setAttribute('tenant_id', $reservation->tenant_id);
-        $usageRecord->setAttribute('subscription_id', $reservation->subscription_id);
-        $usageRecord->setAttribute('category', $reservation->category);
-        $usageRecord->setAttribute('quantity', $actualQuantity);
-        $usageRecord->setAttribute('description', null);
-        $usageRecord->setAttribute('metadata', ['reservation_id' => $reservation->id]);
-        $usageRecord->setAttribute('recorded_at', now()->toDateTimeString());
-        $usageRecord->save();
-
-        return $usageRecord;
+            return $usageRecord;
+        });
     }
 
     /**
@@ -404,6 +414,6 @@ final class UsageGuard implements UsageGuardInterface
 
     private function isPostgres(): bool
     {
-        return config('database.default') === 'pgsql';
+        return DB::connection()->getDriverName() === 'pgsql';
     }
 }

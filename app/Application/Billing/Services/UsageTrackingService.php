@@ -13,7 +13,11 @@ use App\Domain\Billing\Models\Subscription;
 use App\Domain\Billing\Models\UsageRecord;
 use App\Domain\Billing\ValueObjects\UsageCategorySummary;
 use App\Domain\Billing\ValueObjects\UsageSummary;
+use App\Domain\Contacts\Models\Contact;
+use App\Domain\KnowledgeBase\Models\KnowledgeDocument;
 use App\Domain\Tenants\Models\Tenant;
+use App\Domain\Users\Enums\TenantMembershipStatus;
+use App\Domain\Users\Models\TenantUser;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 
@@ -150,8 +154,15 @@ final class UsageTrackingService
 
         $categories = [];
 
+        $capacityCounts = $this->computeCurrentCapacityCounts($tenant);
+
         foreach (UsageCategory::cases() as $case) {
-            $used = (int) ($usageByCategory[$case->value] ?? 0);
+            if (array_key_exists($case->value, $capacityCounts)) {
+                $used = $capacityCounts[$case->value];
+            } else {
+                $used = (int) ($usageByCategory[$case->value] ?? 0);
+            }
+
             $limit = $plan->getLimit($case->value);
             $remaining = $limit !== null ? max(0, $limit - $used) : null;
 
@@ -292,5 +303,30 @@ final class UsageTrackingService
         $sanitized = array_intersect_key($metadata, array_flip(self::METADATA_WHITELIST));
 
         return $sanitized !== [] ? $sanitized : [];
+    }
+
+    /**
+     * Compute current entity counts for capacity categories.
+     *
+     * Capacity is derived from current domain rows, never from usage_records ledger.
+     *
+     * @return array<string, int>
+     */
+    private function computeCurrentCapacityCounts(Tenant $tenant): array
+    {
+        return [
+            UsageCategory::Contacts->value => Contact::query()
+                ->withoutTenantScope()
+                ->where('tenant_id', $tenant->id)
+                ->count(),
+            UsageCategory::Users->value => TenantUser::query()
+                ->where('tenant_id', $tenant->id)
+                ->where('status', TenantMembershipStatus::Active)
+                ->count(),
+            UsageCategory::KnowledgeDocuments->value => KnowledgeDocument::query()
+                ->withoutTenantScope()
+                ->where('tenant_id', $tenant->id)
+                ->count(),
+        ];
     }
 }

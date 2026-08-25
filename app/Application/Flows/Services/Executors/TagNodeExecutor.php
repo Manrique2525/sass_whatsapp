@@ -13,7 +13,7 @@ use App\Domain\Flows\Contracts\NodeExecutorInterface;
 use App\Domain\Flows\Enums\FlowNodeType;
 use App\Domain\Flows\ValueObjects\NodeExecutionContext;
 use App\Domain\Flows\ValueObjects\NodeExecutionResult;
-use Illuminate\Events\Dispatcher;
+use Illuminate\Contracts\Events\Dispatcher;
 
 /**
  * Ejecutor del nodo `tag`: asigna etiquetas al contacto de la conversación.

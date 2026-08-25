@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 U1+U2+HOTFIX+U3+U4 COMPLETADAS · U5 PENDIENTE**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 PENDIENTE**.
 
 ## Fases
 
@@ -31,7 +31,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 U1+U2+HOTF
 | 22 | Notificaciones (U1: Data Model, U2: Event Listeners, U3: Notification API, U4: Email Preferences, U5: Realtime + Frontend) | COMPLETADA |
 | 23 | Planes (U1: Data Model, U2: Usage Metering, U3: Billing API, U4: Billing Frontend) | COMPLETADA |
 | 24 | Billing (U1: Provider Infrastructure + Mappings, U2: Checkout, U3: Webhooks, U4: Frontend Provider UX, U5: Hardening + Closure) | COMPLETADA |
-| 25 | Usage limits (U1: UsageGuard + Atomic Quota Reservation, U2: Message + Flow Quota Enforcement, U2-HOTFIX: fail-closed missing entitlement, U3: AI Token Enforcement, U4: Capacity Limits, U5: Hardening + Closure) | EN PROGRESO |
+| 25 | Usage limits (U1: UsageGuard + Atomic Quota Reservation, U2: Message + Flow Quota Enforcement, U2-HOTFIX: fail-closed missing entitlement, U3: AI Token Enforcement, U4: Capacity Limits, U5: Hardening + Closure) | COMPLETADA |
 | 26 | Auditoría | PENDIENTE |
 | 27 | Seguridad (refuerzo OWASP) | PENDIENTE |
 | 28 | Observabilidad (Sentry, logging) | PENDIENTE |
@@ -2649,3 +2649,49 @@ locks (`pg_advisory_xact_lock`) garantizan atomicidad bajo concurrencia real.
 - PostgreSQL full suite: 38/38 PASS (Billing+Capacity)
 - composer audit: 0 vulnerabilities
 - npm audit: 0 vulnerabilities
+
+## FASE 25 U5 — Hardening + Closure (COMPLETE)
+
+### Scope
+
+Audit, fix, verify, and close FASE 25 (U1–U4). No new features, no new DDL, no new endpoints.
+
+### Fixes Applied (U5)
+
+| Fix | Severity | Description |
+|---|---|---|
+| commit() atomicity | P0 | `UsageGuard::commit()` and `commitWithActual()` wrapped in `DB::transaction()` |
+| Dead code removed | P0 | Removed unused `Tenant::query()->find()` from `commit()` and `commitWithActual()` |
+| Usage API capacity | P0 | `UsageTrackingService::computeCurrentCapacityCounts()` — `/usage` now reports real contact/user/KB counts |
+| TagNodeExecutor | P1 | `Illuminate\Events\Dispatcher` → `Illuminate\Contracts\Events\Dispatcher` (fixes `EventFake` TypeError) |
+| FaqHardeningTest | P1 | Added `FakeCapacityGuard` binding (U4 regression) |
+| MessageApiTest | P1 | Added `FakeCapacityGuard` binding (U4 regression) |
+| ReprocessOutboxTest | P1 | Added `FakeCapacityGuard` binding (U4 regression) |
+| isPostgres() | P1 | `config('database.default')` → `DB::connection()->getDriverName()` in UsageGuard |
+
+### Quality Gates (Final)
+
+- PHPStan: 0 errors
+- Pint: PASS
+- Unit tests: 444/444 PASS
+- Billing tests: 395/395 PASS
+- Feature tests (Contacts, Users, KB, WhatsApp, Handoff, Faq, Messages, Leads, Tags, Notifications): 830/830 PASS
+- PostgreSQL concurrency (Capacity): 6/6 PASS
+- Vitest: 532/532 PASS
+- vue-tsc: PASS
+- Vite build: PASS
+- composer audit: 0 vulnerabilities
+- npm audit: 0 vulnerabilities
+- Secrets/PII scan: clean
+- Pre-existing failures fixed: 8 (HandoffFinalTest, FaqHardeningTest, MessageApiTest, ReprocessOutboxTest U4 regressions)
+
+### Total Test Suite
+
+| Suite | Count | Status |
+|---|---|---|
+| Unit | 444 | PASS |
+| Billing (SQLite) | 395 | PASS |
+| Feature (SQLite) | 830 | PASS |
+| PG Capacity | 6 | PASS |
+| Frontend (Vitest) | 532 | PASS |
+| **Total** | **2,207** | **PASS** |
