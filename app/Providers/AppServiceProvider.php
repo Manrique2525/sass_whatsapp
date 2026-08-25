@@ -148,5 +148,13 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('flow-webhook', function (Request $request): Limit {
             return Limit::perMinute(60)->by($request->ip());
         });
+
+        RateLimiter::for('webhook.whatsapp', function (Request $request): Limit {
+            return Limit::perMinute(120)->by($request->ip());
+        });
+
+        RateLimiter::for('invitation', function (Request $request): Limit {
+            return Limit::perMinute(30)->by($request->ip());
+        });
     }
 }

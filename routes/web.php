@@ -29,7 +29,9 @@ Route::redirect('/', '/login');
 
 Route::get('/health', HealthController::class);
 
-Route::get('invitations/{token}', [InvitationWebController::class, 'show'])->name('invitations.show');
+Route::get('invitations/{token}', [InvitationWebController::class, 'show'])
+    ->middleware('throttle:invitation')
+    ->name('invitations.show');
 
 Route::middleware('guest')->group(function (): void {
     Route::get('login', [AuthenticatedSessionController::class, 'create'])->name('login');

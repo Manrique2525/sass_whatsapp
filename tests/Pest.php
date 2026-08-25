@@ -28,6 +28,9 @@ pest()->extend(TestCase::class)
         RateLimiter::clear('auth-password|127.0.0.1');
         RateLimiter::clear('auth-login|test@example.com');
         RateLimiter::clear('auth-password|test@example.com');
+        RateLimiter::clear('webhook.whatsapp|127.0.0.1');
+        RateLimiter::clear('invitation|127.0.0.1');
+        RateLimiter::clear('flow-webhook|127.0.0.1');
     });
 
 pest()->extend(PostgresConcurrencyTestCase::class)

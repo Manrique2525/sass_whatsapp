@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 PENDIENTE**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 AUDIT COMPLETADA · FASE 26 U1 COMPLETADA · FASE 26 U2-U4 PENDIENTE**.
 
 ## Fases
 
@@ -32,7 +32,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA
 | 23 | Planes (U1: Data Model, U2: Usage Metering, U3: Billing API, U4: Billing Frontend) | COMPLETADA |
 | 24 | Billing (U1: Provider Infrastructure + Mappings, U2: Checkout, U3: Webhooks, U4: Frontend Provider UX, U5: Hardening + Closure) | COMPLETADA |
 | 25 | Usage limits (U1: UsageGuard + Atomic Quota Reservation, U2: Message + Flow Quota Enforcement, U2-HOTFIX: fail-closed missing entitlement, U3: AI Token Enforcement, U4: Capacity Limits, U5: Hardening + Closure) | COMPLETADA |
-| 26 | Auditoría | PENDIENTE |
+| 26 | Auditoría + Seguridad (U1: Deployment Gate + Rate Limiting, U2: Billing atomicity + Job hardening, U3: Job timeout + error handling, U4: Frontend security) | EN PROGRESO (U1 COMPLETADA) |
 | 27 | Seguridad (refuerzo OWASP) | PENDIENTE |
 | 28 | Observabilidad (Sentry, logging) | PENDIENTE |
 | 29 | Testing global + cobertura | PENDIENTE |
@@ -2695,3 +2695,71 @@ Audit, fix, verify, and close FASE 25 (U1–U4). No new features, no new DDL, no
 | PG Capacity | 6 | PASS |
 | Frontend (Vitest) | 532 | PASS |
 | **Total** | **2,207** | **PASS** |
+
+---
+
+## FASE 26 — Auditoría + Seguridad
+
+### Auditoría técnica (COMPLETADA)
+
+Auditoría de 71 secciones completada. Hallazgos clasificados:
+- **P0** (1): Migración `usage_reservations` pendiente → reclassificado como DEPLOYMENT GATE (no vulnerabilidad de código)
+- **P1** (8): UsageGuard atomicity, job hardening, rate limiting, LIKE injection, etc.
+- **P2** (4): Error passthrough, timeout, crc32, README
+- **P3** (4): Dead events, TODO markers, abandoned packages
+- Deploy verdict: **CONDITIONALLY READY**
+
+### U1 — Deployment Gate + Public Rate Limiting (COMPLETADA)
+
+#### Deployment Gate
+- Migración `2026_08_25_100001_create_usage_reservations_table.php` verificada: UP/DOWN/UP idempotente en PostgreSQL 16.
+- Fresh database test: 58/58 migrations pasan.
+- No auto-migrate en `entrypoint.sh`, `Dockerfile`, ni servicios Docker.
+- Documentación de deploy: `docs/deployment.md` §Gate de migración.
+
+#### Rate Limiting
+- `webhook.whatsapp`: 120/min per IP — `AppServiceProvider.php` + `routes/api.php` (GET + POST).
+- `invitation`: 30/min per IP — `AppServiceProvider.php` + `routes/api.php` + `routes/web.php`.
+- Stripe webhook: audit-only (firma HMAC, sin rate limit adicional).
+- Flow webhook: preexistente (`flow-webhook` 60/min).
+- 429 handler: preexistente en `bootstrap/app.php` → `{message, code: RATE_LIMITED}`.
+
+#### Tests (12 nuevos)
+- WA-RL-01..06: webhook WhatsApp rate limiting (under limit, boundary, 429 shape, invalid sig, verify endpoint, no leak).
+- INV-RL-01..06: invitation rate limiting (under limit, boundary, 429, brute-force, web route, independent buckets).
+
+#### Quality Gates
+- Backend: **2,141/2,141 PASS** (6,396 assertions), 0 failures, 14 skipped.
+- Frontend: Vitest **532/532 PASS**, vue-tsc PASS, Vite build PASS.
+- PHPStan: **0 errors** (448 files).
+- composer audit: 0 vulnerabilities.
+- npm audit: 0 vulnerabilities.
+- Security scan: clean (no .env, credentials, tokens, PII, or private keys in diff).
+
+#### Archivos modificados
+- `app/Providers/AppServiceProvider.php` — +webhook.whatsapp limiter (120/min), +invitation limiter (30/min).
+- `routes/api.php` — +throttle middleware on WA webhook (GET+POST) and invitation show.
+- `routes/web.php` — +throttle middleware on web invitation show.
+- `tests/Pest.php` — +rate limiter bucket clears in beforeEach.
+- `tests/Feature/Security/RateLimitTest.php` — NEW: 12 tests.
+
+#### Scope Check
+- Solo archivos autorizados modificados.
+- NO se modificó: UsageGuard, UsageTrackingService, billing atomicity, ProcessWhatsAppStatusUpdate, FlowWebhookController, AI, Docker, Sentry, frontend features.
+- NO se ejecutó migración en producción.
+- NO se hizo push.
+
+#### SEGURIDAD
+- Rate limiters protegen endpoints públicos contra abuso y brute-force.
+- Throttle aplica ANTES de la lógica del controller (protege CPU/DB).
+- Stripe webhook: firma HMAC suficiente (autenticación criptográfica).
+- 429 response no expone internals (sin `retry_after`, `limit`, `remaining`).
+- Limiter buckets independientes (WhatsApp no afecta invitations y viceversa).
+
+#### Pendientes (U2-U4)
+- **U2**: Billing atomicity + UsageGuard commit atomic (P1-1..P1-4).
+- **U3**: ProcessWhatsAppStatusUpdate job hardening (P1-5).
+- **U4**: Frontend security hardening (P2 audit-only items).
+
+#### ESTADO
+COMPLETADA — pendiente commit. NO PUSH.

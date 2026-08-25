@@ -676,6 +676,17 @@ docker compose exec -T app vendor/bin/pest --configuration=phpunit.pgsql.xml --t
 ### Seguridad
 - 401 sin token, 403 sin permiso, 404 en datos ajenos, throttle en login/envío.
 
+### Rate Limiting (FASE 26 U1, 12 tests en `tests/Feature/Security/RateLimitTest.php`)
+
+Tests de rate limiting para endpoints públicos:
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| WhatsApp Webhook RL (F26-U1-WA-RL-01..06) | 6 | Under limit succeed, boundary (121st rejected), 429 shape, invalid sig still limited, verify endpoint limited, no internal config leak |
+| Invitation RL (F26-U1-INV-RL-01..06) | 6 | Under limit succeed, boundary (31st rejected), 429 on over-limit, brute-force blocked, web route limited, independent buckets from WhatsApp |
+
+Ejecución: `vendor/bin/pest --filter="RateLimitTest"`
+
 ## 5. Comandos
 
 ```bash

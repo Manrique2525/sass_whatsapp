@@ -176,6 +176,33 @@ jobs:
   tráfico. Dimensionar la ventana con una copia representativa porque PostgreSQL retiene locks
   durante el backfill y la creación de constraints/índices.
 
+### Gate de migración (FASE 26 U1)
+
+No existe auto-migrate en ningún contenedor (`entrypoint.sh`, `Dockerfile`, servicios
+`docker-compose.yml`). **Toda migración requiere ejecución manual explícita por el deployer**
+antes de activar tráfico.
+
+Migración pendiente al momento del commit:
+- `2026_08_25_100001_create_usage_reservations_table.php` — tabla
+  `usage_reservations` con PK uuid, FK→`tenants` CASCADE, FK→`subscriptions` CASCADE,
+  CHECK `quantity > 0`, UNIQUE compuesta `(tenant_id, subscription_id, category,
+  idempotency_key)`, índice compuesto `(tenant_id, subscription_id)`.
+
+**Secuencia de deploy con migración pendiente:**
+1. Activar modo mantenimiento.
+2. Detener workers y scheduler (`queue:work --stop`, sin `schedule:run`).
+3. Desplegar la nueva imagen.
+4. Ejecutar `php artisan migrate --force`.
+5. Verificar con `php artisan migrate:status` que la migración figura como "Yes".
+6. Verificar healthcheck.
+7. Reactivar tráfico, workers y scheduler.
+
+**Rollback**: la migración soporta `php artisan migrate:rollback` (drop table
+`usage_reservations`). El rollback revierte la migración, pero las reservas de uso
+activas se perderán. En producción, dado que la tabla es nueva y UsageGuard aún no
+la consume en chokepoints de mensajes/flows (pendiente de activación), el rollback
+es seguro si se ejecuta antes de activar dichos chokepoints.
+
 ## 7. Health check
 
 `GET /health` → `{"status":"ok"}`. Verifica DB y Redis (si falla redis, degrada a `degraded`).

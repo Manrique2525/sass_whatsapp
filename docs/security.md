@@ -336,9 +336,19 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`,
   CSP para el SPA. `APP_DEBUG=false` en producción.
 
-### Rate limiting
-- `throttle` global en API (p. ej. 300/min) y específicos: envío de mensajes, IA, login.
-- Las claves de throttle incluyen `tenant_id`/`user_id` (Redis compartido → nunca claves globales).
+### Rate limiting (FASE 26 U1)
+- `throttle` global en API (p. ej. 300/min) y específicos por endpoint público:
+  - `auth-login` 10/min por email/IP, `auth-register` 5/min por IP, `auth-password` 3/min por email/IP.
+  - `webhook.whatsapp` 120/min por IP (GET verificación + POST handle). Tolera bursts legítimos
+    de Meta; aplica ANTES de la verificación de firma (protege CPU contra abuso).
+  - `invitation` 30/min por IP (API `GET /api/v1/invitations/{token}` + web `GET /invitations/{token}`).
+    Mitiga brute-force de tokens y enumeración de invitaciones.
+  - `flow-webhook` 60/min por IP (POST `/api/webhooks/flows/{trigger}`, preexistente).
+- Los rate limiters se definen en `AppServiceProvider::boot()` como `RateLimiter::for(...)` y
+  se aplican vía middleware `throttle:nombre` en las rutas.
+- Stripe webhook: audit-only (autenticado por firma HMAC, no requiere rate limit adicional).
+- Las claves de throttle incluyen `tenant_id`/`user_id` o `ip()` según el endpoint (Redis
+  compartido → nunca claves globales).
 
 ### Límites de uso (backend)
 - `UsageGuard` valida cuota del plan ANTES de: enviar mensaje, ejecutar flow. Respuesta `TENANT_QUOTA_EXCEEDED`. AI tokens, contacts, users, knowledge documents: **pendientes** (U3/U4).

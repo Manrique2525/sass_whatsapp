@@ -37,8 +37,11 @@ use Illuminate\Support\Facades\Route;
 
 // Webhooks de WhatsApp (públicos, sin auth Bearer): autenticados por
 // verificación GET (hub.verify_token) y firma X-Hub-Signature-256.
-Route::get('webhooks/whatsapp', [WhatsAppWebhookController::class, 'verify']);
-Route::post('webhooks/whatsapp', [WhatsAppWebhookController::class, 'handle']);
+// Rate limit: 120/min per IP (tolera bursts legítimos de Meta).
+Route::get('webhooks/whatsapp', [WhatsAppWebhookController::class, 'verify'])
+    ->middleware('throttle:webhook.whatsapp');
+Route::post('webhooks/whatsapp', [WhatsAppWebhookController::class, 'handle'])
+    ->middleware('throttle:webhook.whatsapp');
 
 Route::post('webhooks/flows/{trigger}', [FlowWebhookController::class, 'handle'])
     ->middleware('throttle:flow-webhook');
@@ -60,7 +63,9 @@ Route::prefix('v1')->group(function (): void {
         ->middleware('throttle:auth-password');
 
     // Invitaciones públicas (el token en el enlace ES la credencial).
-    Route::get('invitations/{token}', [InvitationController::class, 'show']);
+    // Rate limit: 30/min per IP (brute-force protection + enumeration mitigation).
+    Route::get('invitations/{token}', [InvitationController::class, 'show'])
+        ->middleware('throttle:invitation');
 
     Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('auth/me', [AuthController::class, 'me']);
