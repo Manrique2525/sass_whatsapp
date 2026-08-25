@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 U1+U2 COMPLETADAS**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 U1+U2+HOTFIX COMPLETADAS · U3+U4+U5 PENDIENTES**.
 
 ## Fases
 
@@ -31,7 +31,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 U1+U2 COMP
 | 22 | Notificaciones (U1: Data Model, U2: Event Listeners, U3: Notification API, U4: Email Preferences, U5: Realtime + Frontend) | COMPLETADA |
 | 23 | Planes (U1: Data Model, U2: Usage Metering, U3: Billing API, U4: Billing Frontend) | COMPLETADA |
 | 24 | Billing (U1: Provider Infrastructure + Mappings, U2: Checkout, U3: Webhooks, U4: Frontend Provider UX, U5: Hardening + Closure) | COMPLETADA |
-| 25 | Usage limits (U1: UsageGuard + Atomic Quota Reservation, U2: Message + Flow Quota Enforcement) | U1+U2 COMPLETADAS |
+| 25 | Usage limits (U1: UsageGuard + Atomic Quota Reservation, U2: Message + Flow Quota Enforcement, U2-HOTFIX: fail-closed missing entitlement, U3: AI Token Enforcement, U4: Capacity Limits, U5: Hardening + Closure) | EN PROGRESO |
 | 26 | Auditoría | PENDIENTE |
 | 27 | Seguridad (refuerzo OWASP) | PENDIENTE |
 | 28 | Observabilidad (Sentry, logging) | PENDIENTE |

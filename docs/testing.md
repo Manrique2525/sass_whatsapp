@@ -562,16 +562,16 @@ Pirámide de tests con prioridad en lo crítico:
 - registro, login ok/ko, logout, forgot/reset, email verify, tokens.
 
 ### Billing / límites
-- cuota superada → `TENANT_QUOTA_EXCEEDED` antes de enviar/IA/crear contacto.
+- cuota superada → `TENANT_QUOTA_EXCEEDED` antes de enviar mensaje o ejecutar flow. AI tokens, contacts, users, knowledge documents: pendientes (U3/U4).
 - usage_records incrementan.
 
-### UsageGuard (FASE 25 U1+U2, 48 U1 SQLite + 7 U1 PG + 43 U2 tests)
+### UsageGuard (FASE 25 U1+U2+HOTFIX, 48 U1 SQLite + 7 U1 PG + 43 U2 + 16 HOTFIX tests)
 
 #### SQLite — Unit, Commit, Release (UsageGuardTest, 26 tests)
 
 | Suite | Tests | Cobertura |
 |---|---|---|
-| `UsageGuardTest.php` | USG-U1-UNIT-01..19, USG-U1-COMMIT-01..04, USG-U1-RELEASE-01..03 | remaining(): unlimited/null, blocked/0, limit-usage, accounts for reservations, no subscription → null, full limit. reserve(): active/past-due/pending/cancelled/missing subscription, under/at limit, unlimited, blocked, zero/negative quantity, period boundaries, TTL. commit(): creates usage record, updates status, rejects committed/expired. release(): updates status, no usage created, rejects committed. |
+| `UsageGuardTest.php` | USG-U1-UNIT-01..19, USG-U1-COMMIT-01..04, USG-U1-RELEASE-01..03 | remaining(): unlimited/null, blocked/0, limit-usage, accounts for reservations, SubscriptionNotFoundException for missing subscription (fail-closed), full limit. reserve(): active/past-due allowed, pending/cancelled/missing subscription throws SubscriptionNotFoundException (fail-closed), under/at limit, unlimited, blocked, zero/negative quantity, period boundaries, TTL. commit(): creates usage record, updates status, rejects committed/expired. release(): updates status, no usage created, rejects committed. |
 
 #### SQLite — Idempotency (UsageGuardIdempotencyTest, 6 tests)
 
@@ -601,19 +601,27 @@ Pirámide de tests con prioridad en lo crítico:
 
 | Suite | Tests | Cobertura |
 |---|---|---|
-| `UsageGuardMessageQuotaTest.php` | USG-U2-MSG-01..26 | Reserve before dispatch, null on no subscription, at limit blocks, committed on success, released on provider failure, transient failure doesn't release (U1 holds slot), idempotent retry returns same reservation, tenant isolation, no double-charge, Queue::fake unit tests for reserve-commit-release lifecycle, exception renderer 409. |
+| `UsageGuardMessageQuotaTest.php` | USG-U2-MSG-01..15, MSG-17..26 | Reserve before dispatch (UUID pre-generated, forceFill for ID), at limit blocks, committed on success, released on provider failure, transient failure doesn't release (U1 holds slot), idempotent retry returns same reservation, tenant isolation, no double-charge, Queue::fake unit tests for reserve-commit-release lifecycle, exception renderer 409. Pending/Cancelled/Missing subscription throws SubscriptionNotFoundException (fail-closed). |
 
 #### U2 — Flow Quota Enforcement (UsageGuardFlowQuotaTest, 12 tests)
 
 | Suite | Tests | Cobertura |
 |---|---|---|
-| `UsageGuardFlowQuotaTest.php` | USG-U2-FLOW-01..12 | Under limit starts, at limit blocks, unlimited plan, zero limit blocked, reserve before creating execution, commit after start, later error doesn't release, duplicate start no double count, tenant isolation, null on pending/cancelled subscription, PastDue allowed, plan downgrade re-check. |
+| `UsageGuardFlowQuotaTest.php` | USG-U2-FLOW-01..12 | Under limit starts, at limit blocks, unlimited plan, zero limit blocked, reserve before creating execution, commit after start, later error doesn't release, duplicate start no double count, tenant isolation, Pending/Cancelled/Missing subscription throws SubscriptionNotFoundException (fail-closed), PastDue allowed, plan downgrade re-check. |
 
 #### U2 — Message Concurrency (UsageGuardMessageConcurrencyTest, 5 tests)
 
 | Suite | Tests | Cobertura |
 |---|---|---|
-| `UsageGuardMessageConcurrencyTest.php` | USG-U2-MSG-CONC-01..05 | Reserve-commit-release lifecycle, idempotent retry same reservation, cross-tenant independence, category independence, null on missing subscription. |
+| `UsageGuardMessageConcurrencyTest.php` | USG-U2-MSG-CONC-01..05 | Reserve-commit-release lifecycle, idempotent retry same reservation, cross-tenant independence, category independence, missing subscription throws SubscriptionNotFoundException (fail-closed). |
+
+#### U2-HOTFIX — Fail-closed Regression (UsageGuardHotfixTest, 16 tests)
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `UsageGuardHotfixTest.php` | HF-MSG-01..07, HF-JOB-01..03, HF-FLOW-01..05, HF-SEC-01 | Message: missing/active/past-due subscription, unlimited plan, pending/cancelled throws. Job: worker reserve+commit on success, release on permanent failure, SubscriptionNotFoundException propagates. Flow: under/at limit, missing subscription throws, unlimited, pending/cancelled throws. Security: SubscriptionNotFoundException HTTP 409 with code SUBSCRIPTION_NOT_FOUND. |
+
+Ejecución: `vendor/bin/pest --filter="UsageGuardHotfix" --no-coverage`
 
 Ejecución SQLite: `vendor/bin/pest --filter="UsageGuard" --no-coverage`
 Ejecución PG: `docker compose exec -T app vendor/bin/pest --configuration=phpunit.pgsql.xml --filter="UsageGuardConcurrency" --no-coverage`

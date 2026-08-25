@@ -341,11 +341,11 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - Las claves de throttle incluyen `tenant_id`/`user_id` (Redis compartido → nunca claves globales).
 
 ### Límites de uso (backend)
-- `UsageGuard` valida cuota del plan ANTES de: enviar mensaje, ejecutar IA, crear contacto,
-  publicar flow, procesar documento KB. Respuesta `TENANT_QUOTA_EXCEEDED`.
-- **U2 chokepoints**: MessageService.createOutbound() reserva antes de dispatch; SendWhatsAppMessage re-reserva con misma key tras CAS claim, commitea en éxito, libera en fallo permanente; FlowExecutionService.start() reserva y commitea inmediatamente. Sin suscripción activa → null → sin enforcement.
+- `UsageGuard` valida cuota del plan ANTES de: enviar mensaje, ejecutar flow. Respuesta `TENANT_QUOTA_EXCEEDED`. AI tokens, contacts, users, knowledge documents: **pendientes** (U3/U4).
+- **U2 chokepoints**: MessageService.createOutbound() reserva antes de dispatch (UUID pre-generado, ID vía forceFill); SendWhatsAppMessage re-reserva con misma key tras CAS claim, commitea en éxito, libera en fallo permanente; FlowExecutionService.start() reserva y commitea inmediatamente. Sin suscripción activa → `SubscriptionNotFoundException` → HTTP 409 `SUBSCRIPTION_NOT_FOUND` (fail-closed, U2-HOTFIX).
 - **Idempotencia**: keys namespaced (`message:{id}`, `flow_execution:{uuid}`). Worker re-reserva con la misma key; si la reservation ya fue committed, retorna la misma (idempotente). Si expiró, U1 crea fresh reservation.
 - **SubscriptionNotActiveException**: HTTP 409, code `SUBSCRIPTION_NOT_ACTIVE`. Renderer en `bootstrap/app.php`.
+- **SubscriptionNotFoundException**: HTTP 409, code `SUBSCRIPTION_NOT_FOUND`. Fail-closed: tenant sin suscripción activa no puede enviar mensajes ni ejecutar flujos. Renderer en `bootstrap/app.php`.
 
 ### Secreto de tokens de WhatsApp
 - El `access_token` de cada WABA se guarda **cifrado** en `whatsapp_accounts.access_token`

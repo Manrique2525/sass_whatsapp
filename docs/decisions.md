@@ -2843,9 +2843,9 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
 
 ## ADR-097 · UsageGuard + Atomic Quota Reservation (FASE 25 U1)
 
-- **Estado**: ACEPTADO · FASE 25 U1+U2
+- **Estado**: ACEPTADO · FASE 25 U1+U2+HOTFIX · U3+U4+U5 PENDIENTES
 - **Contexto**: FASE 23 instaló `UsageTrackingService` (append-only ledger, dormante en producción)
-  y el catálogo de `Plan::limits` por categoría. FASE 25 U2-U5 necesitan un guard de cuotas
+  y el catálogo de `Plan::limits` por categoría. FASE 25 necesita un guard de cuotas
   atómico, idempotente y multi-tenant que prevenga over-limit antes de enviar mensajes, ejecutar
   IA o crear contactos — sin integrares aún con servicios de negocio (MessageService, etc.).
 - **Decisión**:
@@ -2872,7 +2872,7 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - SQLite (tests) omite advisory locks (sin pg_advisory_xact_lock) — la serialización
     depende del `DB::transaction()`.
   - La migración `usage_reservations` incluye CHECK constraint y UNIQUE parcial.
-   - Cada módulo futuro (U2: messages, U3: AI, U4: contacts) integra UsageGuard progresivamente.
+   - U3 (AI tokens) y U4 (contacts/users/KDocuments) integran UsageGuard en futuras unidades.
 
 ### U2 · Message + Flow Quota Enforcement (extensión de ADR-097)
 
@@ -2883,15 +2883,52 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   manejo de suscripciones inexistentes.
 - **Decisión**:
   1. **MessageService** (`app/Application/Messages/Services/MessageService.php`): reserve quota
-     con key `message:{message_id}` (TTL 900s) antes de dispatch. Si no hay suscripción → null →
-     sin enforcement.
+     con key `message:{message_id}` (TTL 900s) antes de crear el mensaje. UUID pre-generado via
+     `Str::uuid()`. ID asignado via `forceFill(['id' => $messageId])` (id no está en `$fillable`).
   2. **SendWhatsAppMessage** (`app/Jobs/SendWhatsAppMessage.php`): re-reserva con misma key tras
      CAS claim. Éxito del provider → commit. Fallo permanente → release. `failed()` llama
-     `releaseReservationIfExists()` antes de `failMessage()`.
+     `releaseReservationIfExists()` antes de `failMessage()`. SubscriptionNotFoundException
+     propaga → `failed()` → mensaje terminal.
   3. **FlowExecutionService** (`app/Application/Flows/Services/FlowExecutionService.php`): genera
      UUID pre-creado, reserva con key `flow_execution:{uuid}` (TTL 300s), crea FlowExecution con
      ID pre-generado, commitea inmediatamente. Start = consumed. Errores posteriores NO liberan.
-  4. **UsageGuard::reserve()** retorna `?UsageReservation` (null = sin suscripción = sin enforcement).
-     Catch `SubscriptionNotFoundException` → null. Consistente con `remaining()` null.
+  4. **UsageGuard::reserve()** retorna `?UsageReservation` (null = plan limit es null = unlimited).
+     `SubscriptionNotFoundException` propaga (fail-closed). `remaining()` idem.
   5. **SubscriptionNotActiveException** renderer: HTTP 409, code `SUBSCRIPTION_NOT_ACTIVE` en
      `bootstrap/app.php`.
+  6. **SubscriptionNotFoundException** renderer: HTTP 409, code `SUBSCRIPTION_NOT_FOUND` en
+     `bootstrap/app.php`.
+
+### U2-HOTFIX · Fail-closed when usage entitlement is missing
+
+- **Estado**: ACEPTADO · FASE 25 U2 HOTFIX
+- **Commit**: `755a192`
+- **Contexto**: U2 integró UsageGuard en MessageService, SendWhatsAppMessage y
+  FlowExecutionService. Sin embargo, `UsageGuard::reserve()` y `remaining()` capturaban
+  `SubscriptionNotFoundException` y retornaban `null` (tratando tenants sin suscripción como
+  unlimited). Esto significaba que un tenant sin suscripción activa podía enviar mensajes y
+  ejecutar flujos ilimitadamente — violando el principio fail-closed deEntitlementResolver.
+- **Causa raíz**: Catch blocks en `reserve()` (línea ~94) y `remaining()` (línea ~48) que
+  convertían `SubscriptionNotFoundException` en `null`.
+- **Decisión**:
+  1. **UsageGuard::reserve()** y **remaining()**: eliminados ambos catch blocks.
+     `SubscriptionNotFoundException` ahora propaga al caller. `null` retorno = plan limit
+     es `null` = unlimited (no necesita reserva).
+  2. **MessageService::createOutbound()**: `reserve()` movido ANTES de la creación del
+     mensaje. UUID pre-generado via `Str::uuid()` para construir la idempotency key.
+     ID asignado via `forceFill(['id' => $messageId])` (descubrimiento: `id` no está en
+     `$fillable` del modelo Message).
+  3. **bootstrap/app.php**: renderer para `SubscriptionNotFoundException` → HTTP 409,
+     code `SUBSCRIPTION_NOT_FOUND`.
+  4. **Worker defense** (ya existente en U2): `SendWhatsAppMessage::sendLocked()` llama
+     `reserve()` después de CAS claim. SubscriptionNotFoundException → exception
+     propagates → `failed()` → libera reserva y falla mensaje permanentemente.
+- **Consecuencias**:
+  - Tenant sin suscripción → `SubscriptionNotFoundException` en el primer chokepoint
+    (createOutbound, start flow). HTTP 409 o job failure terminal.
+  - Tenant con plan unlimited → null retorno (sin cambio). `reserve()` retorna null
+    después del early-return de `limit === null`.
+  - Tenant con plan limitado → quota enforcement sin cambios.
+  - 136 tests fixture regressions resueltos con helper `ensure_test_usage_entitlement()`.
+  - 6 Handoff test failures preexistentes (TypeError `TagNodeExecutor` con EventFake,
+    no relacionado con el hotfix).
