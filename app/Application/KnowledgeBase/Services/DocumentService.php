@@ -6,6 +6,12 @@ namespace App\Application\KnowledgeBase\Services;
 
 use App\Application\Audit\Services\AuditLogger;
 use App\Application\Users\Services\AuthorizationService;
+use App\Domain\Billing\Contracts\CapacityCheckInterface;
+use App\Domain\Billing\Contracts\CapacityGuardInterface;
+use App\Domain\Billing\Enums\UsageCategory;
+use App\Domain\Billing\Exceptions\SubscriptionNotActiveException;
+use App\Domain\Billing\Exceptions\SubscriptionNotFoundException;
+use App\Domain\Billing\Exceptions\TenantQuotaExceededException;
 use App\Domain\KnowledgeBase\Enums\KnowledgeDocumentStatus;
 use App\Domain\KnowledgeBase\Exceptions\DocumentDuplicateException;
 use App\Domain\KnowledgeBase\Exceptions\DocumentNotFoundException;
@@ -21,10 +27,10 @@ use App\Jobs\ProcessKnowledgeDocument;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use PDOException;
+use Throwable;
 
 /**
  * Casos de uso de administración de documentos de Knowledge Base (FASE 17 U2.1+U2.2).
@@ -44,6 +50,7 @@ final class DocumentService
         private readonly AuthorizationService $authorization,
         private readonly AuditLogger $auditLogger,
         private readonly DocumentUploadValidator $validator,
+        private readonly CapacityGuardInterface $capacityGuard,
     ) {}
 
     /**
@@ -89,6 +96,7 @@ final class DocumentService
         $fileHash = $this->calculateHash($file);
 
         $this->assertNotDuplicate($tenant->id, $knowledgeBase->id, $fileHash);
+        $this->capacityGuard->assertCanCreate($tenant, UsageCategory::KnowledgeDocuments);
 
         $documentId = (string) Str::uuid();
         $extension = strtolower($file->getClientOriginalExtension());
@@ -107,7 +115,7 @@ final class DocumentService
             }
 
             $document = $this->createDocumentRow(
-                tenantId: $tenant->id,
+                tenant: $tenant,
                 knowledgeBaseId: $knowledgeBase->id,
                 documentId: $documentId,
                 originalFilename: $file->getClientOriginalName(),
@@ -117,13 +125,19 @@ final class DocumentService
                 fileSize: $file->getSize(),
                 fileHash: $fileHash,
             );
+        } catch (DocumentDuplicateException|SubscriptionNotActiveException|SubscriptionNotFoundException|TenantQuotaExceededException $e) {
+            Storage::disk($disk)->delete($storagePath);
+
+            throw $e;
         } catch (PDOException|QueryException) {
             Storage::disk($disk)->delete($storagePath);
+
+            $this->assertNotDuplicate($tenant->id, $knowledgeBase->id, $fileHash);
 
             throw new DocumentStorageFailedException('Error al persistir el registro.');
         } catch (DocumentStorageFailedException $e) {
             throw $e;
-        } catch (\Exception) {
+        } catch (Throwable) {
             Storage::disk($disk)->delete($storagePath);
 
             throw new DocumentStorageFailedException;
@@ -220,7 +234,7 @@ final class DocumentService
     }
 
     private function createDocumentRow(
-        string $tenantId,
+        Tenant $tenant,
         string $knowledgeBaseId,
         string $documentId,
         string $originalFilename,
@@ -230,33 +244,40 @@ final class DocumentService
         int $fileSize,
         string $fileHash,
     ): KnowledgeDocument {
-        return DB::transaction(function () use (
-            $tenantId,
-            $knowledgeBaseId,
-            $documentId,
-            $originalFilename,
-            $storageDisk,
-            $storagePath,
-            $mimeType,
-            $fileSize,
-            $fileHash,
-        ): KnowledgeDocument {
-            $document = new KnowledgeDocument;
-            $document->id = $documentId;
-            $document->tenant_id = $tenantId;
-            $document->knowledge_base_id = $knowledgeBaseId;
-            $document->original_filename = $originalFilename;
-            $document->storage_disk = $storageDisk;
-            $document->storage_path = $storagePath;
-            $document->mime_type = $mimeType;
-            $document->file_size = $fileSize;
-            $document->file_hash = $fileHash;
-            $document->status = KnowledgeDocumentStatus::Uploaded;
-            $document->chunk_count = 0;
-            $document->save();
+        return $this->capacityGuard->withinLock(
+            $tenant,
+            UsageCategory::KnowledgeDocuments,
+            function (CapacityCheckInterface $capacity) use (
+                $tenant,
+                $knowledgeBaseId,
+                $documentId,
+                $originalFilename,
+                $storageDisk,
+                $storagePath,
+                $mimeType,
+                $fileSize,
+                $fileHash,
+            ): KnowledgeDocument {
+                $this->assertNotDuplicate($tenant->id, $knowledgeBaseId, $fileHash);
+                $capacity->assertCanCreate();
 
-            return $document;
-        });
+                $document = new KnowledgeDocument;
+                $document->id = $documentId;
+                $document->tenant_id = $tenant->id;
+                $document->knowledge_base_id = $knowledgeBaseId;
+                $document->original_filename = $originalFilename;
+                $document->storage_disk = $storageDisk;
+                $document->storage_path = $storagePath;
+                $document->mime_type = $mimeType;
+                $document->file_size = $fileSize;
+                $document->file_hash = $fileHash;
+                $document->status = KnowledgeDocumentStatus::Uploaded;
+                $document->chunk_count = 0;
+                $document->save();
+
+                return $document;
+            },
+        );
     }
 
     private function findKnowledgeBaseForTenant(Tenant $tenant, string $knowledgeBaseId): KnowledgeBase

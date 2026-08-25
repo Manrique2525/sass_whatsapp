@@ -4,13 +4,19 @@ declare(strict_types=1);
 
 use App\Application\Users\Services\InvitationService;
 use App\Application\Users\Services\TenantRoleManager;
+use App\Domain\Billing\Contracts\CapacityGuardInterface;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Enums\UserRole;
 use App\Domain\Users\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Fakes\FakeCapacityGuard;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    app()->instance(CapacityGuardInterface::class, new FakeCapacityGuard);
+});
 
 /*
 |--------------------------------------------------------------------------

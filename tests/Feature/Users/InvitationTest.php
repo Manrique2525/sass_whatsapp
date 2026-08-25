@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Application\Users\Services\InvitationService;
+use App\Domain\Billing\Contracts\CapacityGuardInterface;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Enums\InvitationStatus;
 use App\Domain\Users\Enums\UserRole;
@@ -14,8 +15,13 @@ use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
+use Tests\Fakes\FakeCapacityGuard;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    app()->instance(CapacityGuardInterface::class, new FakeCapacityGuard);
+});
 
 /*
 |--------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 U1+U2+HOTFIX+U3 COMPLETADAS · U4+U5 PENDIENTES**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 U1+U2+HOTFIX+U3+U4 COMPLETADAS · U5 PENDIENTE**.
 
 ## Fases
 
@@ -2561,3 +2561,91 @@ FASE 20 COMPLETADA. FASE 21 U1 COMPLETADA. FASE 21 U2 COMPLETADA. FASE 21 U3 COM
 - SQLite tests: ~1,529 PASS, 6 pre-existing failures
 - PostgreSQL: 142/164 pass (22 pre-existing, 0 U3-caused)
 - AiQuotaPostgresTest: 9/9 PASS on real PG
+
+---
+
+## FASE 25 U4 — Tenant Capacity Limits (COMPLETE)
+
+### Concepto
+
+Capacity enforcement separado del periodic usage ledger. Cada categoría capacity
+cuenta entidades actuales en DB (no `SUM(usage_records)`). PostgreSQL advisory
+locks (`pg_advisory_xact_lock`) garantizan atomicidad bajo concurrencia real.
+
+### Semánticas
+
+| Categoría | Source of truth | Criterio | Soft-delete libera |
+|---|---|---|---|
+| `contacts` | `contacts` WHERE `deleted_at IS NULL` | COUNT por tenant | SÍ |
+| `users` | `tenant_users` WHERE `status = active` | COUNT incluye owner/admin/agent | NO (baja necesaria) |
+| `knowledge_documents` | `knowledge_documents` WHERE `deleted_at IS NULL` | COUNT todos los estados | SÍ |
+
+- **Owner consume asiento**: SÍ.
+- **Invitaciones pendientes consumen**: NO (validación bajo lock al aceptar).
+- **Documentos fallidos consumen**: SÍ.
+- **Entitlements**: Active/PastDue permitidos; Pending/Cancelled/Missing → fail-closed.
+- **`limit = null`**: ilimitado. **`limit = 0`**: bloquea nuevas altas.
+- **Downgrade**: no elimina entidades; bloquea nuevas hasta quedar bajo límite.
+
+### Integraciones
+
+- `ContactService::create()` y `findOrCreateForPhone()`: contacto existente
+  se devuelve sin consumir capacidad.
+- `InvitationService::invite()`: precheck informativo + validación bajo lock.
+- `InvitationService::accept()`: revalida membresías activas bajo lock;
+  protege invitaciones stale tras downgrade.
+- `DocumentService::upload()`: precheck antes de storage → lock → INSERT;
+  elimina storage si pierde carrera.
+- `ProcessIncomingWhatsAppMessage`: quota de contactos/subscription → fallo
+  terminal, marca webhook `failed`, evita retries infinitos.
+
+### Arquitectura
+
+- `CapacityGuardInterface` separado de `UsageGuardInterface`.
+- `CapacityGuard::withinLock()`: abre transacción, `pg_advisory_xact_lock`
+  por `tenant + category` (crc32).
+- `CapacityCheckInterface`: callback recibe `assertCanCreate()` bajo la misma
+  transacción/lock.
+- SQLite tests: semántica, no concurrencia real.
+- PostgreSQL tests: procesos PHP independientes + barrera Redis.
+
+### Archivos creados
+
+- `app/Domain/Billing/Contracts/CapacityCheckInterface.php`
+- `app/Domain/Billing/Contracts/CapacityGuardInterface.php`
+- `app/Application/Billing/Guards/CapacityCheck.php`
+- `app/Application/Billing/Guards/CapacityGuard.php`
+- `tests/Fakes/FakeCapacityGuard.php`
+- `tests/Feature/Billing/CapacityLimitsTest.php` (36 tests SQLite)
+- `tests/Support/PostgresCapacityWorker.php`
+- `tests/Postgres/Billing/CapacityLimitsPostgresTest.php` (6 tests PG)
+
+### Archivos modificados (tests)
+
+- `tests/Feature/Contacts/ContactTest.php` — FakeCapacityGuard
+- `tests/Feature/Users/InvitationTest.php` — FakeCapacityGuard
+- `tests/Feature/Users/MultiTenancyUsersTest.php` — FakeCapacityGuard
+- `tests/Feature/Users/AuthorizationTest.php` — FakeCapacityGuard
+- `tests/Feature/KnowledgeBase/DocumentUploadTest.php` — FakeCapacityGuard
+- `tests/Feature/KnowledgeBase/ProcessKnowledgeDocumentTest.php` — FakeCapacityGuard
+- `tests/Feature/Messages/InboundWebhookTest.php` — FakeCapacityGuard
+- `tests/Feature/WhatsApp/WhatsAppWebhookTest.php` — FakeCapacityGuard
+- `tests/Feature/Faq/FaqHardeningTest.php` — FakeCapacityGuard
+- `tests/Feature/Messages/MessageApiTest.php` — FakeCapacityGuard
+- `tests/Feature/Messages/ReprocessOutboxTest.php` — FakeCapacityGuard
+
+### Tests
+
+- SQLite: 2,123 pass, 14 skipped, 6 pre-existing failures (handoff/EventFake).
+- PostgreSQL: 148 pass, 22 pre-existing failures, 0 U4-caused regressions.
+- CAP-U4-PG: 6/6 PASS (contacts×2, users×1, docs×1, locks×2).
+
+### Quality gates
+
+- PHPStan: 0 errors
+- Pint: PASS
+- SQLite (Unit+Feature): 444 unit + 2,133 feature = 2,577 total (6 pre-existing: HandoffFinalTest/HandoffRuntimeTest/FaqHardeningTest/MessageApiTest)
+- PostgreSQL CAP concurrency: 6/6 PASS (29 assertions)
+- PostgreSQL full suite: 38/38 PASS (Billing+Capacity)
+- composer audit: 0 vulnerabilities
+- npm audit: 0 vulnerabilities

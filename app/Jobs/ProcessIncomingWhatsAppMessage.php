@@ -7,6 +7,10 @@ namespace App\Jobs;
 use App\Application\Faq\Services\FaqReplyService;
 use App\Application\Flows\Services\FlowEngine;
 use App\Application\Messages\Services\MessageService;
+use App\Domain\Billing\Enums\UsageCategory;
+use App\Domain\Billing\Exceptions\SubscriptionNotActiveException;
+use App\Domain\Billing\Exceptions\SubscriptionNotFoundException;
+use App\Domain\Billing\Exceptions\TenantQuotaExceededException;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Messages\Exceptions\UnsupportedMessageTypeException;
 use App\Domain\Tenants\Models\Tenant;
@@ -91,6 +95,18 @@ final class ProcessIncomingWhatsAppMessage implements ShouldQueue
             $result = app(MessageService::class)->handleInboundMessage($tenant, $data);
         } catch (UnsupportedMessageTypeException) {
             $event->markFailed('unsupported_message_type');
+
+            return;
+        } catch (TenantQuotaExceededException $exception) {
+            if ($exception->category !== UsageCategory::Contacts->value) {
+                throw $exception;
+            }
+
+            $event->markFailed('contact_quota_exceeded');
+
+            return;
+        } catch (SubscriptionNotFoundException|SubscriptionNotActiveException) {
+            $event->markFailed('subscription_not_available');
 
             return;
         }

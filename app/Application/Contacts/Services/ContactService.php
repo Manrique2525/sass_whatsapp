@@ -6,6 +6,9 @@ namespace App\Application\Contacts\Services;
 
 use App\Application\Audit\Services\AuditLogger;
 use App\Application\Users\Services\AuthorizationService;
+use App\Domain\Billing\Contracts\CapacityCheckInterface;
+use App\Domain\Billing\Contracts\CapacityGuardInterface;
+use App\Domain\Billing\Enums\UsageCategory;
 use App\Domain\Contacts\Exceptions\ContactDuplicateException;
 use App\Domain\Contacts\Exceptions\ContactNotFoundException;
 use App\Domain\Contacts\Models\Contact;
@@ -35,6 +38,7 @@ final class ContactService
     public function __construct(
         private readonly AuthorizationService $authorization,
         private readonly AuditLogger $auditLogger,
+        private readonly CapacityGuardInterface $capacityGuard,
     ) {}
 
     /**
@@ -97,11 +101,20 @@ final class ContactService
         $phone = self::normalizePhone((string) $validated['phone']);
         $this->assertPhoneUnique($tenant, $phone, null);
 
-        $contact = Contact::query()->create([
-            ...$validated,
-            'phone' => $phone,
-            'name' => (string) $validated['name'],
-        ]);
+        $contact = $this->capacityGuard->withinLock(
+            $tenant,
+            UsageCategory::Contacts,
+            function (CapacityCheckInterface $capacity) use ($tenant, $validated, $phone): Contact {
+                $this->assertPhoneUnique($tenant, $phone, null);
+                $capacity->assertCanCreate();
+
+                return Contact::query()->create([
+                    ...$validated,
+                    'phone' => $phone,
+                    'name' => (string) $validated['name'],
+                ]);
+            },
+        );
 
         $this->auditLogger->record(
             action: 'contact.created',
@@ -185,10 +198,24 @@ final class ContactService
         }
 
         try {
-            $contact = TenantContext::withId($tenant->id, fn (): Contact => Contact::query()->create([
-                'name' => $normalized === '' ? 'Desconocido' : $normalized,
-                'phone' => $normalized,
-            ]));
+            $contact = $this->capacityGuard->withinLock(
+                $tenant,
+                UsageCategory::Contacts,
+                function (CapacityCheckInterface $capacity) use ($tenant, $normalized): Contact {
+                    $existing = $this->findByPhone($tenant, $normalized);
+
+                    if ($existing !== null) {
+                        return $existing;
+                    }
+
+                    $capacity->assertCanCreate();
+
+                    return TenantContext::withId($tenant->id, fn (): Contact => Contact::query()->create([
+                        'name' => $normalized === '' ? 'Desconocido' : $normalized,
+                        'phone' => $normalized,
+                    ]));
+                },
+            );
         } catch (QueryException $e) {
             $existing = $this->findByPhone($tenant, $normalized);
 

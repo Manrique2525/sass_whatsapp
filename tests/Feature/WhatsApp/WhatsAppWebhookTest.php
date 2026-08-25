@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domain\Billing\Contracts\CapacityGuardInterface;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Enums\TenantPermission;
 use App\Domain\Users\Enums\UserRole;
@@ -10,8 +11,13 @@ use App\Jobs\ProcessIncomingWhatsAppMessage;
 use App\Jobs\ProcessWhatsAppStatusUpdate;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
+use Tests\Fakes\FakeCapacityGuard;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    app()->instance(CapacityGuardInterface::class, new FakeCapacityGuard);
+});
 
 /*
 |--------------------------------------------------------------------------

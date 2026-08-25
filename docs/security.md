@@ -664,6 +664,32 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
         billingApi tests: createCheckoutSession, createPortalSession, cancelSubscription.
         billingUtils tests: past_due label/color, all status labels, formatCurrency safety.
         Total U4: 52 frontend tests. Total FASE 24: 46 U3 + 39 U2 + 32 U1 + 52 U4 = 169 tests.
+
+### FASE 25 U4 — Tenant Capacity Limits (chokepoints)
+
+- **Capacity enforcement** en `ContactService::create()`, `InvitationService::invite()`
+  y `accept()`, `DocumentService::upload()`. Cada uno abre transacción con advisory
+  lock → CHECK count vs limit → INSERT bajo la misma transacción. Race conditions
+  eliminadas.
+- **Fail-closed**: Active/PastDue permitidos. Pending/Cancelled/Missing →
+  `SubscriptionNotFoundException` → HTTP 409. Tenant sin suscripción no puede
+  crear contactos/usuarios/documentos.
+- **Limit 0**: bloquea nuevas altas sin eliminar existentes.
+- **Null limit**: ilimitado (sin CHECK de capacidad).
+- **Downgrade**: no elimina entidades existentes; bloquea nuevas hasta quedar
+  bajo el nuevo límite.
+- **Soft-delete**: contactos y documentos liberan capacidad al ser eliminados.
+  Usuarios no (baja manual necesaria).
+- **Owner consume asiento**: SÍ. Invitaciones pendientes: NO.
+- **Documentos fallidos**: SÍ consumen capacidad.
+- **Inbound WhatsApp**: quota de contactos/suscripción → fallo terminal en
+  `ProcessIncomingWhatsAppMessage`, marca webhook `failed`, evita retries
+  infinitos.
+- **Cross-tenant**: cada tenant tiene su propio límite y conteo. Advisory
+  locks son independientes por `(tenant_id, category)`.
+- **Tests**: 36 SQLite (CAP-U4-CONTACT-01..15, USER-01..11, KB-01..10) +
+  6 PostgreSQL concurrency (CAP-U4-PG-CONTACT-01..02, USER-01, KB-01,
+  LOCK-01..02).
 - [x] (FASE 24 U5) Billing Hardening + Closure:
         Full audit of U1–U4. P0: NONE (all critical invariants hold). P1: 5 fixed. P2: 4 fixed.
         P1-01: recordEvent() SQLSTATE-aware duplicate detection (23505 PostgreSQL, 23000 SQLite).

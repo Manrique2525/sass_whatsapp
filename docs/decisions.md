@@ -2932,3 +2932,34 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - 136 tests fixture regressions resueltos con helper `ensure_test_usage_entitlement()`.
   - 6 Handoff test failures preexistentes (TypeError `TagNodeExecutor` con EventFake,
     no relacionado con el hotfix).
+
+## ADR-098 · Tenant Capacity Limits (FASE 25 U4)
+
+- **Estado**: ACEPTADO · FASE 25 U4
+- **Contexto**: El SaaS necesita límites de capacidad por tenant (contactos, usuarios,
+  documentos KB) que se enforcement en tiempo real. El ledger de periodic usage
+  (`usage_records`) no sirve para capacity porque no refleja entidades actuales;
+  un tenant puede tener 50 contactos pero haber enviado solo 10 mensajes/mes.
+- **Decisión**:
+  1. **CapacityGuardInterface** separado de **UsageGuardInterface**. Capacity
+     usa conteo actual de entidades en DB; periodic usage usa el ledger.
+  2. **PostgreSQL advisory locks** (`pg_advisory_xact_lock`) por `(tenant, category)`
+     crc32 para serializar creaciones concurrentes. La misma transacción ejecuta
+     el CHECK + INSERT, evitando race conditions.
+  3. **CapacityCheckInterface** como callback: el guard abre la transacción, el
+     servicio revalida estado/duplicados, llama `assertCanCreate()` y ejecuta
+     el INSERT bajo la misma transacción.
+  4. **Entitlements**: Active/PastDue permitidos; Pending/Cancelled/Missing →
+     fail-closed (`SubscriptionNotFoundException`).
+  5. **`limit = null`**: ilimitado. **`limit = 0`**: bloquea nuevas altas sin
+     eliminar existentes.
+  6. **FakeCapacityGuard**: unlimited fake para tests no-billing (FAQ, messages,
+     handoff, tags). Separado de `FakeUsageGuard`.
+- **Consecuencias**:
+  - Capacity categories no crean `UsageRecord`. `/usage` retorna `used=0` para
+    estas categorías (diseño correcto, no un bug).
+  - Documentos soft-deleted liberan capacidad; usuarios no (baja manual necesaria).
+  - Dueña consume asiento de usuario; invitaciones pendientes no.
+  - Downgrade no elimina entidades; bloquea nuevas hasta quedar bajo límite.
+  - PostgreSQL tests prueban concurrencia real con procesos independientes.
+  - SQLite tests prueban semántica (no concurrencia).

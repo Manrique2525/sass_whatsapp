@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Application\Billing\Guards\CapacityGuard;
 use App\Application\Billing\Guards\UsageGuard;
 use App\Application\Faq\Contracts\FaqMatcherServiceInterface;
 use App\Application\Faq\Services\FaqMatcherService;
@@ -25,6 +26,7 @@ use App\Application\Notifications\Listeners\CreateNotificationFromInboxChange;
 use App\Domain\AI\Contracts\AIProviderInterface;
 use App\Domain\AI\Contracts\EmbeddingProviderInterface;
 use App\Domain\Billing\Contracts\BillingProviderInterface;
+use App\Domain\Billing\Contracts\CapacityGuardInterface;
 use App\Domain\Billing\Contracts\UsageGuardInterface;
 use App\Domain\Contacts\Events\TagAssigned;
 use App\Domain\Tenants\Models\Tenant;
@@ -77,6 +79,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(FaqMatcherServiceInterface::class, FaqMatcherService::class);
 
         $this->app->bind(UsageGuardInterface::class, UsageGuard::class);
+
+        $this->app->bind(CapacityGuardInterface::class, CapacityGuard::class);
 
         $this->app->bind(BillingProviderInterface::class, function (): StripeProvider {
             $secret = (string) config('services.stripe.secret');

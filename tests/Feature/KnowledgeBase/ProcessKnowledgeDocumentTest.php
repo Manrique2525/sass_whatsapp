@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Application\KnowledgeBase\Services\KnowledgeDocumentProcessingService;
+use App\Domain\Billing\Contracts\CapacityGuardInterface;
 use App\Domain\KnowledgeBase\Enums\KnowledgeDocumentStatus;
 use App\Domain\KnowledgeBase\Models\KnowledgeBase;
 use App\Domain\KnowledgeBase\Models\KnowledgeChunk;
@@ -17,8 +18,13 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Tests\Fakes\FakeCapacityGuard;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    app()->instance(CapacityGuardInterface::class, new FakeCapacityGuard);
+});
 
 // =========================================================================
 // HELPERS

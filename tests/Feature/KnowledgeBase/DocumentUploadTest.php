@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domain\Billing\Contracts\CapacityGuardInterface;
 use App\Domain\KnowledgeBase\Models\KnowledgeBase;
 use App\Domain\KnowledgeBase\Models\KnowledgeDocument;
 use App\Domain\Tenants\Models\Tenant;
@@ -14,8 +15,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Tests\Fakes\FakeCapacityGuard;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    app()->instance(CapacityGuardInterface::class, new FakeCapacityGuard);
+});
 
 /*
 |--------------------------------------------------------------------------

@@ -1091,8 +1091,10 @@ Reduced from **13 errors to 0**:
 
 | Gate | Result |
 |---|---|
-| Billing tests (SQLite) | 252/252 PASS |
-| PG billing tests | 18/18 PASS |
+| Unit tests (SQLite) | 444/444 PASS |
+| Feature tests (SQLite) | 2,133/2,139 PASS (6 pre-existing) |
+| CAP SQLite | 36/36 PASS (76 assertions) |
+| CAP PostgreSQL concurrency | 6/6 PASS (29 assertions) |
 | PHPStan (level 6) | 0 errors |
 | Pint | PASS |
 | vue-tsc | PASS |

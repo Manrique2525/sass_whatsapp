@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\Application\Users\Services;
 
 use App\Application\Audit\Services\AuditLogger;
+use App\Domain\Billing\Contracts\CapacityCheckInterface;
+use App\Domain\Billing\Contracts\CapacityGuardInterface;
+use App\Domain\Billing\Enums\UsageCategory;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Enums\InvitationStatus;
 use App\Domain\Users\Enums\TenantMembershipStatus;
@@ -42,6 +45,7 @@ final class InvitationService
         private readonly AuthorizationService $authorization,
         private readonly TenantRoleManager $roleManager,
         private readonly AuditLogger $auditLogger,
+        private readonly CapacityGuardInterface $capacityGuard,
     ) {}
 
     /**
@@ -60,31 +64,28 @@ final class InvitationService
 
         $email = mb_strtolower(trim($email));
 
-        $existingUser = User::query()->where('email', $email)->first();
-
-        if ($existingUser !== null && $existingUser->belongsToTenant($tenant)) {
-            throw new MemberAlreadyExistsException('El usuario ya es miembro del tenant.');
-        }
-
-        if (TenantInvitation::query()
-            ->where('tenant_id', $tenant->id)
-            ->where('email', $email)
-            ->where('status', InvitationStatus::Pending)
-            ->exists()) {
-            throw new InvitationAlreadyPendingException('Ya existe una invitación pendiente para este email.');
-        }
+        $this->assertCanInviteEmail($tenant, $email);
 
         $token = Str::random(64);
 
-        $invitation = TenantInvitation::query()->create([
-            'tenant_id' => $tenant->id,
-            'email' => $email,
-            'role' => $role,
-            'token_hash' => hash('sha256', $token),
-            'invited_by' => $actor->id,
-            'status' => InvitationStatus::Pending,
-            'expires_at' => now()->addDays(self::INVITATION_TTL_DAYS),
-        ]);
+        $invitation = $this->capacityGuard->withinLock(
+            $tenant,
+            UsageCategory::Users,
+            function (CapacityCheckInterface $capacity) use ($tenant, $email, $role, $token, $actor): TenantInvitation {
+                $this->assertCanInviteEmail($tenant, $email);
+                $capacity->assertCanCreate();
+
+                return TenantInvitation::query()->create([
+                    'tenant_id' => $tenant->id,
+                    'email' => $email,
+                    'role' => $role,
+                    'token_hash' => hash('sha256', $token),
+                    'invited_by' => $actor->id,
+                    'status' => InvitationStatus::Pending,
+                    'expires_at' => now()->addDays(self::INVITATION_TTL_DAYS),
+                ]);
+            },
+        );
 
         $this->sendNotification($invitation, $token);
 
@@ -134,49 +135,76 @@ final class InvitationService
             throw new InvitationEmailMismatchException('La invitación no corresponde a tu email.');
         }
 
-        $invitation->forceFill([
-            'status' => InvitationStatus::Accepted,
-            'accepted_at' => now(),
-        ])->save();
-
-        $membership = TenantUser::query()
-            ->where('tenant_id', $invitation->tenant_id)
-            ->where('user_id', $user->id)
-            ->first();
-
-        if ($membership === null) {
-            TenantUser::query()->create([
-                'tenant_id' => $invitation->tenant_id,
-                'user_id' => $user->id,
-                'role' => $invitation->role,
-                'status' => TenantMembershipStatus::Active,
-                'joined_at' => now(),
-            ]);
-        } else {
-            $membership->forceFill([
-                'role' => $invitation->role,
-                'status' => TenantMembershipStatus::Active,
-                'joined_at' => now(),
-            ])->save();
-        }
-
         $tenant = Tenant::query()->findOrFail($invitation->tenant_id);
-        $this->roleManager->syncRoles($user, $tenant, $invitation->role);
 
-        $this->auditLogger->record(
-            action: 'user.invitation_accepted',
-            data: [
-                'tenant_id' => $invitation->tenant_id,
-                'invitation_id' => $invitation->id,
-                'role' => $invitation->role->value,
-            ],
-            subjectType: TenantInvitation::class,
-            subjectId: $invitation->id,
-            actorUserId: $user->id,
-            tenantId: $invitation->tenant_id,
+        return $this->capacityGuard->withinLock(
+            $tenant,
+            UsageCategory::Users,
+            function (CapacityCheckInterface $capacity) use ($invitation, $user, $tenant): TenantInvitation {
+                $lockedInvitation = TenantInvitation::query()
+                    ->whereKey($invitation->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($lockedInvitation === null) {
+                    throw new InvitationNotFoundException('Invitación no encontrada.');
+                }
+
+                $lockedInvitation = $this->assertInvitationUsable($lockedInvitation);
+
+                if (mb_strtolower($user->email) !== mb_strtolower($lockedInvitation->email)) {
+                    throw new InvitationEmailMismatchException('La invitación no corresponde a tu email.');
+                }
+
+                $membership = TenantUser::query()
+                    ->where('tenant_id', $lockedInvitation->tenant_id)
+                    ->where('user_id', $user->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($membership === null || $membership->status !== TenantMembershipStatus::Active) {
+                    $capacity->assertCanCreate();
+                }
+
+                if ($membership === null) {
+                    TenantUser::query()->create([
+                        'tenant_id' => $lockedInvitation->tenant_id,
+                        'user_id' => $user->id,
+                        'role' => $lockedInvitation->role,
+                        'status' => TenantMembershipStatus::Active,
+                        'joined_at' => now(),
+                    ]);
+                } else {
+                    $membership->forceFill([
+                        'role' => $lockedInvitation->role,
+                        'status' => TenantMembershipStatus::Active,
+                        'joined_at' => now(),
+                    ])->save();
+                }
+
+                $lockedInvitation->forceFill([
+                    'status' => InvitationStatus::Accepted,
+                    'accepted_at' => now(),
+                ])->save();
+
+                $this->roleManager->syncRoles($user, $tenant, $lockedInvitation->role);
+
+                $this->auditLogger->record(
+                    action: 'user.invitation_accepted',
+                    data: [
+                        'tenant_id' => $lockedInvitation->tenant_id,
+                        'invitation_id' => $lockedInvitation->id,
+                        'role' => $lockedInvitation->role->value,
+                    ],
+                    subjectType: TenantInvitation::class,
+                    subjectId: $lockedInvitation->id,
+                    actorUserId: $user->id,
+                    tenantId: $lockedInvitation->tenant_id,
+                );
+
+                return $lockedInvitation->fresh();
+            },
         );
-
-        return $invitation->fresh();
     }
 
     public function revoke(User $actor, Tenant $tenant, TenantInvitation $invitation): void
@@ -257,6 +285,35 @@ final class InvitationService
         }
 
         return $invitation;
+    }
+
+    private function assertInvitationUsable(TenantInvitation $invitation): TenantInvitation
+    {
+        return match ($invitation->status) {
+            InvitationStatus::Accepted => throw new InvitationAlreadyAcceptedException('La invitación ya fue aceptada.'),
+            InvitationStatus::Revoked => throw new InvitationRevokedException('La invitación fue revocada.'),
+            InvitationStatus::Expired => throw new InvitationExpiredException('La invitación expiró.'),
+            InvitationStatus::Pending => $invitation->expires_at->isFuture()
+                ? $invitation
+                : throw new InvitationExpiredException('La invitación expiró.'),
+        };
+    }
+
+    private function assertCanInviteEmail(Tenant $tenant, string $email): void
+    {
+        $existingUser = User::query()->where('email', $email)->first();
+
+        if ($existingUser !== null && $existingUser->belongsToTenant($tenant)) {
+            throw new MemberAlreadyExistsException('El usuario ya es miembro del tenant.');
+        }
+
+        if (TenantInvitation::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('email', $email)
+            ->where('status', InvitationStatus::Pending)
+            ->exists()) {
+            throw new InvitationAlreadyPendingException('Ya existe una invitación pendiente para este email.');
+        }
     }
 
     private function assertBelongsToTenant(Tenant $tenant, TenantInvitation $invitation): void

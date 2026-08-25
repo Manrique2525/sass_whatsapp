@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Application\Contacts\Services\ContactService;
 use App\Domain\Audit\Models\AuditLog;
+use App\Domain\Billing\Contracts\CapacityGuardInterface;
 use App\Domain\Contacts\Models\Contact;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Enums\TenantPermission;
@@ -12,8 +13,13 @@ use App\Domain\Users\Models\User;
 use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Tests\Fakes\FakeCapacityGuard;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    app()->instance(CapacityGuardInterface::class, new FakeCapacityGuard);
+});
 
 /*
 |--------------------------------------------------------------------------
