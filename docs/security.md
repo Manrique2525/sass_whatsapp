@@ -376,6 +376,17 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 ### Logs y auditoría
 - `AuditLog` para acciones sensibles (ver `database.md`). Logs sin datos personales
   innecesarios, con `tenant_id`/`user_id`/correlation id.
+- **Sentry error tracking (FASE 28 U2, ADR-105)**: Backend error tracking via
+  `sentry/sentry-laravel`. Privacy-safe por diseño:
+  - `send_default_pii=false`, `max_request_body_size=none` — no captura bodies.
+  - `SentryEventScrubber` (`before_send`): strips Authorization, Cookie, X-Hub-Signature,
+    Stripe-Signature, CSRF headers; query params sensibles (token, code, secret, key);
+    request bodies en paths de webhooks y auth; PII regex (emails → [EMAIL], phones →
+    [PHONE], API keys → [REDACTED]); user data solo id.
+  - `SentryScopeMiddleware`: inyecta `request_id` y `tenant_id` como tags.
+  - `SentryQueueFailureServiceProvider`: captura job exhaustions con contexto.
+  - `ignore_exceptions` para 4xx esperados (Validation, Auth, NotFound, Billing quotas).
+  - Tracing deshabilitado por defecto (opt-in via `SENTRY_TRACES_SAMPLE_RATE`).
 
 ### Motor de flujos (FASE 11, ADR-034..039)
 - **Validación backend-first**: `FlowValidator` valida el grafo ANTES de publicar (un solo

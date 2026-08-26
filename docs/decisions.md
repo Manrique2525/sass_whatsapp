@@ -3174,8 +3174,41 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
 ### FASE 28 — Observabilidad (Plan)
 
 - **U1** (COMPLETADA): Structured Logging + Correlation IDs
-- **U2** (PENDIENTE): Backend Sentry — error/exception/performance tracking
+- **U2** (COMPLETADA): Backend Sentry — privacy-safe error tracking
 - **U3** (PENDIENTE): Frontend Sentry — `@sentry/vue` + error tracking + breadcrumbs
 - **U4** (PENDIENTE): Health Checks + Queue Monitoring — endpoint salud, alertas cola fallida,
   analytics queue mismatch fix
 - **U5** (PENDIENTE): Alerting + Operational Docs + Closure — runbooks, escalation, retention
+
+## ADR-105 · Privacy-Safe Backend Error Tracking with Sentry (FASE 28 U2)
+
+- **Estado**: Aceptado · FASE 28 U2
+- **Contexto**: No existe visibilidad sobre errores en producción. Excepciones no capturadas,
+  fallos en jobs y errores de proveedores se pierden. Sentry ofrece error tracking, alertas y
+  breadcrumbs pero su configuración por defecto captura PII, request bodies y headers sensibles.
+- **Decisión**:
+  1. **Sentry config** (`config/sentry.php`): `send_default_pii=false`, `max_request_body_size=none`
+     (no captura bodies), `sample_rate=1.0` (todos los errores), `traces_sample_rate=null`
+     (tracing opt-in). Breadcrumbs: logs/cache/sql/on, http_client_requests off.
+     `ignore_exceptions` para 4xx esperados (Validation, Auth, NotFound, Billing quotas).
+  2. **SentryEventScrubber** (`before_send` callback): Centraliza todo el sanitizado en un solo
+     punto. Strips: Authorization, Cookie, X-Hub-Signature-256, Stripe-Signature, CSRF headers.
+     Query params sensibles (token, code, secret, key, invite). Request bodies en paths de
+     webhooks (/api/webhooks/*, /api/v1/flows/webhook/*) y auth (/login, /register).
+     PII regex: emails → [EMAIL], phones E.164 → [PHONE], API keys → [REDACTED].
+     User data: solo id. Fail-safe: catch Throwable → nunca rompe reporting.
+  3. **SentryScopeMiddleware**: Inyecta `request_id` (U1) y `tenant_id` (TenantContext) como tags
+     en el scope Sentry para cada request HTTP. Placed after RequestCorrelationId.
+  4. **SentryQueueFailureServiceProvider**: `Queue::failing()` captura job exhaustions con
+     job_class, queue, job_id, request_id (payload U1), tenant_id (payload). El SDK Sentry NO
+     auto-captura queue failures — solo finaliza spans de tracing.
+  5. **Env vars**: `SENTRY_LARAVEL_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`,
+     `SENTRY_SAMPLE_RATE`, `SENTRY_TRACES_SAMPLE_RATE` en `.env.example`.
+- **Consecuencias**:
+  - Sentry es privacy-safe desde el primer día: ningún email, phone, API key o webhook body sale
+    de la aplicación. El scrubber centraliza toda la lógica de sanitizado (no scattered).
+  - Queue failures capturados con contexto (request_id, tenant_id) — antes silenciosos.
+  - Tracing deshabilitado por defecto (opt-in) para evitar overhead innecesario en desarrollo.
+  - `SentryEventScrubber` reutiliza deny-lists similares a `SafeLogContext` (U1) pero para el
+    payload Sentry (no para logs Monolog).
+  - 20 tests nuevos: SCRUB-01..12, QUEUE-01..06, FAIL-01..02.

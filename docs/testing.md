@@ -1428,3 +1428,33 @@ vendor/bin/pest tests/Feature/Security/TokenExpirationRolloutTest.php
 | PII-03 | Stripe sensitive content scrubbed | PASS |
 | PII-04 | Authorization header never emitted raw | PASS |
 | PII-05 | Message body not auto-emitted in provider logs | PASS |
+
+#### Sentry Event Scrubber (`tests/Feature/SentryScrubberTest.php`, 12 tests)
+
+| Test | Description | Status |
+|---|---|---|
+| SCRUB-01 | Strips Authorization header from request | PASS |
+| SCRUB-02 | Strips Cookie header from request | PASS |
+| SCRUB-03 | Strips X-Hub-Signature-256 header | PASS |
+| SCRUB-04 | Strips Stripe-Signature header | PASS |
+| SCRUB-05 | Strips sensitive query parameters | PASS |
+| SCRUB-06 | Strips request body for webhook paths | PASS |
+| SCRUB-07 | Strips request body for /login path | PASS |
+| SCRUB-08 | Preserves request body for non-sensitive paths | PASS |
+| SCRUB-09 | Scrubs email PII from extra data | PASS |
+| SCRUB-10 | Scrubs phone numbers from extra data | PASS |
+| SCRUB-11 | Scrubs OpenAI API keys from extra data | PASS |
+| SCRUB-12 | Strips user data except id | PASS |
+
+#### Sentry Config + Fail-Open (`tests/Feature/SentryConfigTest.php`, 8 tests)
+
+| Test | Description | Status |
+|---|---|---|
+| QUEUE-01 | Config loads with correct defaults | PASS |
+| QUEUE-02 | Tracing disabled by default (opt-in) | PASS |
+| QUEUE-03 | max_request_body_size is none | PASS |
+| QUEUE-04 | before_send callback registered | PASS |
+| QUEUE-05 | ignore_transactions excludes /up | PASS |
+| QUEUE-06 | ignore_exceptions includes business exceptions | PASS |
+| FAIL-01 | Scrubber returns event (fail-open) | PASS |
+| FAIL-02 | Scrubber survives invalid request data | PASS |

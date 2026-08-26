@@ -11,6 +11,7 @@ use App\Domain\WhatsApp\Exceptions\WhatsAppException;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\RequestCorrelationId;
 use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\SentryScopeMiddleware;
 use App\Http\Middleware\TenantMiddleware;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -40,6 +41,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(prepend: [
             EnsureFrontendRequestsAreStateful::class,
             RequestCorrelationId::class,
+            SentryScopeMiddleware::class,
         ]);
 
         $middleware->api(append: [
