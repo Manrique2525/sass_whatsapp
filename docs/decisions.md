@@ -3171,14 +3171,14 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - 34 tests nuevos: LOG-01..20, REQ-01..09, PII-01..05.
   - Total suite: 2,283 passed, 0 failed, 14 skipped.
 
-### FASE 28 — Observabilidad (Plan)
+### FASE 28 — Observabilidad
 
-- **U1** (COMPLETADA): Structured Logging + Correlation IDs
-- **U2** (COMPLETADA): Backend Sentry — privacy-safe error tracking
-- **U3** (COMPLETADA): Frontend Sentry — `@sentry/vue` + error tracking + privacy scrubber
+- **U1** (COMPLETADA): Structured Logging + Correlation IDs — fa93e17
+- **U2** (COMPLETADA): Backend Sentry — privacy-safe error tracking — 53b557d
+- **U3** (COMPLETADA): Frontend Sentry — `@sentry/vue` + error tracking + privacy scrubber — c961316
 - **U4** (COMPLETADA): Health/Readiness + Queue Monitoring — liveness/readiness separation,
-  scheduler heartbeat, analytics queue fix, job failure logging
-- **U5** (PENDIENTE): Alerting + Operational Docs + Closure — runbooks, escalation, retention
+  scheduler heartbeat, analytics queue fix, job failure logging — 859907d
+- **U5** (COMPLETADA): Alerting + Retention + Incident Response + Closure
 
 ## ADR-105 · Privacy-Safe Backend Error Tracking with Sentry (FASE 28 U2)
 
@@ -3290,4 +3290,44 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Analytics jobs ahora se procesan (antes silenciosamente acumulados en Redis).
   - Scheduler silent failure detectable vía heartbeat + Docker healthcheck.
   - Queue depth NO se usa para readiness (es señal de alerta, no health failure).
-  - 27 tests nuevos: HEALTH-01..18, SCHED-01..02, AN-01..02, Q-01..04, CFG-01.
+   - 27 tests nuevos: HEALTH-01..18, SCHED-01..02, AN-01..02, Q-01..04, CFG-01.
+
+## ADR-108 · Alerting, Retention and Incident Response Strategy (FASE 28 U5)
+
+- **Estado**: Aceptado · FASE 28 U5
+- **Contexto**: FASE 28 U1-U4 proporcionaron structured logging, error tracking (backend + frontend),
+  health probes y queue monitoring. Falta: alert matrix documentado, failed login visibility,
+  data retention (audit_logs y failed_jobs crecen indefinidamente), incident response docs,
+  runbooks para escenarios de falla comunes, y cierre de FASE 28.
+- **Decisión**:
+  1. **Failed login audit**: Ambos controllers (web `AuthenticatedSessionController` y API
+     `AuthController`) registran `user.login_failed` en `audit_logs` cuando las credenciales son
+     inválidas. Solo se almacena `reason: invalid_credentials`, IP, user_agent y request_id
+     (inyectado automáticamente por AuditLogger). NO se almacena email, password ni hash.
+     Respuesta idéntica para usuario existente/inexistente — previene enumeración.
+  2. **Data retention**:
+     - `audit:prune` — prune records older than configurable days (default 90). Batched deletes
+       (500 rows/iteration) para evitar table locks. Soporta `--dry-run` y `--days=N`.
+     - `queue:prune-failed` — prune failed_jobs older than configurable days (default 30).
+       Mismo patrón batched + dry-run.
+     - Ambos comandos programados diariamente a las 03:00 via `withoutOverlapping()`.
+     - Config: `config/observability.php` con `audit_log_retention_days` y
+       `failed_jobs_retention_days` (env-driven).
+  3. **Webhook events y flow logs**: NO se prueban. `webhook_events` requiere idempotencia/replay
+     safety. `flow_execution_logs` requiere historia/analytics. Documentado como deferred.
+  4. **Alert matrix documentada**: `docs/incident-response.md` define modelo de severidad (P0-P3),
+     fuentes de detección, runbooks para DB down, Redis down, queue burst, Stripe sync, WhatsApp
+     webhook, provider outage, security spike. Template de postmortem incluido.
+  5. **Sentry alert rules**: Documentadas como recomendación operacional. Configuración de
+     alertas (email/Slack/PagerDuty) requiere credenciales/autorización del operador — no se
+     configuran automáticamente.
+  6. **Observability doc final**: `docs/observability.md` documenta arquitectura completa,
+     configuración, privacy commitments y deferred items.
+- **Consecuencias**:
+  - Failed login visible en audit_logs para detección de fuerza bruta / credential stuffing.
+  - Sin enumeración de usuarios: misma respuesta y mismo audit record para cualquier email.
+  - audit_logs y failed_jobs ya no crecen indefinidamente — 90 y 30 días respectivamente.
+  - Webhook events y flow execution logs quedan sin retención (documentado, justificado).
+  - Runbooks proporcionan guía de containment sin ejecutar comandos destructivos.
+  - 12 tests nuevos: AUTH-01..06 (failed login audit), RET-01..06 (retention commands).
+  - Total suite: 177 passed (BE), 544 passed (FE), 0 failures.

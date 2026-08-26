@@ -60,6 +60,11 @@ final class AuthController extends Controller
         );
 
         if ($user === null) {
+            $this->auditLogger->record(
+                action: 'user.login_failed',
+                data: ['reason' => 'invalid_credentials'],
+            );
+
             throw ValidationException::withMessages([
                 'email' => 'Las credenciales no coinciden con nuestros registros.',
             ]);

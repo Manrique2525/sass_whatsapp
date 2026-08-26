@@ -1515,3 +1515,25 @@ vendor/bin/pest tests/Feature/Security/TokenExpirationRolloutTest.php
 | F28-U4-Q-03 | Queue config has default and analytics queues | PASS |
 | F28-U4-Q-04 | failed_jobs config uses database-uuids driver | PASS |
 | F28-U4-CFG-01 | observability config is loadable | PASS |
+
+#### Failed Login Audit (`tests/Feature/Security/FailedLoginAuditTest.php`, 6 tests)
+
+| Test | Description | Status |
+|---|---|---|
+| F28-U5-AUTH-01 | Failed API login emits audit event | PASS |
+| F28-U5-AUTH-02 | Failed login does not store email in audit | PASS |
+| F28-U5-AUTH-03 | Failed login does not distinguish user exists | PASS |
+| F28-U5-AUTH-04 | Failed login includes request_id | PASS |
+| F28-U5-AUTH-05 | Successful login does not emit failed event | PASS |
+| F28-U5-AUTH-06 | Failed login does not store password hash | PASS |
+
+#### Retention Commands (`tests/Feature/Security/RetentionCommandTest.php`, 6 tests)
+
+| Test | Description | Status |
+|---|---|---|
+| F28-U5-RET-01 | Audit prune removes old records | PASS |
+| F28-U5-RET-02 | Audit prune dry run does not delete | PASS |
+| F28-U5-RET-03 | Audit prune preserves recent records | PASS |
+| F28-U5-RET-04 | Audit prune respects cutoff boundary | PASS |
+| F28-U5-RET-05 | Failed jobs prune removes old records | PASS |
+| F28-U5-RET-06 | Failed jobs prune dry run does not delete | PASS |

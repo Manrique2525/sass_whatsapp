@@ -2,30 +2,33 @@
 
 declare(strict_types=1);
 
-test('el endpoint /health responde 200 con status ok', function () {
+test('el endpoint /health responde 200 con status ok (liveness only)', function () {
     $response = $this->get('/health');
 
     $response->assertOk()
         ->assertExactJson([
             'status' => 'ok',
-            'components' => [
+            'checks' => [
                 'app' => 'ok',
-                'database' => 'ok',
-                'redis' => 'ok',
-                'queue' => 'ok',
             ],
+            'mode' => 'liveness',
         ]);
 });
 
-test('el endpoint /health expone los componentes de infraestructura', function () {
+test('el endpoint /health solo verifica app (no database redis queue)', function () {
     $this->get('/health')
         ->assertJsonStructure([
             'status',
-            'components' => [
+            'checks' => [
                 'app',
-                'database',
-                'redis',
-                'queue',
+            ],
+            'mode',
+        ])
+        ->assertJsonMissing([
+            'checks' => [
+                'database' => 'ok',
+                'redis' => 'ok',
+                'queue' => 'ok',
             ],
         ]);
 });

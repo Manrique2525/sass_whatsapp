@@ -2904,9 +2904,16 @@ COMPLETADA — pendiente commit. NO PUSH.
 - ADR-107 written.
 - 27 tests: HEALTH-01..18, SCHED-01..02, AN-01..02, Q-01..04, CFG-01.
 
-### U5 — Alerting + Operational Docs + Closure · PENDIENTE
+### U5 — Alerting + Retention + Incident Response + Closure · COMPLETADA
 
-- Sentry alert rules (Slack/email).
-- Runbooks for common failure scenarios.
-- Retention policies.
-- Final closure and documentation.
+- Failed login audit: `user.login_failed` in audit_logs (web + API), safe metadata only.
+- Retention: `audit:prune` (90 days default) + `queue:prune-failed` (30 days default).
+- config/observability.php: audit_log_retention_days, failed_jobs_retention_days (env-driven).
+- Scheduler: daily prune at 03:00 withoutOverlapping.
+- Alert matrix documented in incident-response.md (P0-P3 severity model).
+- Runbooks: DB down, Redis down, queue burst, Stripe sync, WhatsApp, provider outage, security.
+- Postmortem template included.
+- docs/observability.md: full architecture doc.
+- docs/incident-response.md: severity model + runbooks + postmortem.
+- ADR-108 written.
+- 12 tests: AUTH-01..06 (failed login audit), RET-01..06 (retention commands).

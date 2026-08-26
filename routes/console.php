@@ -25,3 +25,11 @@ Schedule::command('analytics:aggregate-daily')
 Schedule::command('scheduler:heartbeat')
     ->everyMinute()
     ->withoutOverlapping();
+
+Schedule::command('audit:prune')
+    ->dailyAt('03:00')
+    ->withoutOverlapping();
+
+Schedule::command('queue:prune-failed')
+    ->dailyAt('03:00')
+    ->withoutOverlapping();

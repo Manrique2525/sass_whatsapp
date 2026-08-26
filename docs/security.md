@@ -880,3 +880,30 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - **Docker**: `schedule` service recibe healthcheck + `condition: service_healthy`.
 - **Response safety**: Sin exception details, sin stack traces, sin host/password/credentials.
 - **X-Request-ID**: presente en ambos endpoints (liveness y readiness).
+
+### Failed Login Audit (FASE 28 U5, ADR-108)
+
+- **Scope**: Ambos controllers de login (web `AuthenticatedSessionController::store()` y API
+  `AuthController::login()`) registran `user.login_failed` en `audit_logs` cuando las credenciales
+  son inválidas.
+- **Safe metadata**: Solo se almacena `reason: invalid_credentials`, `ip_address`, `user_agent`
+  y `request_id` (inyectado automáticamente por AuditLogger).
+- **NO se almacena**: email, password, hash, credential data, request body.
+- **User enumeration prevention**: Respuesta idéntica y mismo audit record para usuario
+  existente/inexistente — el `reason` field es siempre `invalid_credentials`.
+- **Successful login unchanged**: El audit event `user.login` con email se mantiene sin cambios.
+
+### Data Retention (FASE 28 U5)
+
+- **Audit logs**: `php artisan audit:prune --days=90` (default). Batched deletes (500 rows/iteration).
+  Soporta `--dry-run` y `--days=N`. Programado diariamente a las 03:00.
+- **Failed jobs**: `php artisan queue:prune-failed --days=30` (default). Mismo patrón batched.
+  Programado diariamente a las 03:00.
+- **Config**: `config/observability.php` con `audit_log_retention_days` y
+  `failed_jobs_retention_days` (env-driven).
+- **NOT pruned** (justificado):
+  - `webhook_events` — idempotency/replay safety.
+  - `flow_execution_logs` — analytics/history.
+  - Log files — rotation belongs to container (stdout/stderr).
+- **Index**: `audit_logs` tiene `audit_logs_tenant_created_index` en `(tenant_id, created_at)` —
+  retention query usa `created_at` y es eficiente.

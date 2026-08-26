@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Auth;
 
+use App\Application\Audit\Services\AuditLogger;
 use App\Application\Users\Services\AuthenticateUser;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
@@ -21,14 +22,22 @@ final class AuthenticatedSessionController extends Controller
         return Inertia::render('Auth/Login');
     }
 
-    public function store(LoginRequest $request, AuthenticateUser $authenticateUser): RedirectResponse
-    {
+    public function store(
+        LoginRequest $request,
+        AuthenticateUser $authenticateUser,
+        AuditLogger $auditLogger,
+    ): RedirectResponse {
         $user = $authenticateUser->authenticate(
             $request->validated('email'),
             $request->validated('password'),
         );
 
         if ($user === null) {
+            $auditLogger->record(
+                action: 'user.login_failed',
+                data: ['reason' => 'invalid_credentials'],
+            );
+
             throw ValidationException::withMessages([
                 'email' => 'Las credenciales no coinciden con nuestros registros.',
             ]);
