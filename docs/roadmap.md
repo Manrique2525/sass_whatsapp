@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 U1+U2 COMPLETADA**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA**.
 
 ## Fases
 
@@ -33,7 +33,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA
 | 24 | Billing (U1: Provider Infrastructure + Mappings, U2: Checkout, U3: Webhooks, U4: Frontend Provider UX, U5: Hardening + Closure) | COMPLETADA |
 | 25 | Usage limits (U1: UsageGuard + Atomic Quota Reservation, U2: Message + Flow Quota Enforcement, U2-HOTFIX: fail-closed missing entitlement, U3: AI Token Enforcement, U4: Capacity Limits, U5: Hardening + Closure) | COMPLETADA |
 | 26 | Auditoría + Seguridad (U1: Deployment Gate + Rate Limiting, U2: Billing atomicity + UsageGuard hardening, U3: Job timeout + error handling, U4: LIKE escaping + provider error sanitization + global exception renderers) | COMPLETADA |
-| 27 | Seguridad (refuerzo OWASP) — U1: Security Headers + CORS + Session Hardening · U2: Sanctum Token Expiry + TrustProxies + Structured Error Responses | EN PROGRESO |
+| 27 | Seguridad (refuerzo OWASP) — U1: Security Headers + CORS + Session Hardening · U2: Sanctum Token Expiry + TrustProxies + Structured Error Responses · U3: Token Rollout Verification + Documentation Closure | COMPLETADA |
 | 28 | Observabilidad (Sentry, logging) | PENDIENTE |
 | 29 | Testing global + cobertura | PENDIENTE |
 | 30 | E2E (Playwright) | PENDIENTE |

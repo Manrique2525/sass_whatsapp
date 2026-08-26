@@ -1267,7 +1267,7 @@ Reduced from **13 errors to 0**:
 | ReprocessOutboxTest | P1 | FakeCapacityGuard binding (U4 regression) |
 | isPostgres() | P1 | config → DB::connection()->getDriverName() in UsageGuard |
 
-### FASE 27 U1 — Security Headers + CORS + Session (26 tests)
+### FASE 27 U1+U2+U3 — Security Hardening (88 tests)
 
 #### Security Headers (`tests/Feature/Security/SecurityHeadersTest.php`, 13 tests)
 
@@ -1318,6 +1318,7 @@ vendor/bin/pest tests/Feature/Security/SessionConfigTest.php
 vendor/bin/pest tests/Feature/Security/TokenExpirationTest.php
 vendor/bin/pest tests/Feature/Security/TrustProxiesTest.php
 vendor/bin/pest tests/Feature/Security/StructuredErrorTest.php
+vendor/bin/pest tests/Feature/Security/TokenExpirationRolloutTest.php
 ```
 
 #### Token Expiration (`tests/Feature/Security/TokenExpirationTest.php`, 10 tests)
@@ -1362,3 +1363,14 @@ vendor/bin/pest tests/Feature/Security/StructuredErrorTest.php
 | ERR-08 | APP_DEBUG true does not leak internals | PASS |
 | ERR-09 | 404 uses structured format not HTML | PASS |
 | ERR-10 | Web requests return HTML not forced JSON | PASS |
+
+#### Token Rollout Verification (`tests/Feature/Security/TokenExpirationRolloutTest.php`, 6 tests)
+
+| Test | Description | Status |
+|---|---|---|
+| ROLL-01 | Old token (>24h) with null expires_at is INVALID under global expiration | PASS |
+| ROLL-02 | Recent token (<24h) with null expires_at is valid | PASS |
+| ROLL-03 | Token with past expires_at is invalid regardless of global expiration | PASS |
+| ROLL-04 | Null expiration disables created_at check entirely | PASS |
+| ROLL-05 | Old token with future expires_at fails global age check (ANDed) | PASS |
+| ROLL-06 | Login token metadata matches actual validation | PASS |

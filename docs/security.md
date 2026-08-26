@@ -762,36 +762,44 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - Desarrollo local mantiene `SESSION_ENCRYPT=false` para compatibilidad.
 - `SESSION_SECURE_COOKIE` no se setea en `.env` local (HTTP) — production deployment lo configura.
 
-### Pendiente (FASE 27 U3)
-
-- Documentación final + cierre de FASE 27.
-
-### Sanctum Token Expiration (FASE 27 U2)
+### Sanctum Token Expiration (FASE 27 U2+U3)
 
 - **Config**: `config/sanctum.php` — `'expiration' => (int) env('SANCTUM_TOKEN_EXPIRATION', 1440)`.
 - **Default**: 1440 minutos (24 horas). Configurable vía `SANCTUM_TOKEN_EXPIRATION` en `.env`.
-- **Behavior**: Sanctum valida `expires_at` a nivel de request; tokens sin `expires_at` en la DB
-  se consideran válidos indefinidamente. El valor global se aplica a tokens **nuevos** (creados
-  después de activar la config); tokens existentes sin `expires_at` continúan válidos hasta que
-  se les asigne un valor o se eliminen.
+- **Validación (verificada U3 contra Sanctum 4.3.3, `Guard.php:127-130`)**: Ambas condiciones
+  son ANDed — `created_at` age check Y `expires_at` per-token check deben pasar:
+  - `(! $this->expiration || $accessToken->created_at->gt(now()->subMinutes($this->expiration)))`
+  - `(! $accessToken->expires_at || ! $accessToken->expires_at->isPast())`
+- **Mass invalidation REAL**: desplegar `expiration=1440` invalida **todos** los tokens con
+  `created_at` >24h, independientemente de `expires_at`. Un token legacy con `expires_at=NULL`
+  y `created_at` hace 25h → 401. Esto NO es "aplicable solo a tokens nuevos".
+- **Rollout seguro**: establecer `SANCTUM_TOKEN_EXPIRATION=null` en producción para mantener
+  compatibilidad, y cambiar a `1440` cuando todos los clientes estén listos para re-login.
+  `null` desactiva completamente la validación de `created_at` (tokens nunca expiran por edad).
 - **Logout**: `currentAccessToken()->delete()` — revoca solo el token actual. Sin cambios.
 - **Response schema**: Login y Register ahora retornan `token_type`, `expires_at` (ISO 8601 o null),
   e `expires_in` (segundos restantes o null). El campo `token` se mantiene para compatibilidad.
-- **Backward compatible**: Frontend actual ignora `expires_at`/`expires_in`; si existía, recibe 401
-  y debe re-autenticarse. No se requiere cambio frontend si el usuario cierra sesión manualmente.
+- **Metadata accuracy**: Los valores `expires_at`/`expires_in` en la respuesta corresponden a la
+  semántica de validación real (24h desde creación). Si el cliente recibe `expires_in: 86400`,
+  el servidor también lo rechazará después de 86400 segundos.
+- **Tests**: TOK-01..10 (U2) + ROLL-01..06 (U3) validan todos los escenarios.
 
 ### TrustProxies (FASE 27 U2)
 
 - **Config**: `config/trustedproxy.php` — env-driven (`TRUSTED_PROXIES`).
 - **Default**: `null` (no confía en ningún proxy). `X-Forwarded-*` headers ignorados.
-- **Production**: `TRUSTED_PROXIES=10.0.0.1,172.16.0.0/12` (CIDR soportado).
+- **Production**: `TRUSTED_PROXIES=10.0.0.1,172.16.0.0/12` (CIDR soportado). **Preferir lista
+  explícita de IPs/CIDR** sobre `'*'`. Si se usa `'*'` (trust all), la aplicación DEBE estar
+  aislada de red — acceso directo al contenedor/servidor debe ser imposible.
 - **Headers**: `HEADER_X_FORWARDED_FOR | HEADER_X_FORWARDED_HOST | HEADER_X_FORWARDED_PORT |
   HEADER_X_FORWARDED_PROTO | HEADER_X_FORWARDED_PREFIX` — configurables.
-- **Sin wildcard**: No se usa `'*'` por defecto. Documentado que solo detrás de un LB conocido.
 - **HSTS interaction**: Con proxy confiable + forwarded-proto=https → `$request->secure() === true`
   → HSTS se aplica correctamente en producción.
 - **Rate limit safety**: X-Forwarded-For spoofing no afecta rate limit key cuando proxy no es
   confiable (el middleware retorna IP directa del REMOTE_ADDR).
+- **Spoof protection (verificada U2)**: PROXY-01 confirma que X-Forwarded-For de un proxy no
+  confiable es ignorado. PROXY-04 confirma que forwarded-proto=https de proxy no confiable es
+  ignorado. PROXY-06 confirma que rate limit no se ve afectado.
 
 ### Structured API Error Responses (FASE 27 U2)
 

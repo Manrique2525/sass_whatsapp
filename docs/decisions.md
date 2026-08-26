@@ -3105,10 +3105,10 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
 
 ## ADR-103 · Token Expiration + Trusted Proxy + API Error Policy
 
-- **Estado**: ACEPTADO · FASE 27 U2
+- **Estado**: ACEPTADO · FASE 27 U2+U3
 - **Contexto**: FASE 27 U1 añadió headers de seguridad, CORS y session hardening. Pendientes:
   1) Sanctum tokens sin expiración — tokens comprometidos se usan indefinidamente.
-  2) Sin TrustProxies — detrás de un LB, `secure()` y `ip()` retornan valores incorrectos.
+  2) Sin TrustProxies — detrás de un LB, `secure()` e `ip()` retornan valores incorrectos.
   3) Excepciones no controladas (403, 404, 419, 500) sin formato estructurado para la API.
 - **Opciones**:
   - A) Global expiry + config TRUSTED_PROXIES + exception renderers para 403/404/419/500.
@@ -3116,20 +3116,26 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - C) No hacer nada (tokens infinitos, proxies no confiables, errores inconsistentes).
 - **Decisión**: A.
   1. **Token expiry**: `SANCTUM_TOKEN_EXPIRATION` env-driven, default 1440 (24h). Config en
-     `config/sanctum.php`. Login/ Register retornan `expires_at`/`expires_in` sin romper contract.
-     Tokens existentes sin `expires_at` en DB siguen válidos (compatibilidad).
+     `config/sanctum.php`. Login/Register retornan `expires_at`/`expires_in` sin romper contract.
+     **Verificado en U3 contra Sanctum 4.3.3 (`Guard.php:127-130`)**: la expiración global
+     valida `created_at` AND `expires_at` (ambas condiciones son ANDed). Un token con
+     `expires_at=NULL` creado hace >24h es **rechazado** cuando `expiration=1440`. No existe
+     bypass para tokens legacy. Rollout seguro: establecer `SANCTUM_TOKEN_EXPIRATION=null` en
+     producción y cambiar a `1440` cuando todos los clientes estén listos para re-login. Tests
+     ROLL-01..06 validan todos los escenarios (mass invalidation, backward compat, metadata).
   2. **TrustProxies**: `config/trustedproxy.php` con env `TRUSTED_PROXIES` (null por defecto).
      TrustProxies middleware ya está en global stack de Laravel 12; lee config a nivel de request.
-     No se usa `'*'` por defecto; documentado para uso detrás de LB conocido.
+     No se usa `'*'` por defecto; documentado para uso detrás de LB conocido con acceso de red
+     aislado. Prefijos IP/CIDR explícitos preferidos sobre `'*'`.
   3. **Structured errors**: Exception renderers en `bootstrap/app.php` para `NotFoundHttpException`,
      `HttpException` (403/419), `TooManyRequestsHttpException` (429) y `\Throwable` catch-all (500).
      Solo aplican a `$request->is('api/*')`. Reporting intacto. APP_DEBUG no afecta contract.
 - **Consecuencias**:
-  - Tokens se invalidan después de 24h por defecto; clientes móviles/integraciones necesitan
-    refresh flow o re-login. Configurable a null para rollout gradual.
+  - **Mass invalidation real**: desplegar `expiration=1440` invalida todos los tokens con
+    `created_at` >24h. Configurable a `null` para rollout gradual. Documentado en `.env.example`.
   - Detrás de LB, `$request->ip()` y `$request->secure()` retornan valores correctos cuando se
     configura `TRUSTED_PROXIES`. Sin config, headers se ignoran (fail-safe).
   - API tiene formato de error consistente para todos los HTTP codes comunes. Frontend puede
     manejar `code` field de forma unificada.
-  - 28 tests nuevos: TOK-01..10, PROXY-01..08, ERR-01..10.
-  - Total suite: 2,243 passed, 0 failed, 14 skipped, 6,656 assertions.
+  - 34 tests nuevos (U2+U3): TOK-01..10, PROXY-01..08, ERR-01..10, ROLL-01..06.
+  - Total suite: 2,249 passed, 0 failed, 14 skipped, 6,667 assertions.
