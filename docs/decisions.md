@@ -3176,8 +3176,8 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
 - **U1** (COMPLETADA): Structured Logging + Correlation IDs
 - **U2** (COMPLETADA): Backend Sentry — privacy-safe error tracking
 - **U3** (COMPLETADA): Frontend Sentry — `@sentry/vue` + error tracking + privacy scrubber
-- **U4** (PENDIENTE): Health Checks + Queue Monitoring — endpoint salud, alertas cola fallida,
-  analytics queue mismatch fix
+- **U4** (COMPLETADA): Health/Readiness + Queue Monitoring — liveness/readiness separation,
+  scheduler heartbeat, analytics queue fix, job failure logging
 - **U5** (PENDIENTE): Alerting + Operational Docs + Closure — runbooks, escalation, retention
 
 ## ADR-105 · Privacy-Safe Backend Error Tracking with Sentry (FASE 28 U2)
@@ -3261,3 +3261,33 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - No se agregan dependencias de tracing/replay → bundle size no aumenta significativamente.
     Package tree-shaken eficientemente (777 → 1120 modules; bundle sizes idénticas).
   - 12 tests frontend (scrubber PII) + 3 tests backend (CSP Sentry domain) = 15 tests nuevos.
+
+## ADR-107 · Health/Readiness Probes + Queue Monitoring Strategy (FASE 28 U4)
+
+- **Estado**: Aceptado · FASE 28 U4
+- **Contexto**: El endpoint `/health` único verificaba app + DB + Redis + queue en un solo
+  request. No existía distinción entre liveness y readiness. El worker no consumía la cola
+  `analytics` (dispatched pero ignorada). El scheduler no tenía healthcheck Docker ni heartbeat
+  verificable. `AggregateDailyAnalyticsJob` fallaba silenciosamente sin logging.
+- **Decisión**:
+  1. **Liveness vs Readiness**: `GET /health` = liveness (solo `app` check, barato, sin
+     dependencias). `GET /ready` = readiness (`database`, `redis`, `queue`, 503 si caído).
+     `/health` preservado para backward compat (Docker, deployment).
+  2. **HealthChecker refactor**: `checkLiveness()` / `checkReadiness()` / `checkAll()`.
+     `checkApp()` verifica `config('app.name')` accesible (no hardcoded true). `allOk()`
+     genérico (no asume keys específicas).
+  3. **Scheduler heartbeat**: `SchedulerHeartbeatCommand` escribe timestamp a cache cada minuto.
+     HealthChecker verifica freshness (configurable, default 120s). NO bloquea readiness.
+  4. **Analytics queue fix**: Worker consume `--queue=default,analytics,knowledge`. Corrige
+     bug funcional donde analytics jobs nunca se procesaban.
+  5. **Job failure logging**: `AggregateDailyAnalyticsJob::failed()` emite structured log
+     `analytics.aggregation.permanent_failure` con tenant_id, date, job_class. Sin PII.
+  6. **Docker**: `schedule` recibe healthcheck (`healthcheck.php`) + depende de `app` con
+     `condition: service_healthy`.
+  7. **config/observability.php**: `scheduler_heartbeat_max_age_seconds` (env-driven, default 120).
+- **Consecuencias**:
+  - Providers externos (Meta, OpenAI, Stripe) excluidos de readiness — su caída no causa restart.
+  - Analytics jobs ahora se procesan (antes silenciosamente acumulados en Redis).
+  - Scheduler silent failure detectable vía heartbeat + Docker healthcheck.
+  - Queue depth NO se usa para readiness (es señal de alerta, no health failure).
+  - 27 tests nuevos: HEALTH-01..18, SCHED-01..02, AN-01..02, Q-01..04, CFG-01.

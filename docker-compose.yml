@@ -68,7 +68,7 @@ services:
     pull_policy: build
     restart: unless-stopped
     working_dir: /var/www/html
-    command: ["php", "artisan", "queue:work", "--sleep=1", "--tries=3", "--max-time=3600"]
+    command: ["php", "artisan", "queue:work", "--queue=default,analytics,knowledge", "--sleep=1", "--tries=3", "--max-time=3600"]
     volumes:
       - .:/var/www/html
     environment: *app-env
@@ -94,7 +94,14 @@ services:
       - .:/var/www/html
     environment: *app-env
     depends_on:
-      - app
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "php", "healthcheck.php"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks:
       - saas
 

@@ -12,19 +12,50 @@ use Throwable;
 /**
  * Checker de salud de la infraestructura base.
  *
- * Verifica de forma honesta (sin excepciones tragadas ni respuestas falsas) que
- * la aplicación puede: arrancar, hablar con la base de datos configurada, usar
- * el driver de cache configurado y resolver la conexión de cola configurada.
+ * Liveness: ¿el proceso Laravel está vivo? (sin dependencias externas)
+ * Readiness: ¿puede aceptar trabajo crítico? (DB, Redis, queue backend)
+ *
+ * Providers externos (Meta, OpenAI, Stripe) NO se verifican en readiness —
+ * su caída no impide que la app procese trabajo local.
  */
 final class HealthChecker
 {
+    private const SCHEDULER_HEARTBEAT_KEY = 'observability:scheduler:last_heartbeat';
+
     /**
-     * @return array<string, string> statuses: app, database, redis, queue
+     * @return array<string, string>
      */
     public function checkAll(): array
     {
+        return array_merge(
+            $this->checkLiveness(),
+            $this->checkReadiness(),
+        );
+    }
+
+    /**
+     * Liveness: solo verifica que el proceso PHP/Laravel está vivo.
+     * Barato, rápido, sin dependencias externas.
+     *
+     * @return array{app: string}
+     */
+    public function checkLiveness(): array
+    {
         return [
             'app' => $this->checkApp() ? 'ok' : 'fail',
+        ];
+    }
+
+    /**
+     * Readiness: verifica dependencias críticas locales.
+     * DB down = 503, Redis down = 503 (si es queue backend).
+     * Providers externos NUNCA bloquean readiness.
+     *
+     * @return array<string, string>
+     */
+    public function checkReadiness(): array
+    {
+        return [
             'database' => $this->checkDatabase() ? 'ok' : 'fail',
             'redis' => $this->checkRedis() ? 'ok' : 'fail',
             'queue' => $this->checkQueue() ? 'ok' : 'fail',
@@ -33,7 +64,11 @@ final class HealthChecker
 
     public function checkApp(): bool
     {
-        return true;
+        try {
+            return config('app.name') !== null;
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     public function checkDatabase(): bool
@@ -63,13 +98,13 @@ final class HealthChecker
     {
         try {
             $driver = config('queue.default');
-            $connection = app('queue')->connection();
 
             if ($driver === 'sync') {
                 return true;
             }
 
             if ($driver === 'redis') {
+                $connection = app('queue')->connection();
                 $connection->getRedis()->ping();
             }
 
@@ -80,13 +115,46 @@ final class HealthChecker
     }
 
     /**
+     * Optional: check scheduler heartbeat freshness.
+     * Returns null if no heartbeat recorded yet (startup grace).
+     * Returns true if heartbeat is fresh, false if stale.
+     */
+    public function checkSchedulerHeartbeat(): ?bool
+    {
+        try {
+            $last = Cache::store()->get(self::SCHEDULER_HEARTBEAT_KEY);
+
+            if ($last === null) {
+                return null;
+            }
+
+            $maxAge = (int) config('observability.scheduler_heartbeat_max_age_seconds', 120);
+
+            return (time() - (int) $last) < $maxAge;
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /**
      * @param  array<string, string>  $statuses
      */
     public function allOk(array $statuses): bool
     {
-        return $statuses['app'] === 'ok'
-            && $statuses['database'] === 'ok'
-            && $statuses['redis'] === 'ok'
-            && $statuses['queue'] === 'ok';
+        foreach ($statuses as $status) {
+            if ($status !== 'ok') {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  array<string, string>  $statuses
+     */
+    public function anyFail(array $statuses): bool
+    {
+        return ! $this->allOk($statuses);
     }
 }

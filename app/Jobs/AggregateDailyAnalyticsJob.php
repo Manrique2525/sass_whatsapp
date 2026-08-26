@@ -15,6 +15,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -96,6 +97,12 @@ final class AggregateDailyAnalyticsJob implements ShouldBeUnique, ShouldQueue
 
     public function failed(?Throwable $exception): void
     {
-        // No PII logged. Silent fail — job will retry up to `tries()` before reaching here.
+        Log::warning('analytics.aggregation.permanent_failure', [
+            'tenant_id' => $this->tenantId,
+            'date' => $this->date,
+            'job_class' => self::class,
+            'error_class' => $exception !== null ? $exception::class : null,
+            'error_message' => $exception?->getMessage(),
+        ]);
     }
 }

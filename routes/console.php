@@ -21,3 +21,7 @@ Schedule::command('flow:fire-schedule-triggers')
 Schedule::command('analytics:aggregate-daily')
     ->dailyAt('02:00')
     ->withoutOverlapping();
+
+Schedule::command('scheduler:heartbeat')
+    ->everyMinute()
+    ->withoutOverlapping();

@@ -28,6 +28,7 @@ use Illuminate\Support\Facades\Route;
 Route::redirect('/', '/login');
 
 Route::get('/health', HealthController::class);
+Route::get('/ready', [HealthController::class, 'ready']);
 
 Route::get('invitations/{token}', [InvitationWebController::class, 'show'])
     ->middleware('throttle:invitation')

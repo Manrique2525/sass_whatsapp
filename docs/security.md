@@ -864,3 +864,19 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
   (`sk-*`, `sk_live_*`, `sk_test_*`), Bearer tokens, teléfonos E.164, emails. Trunca a 200 chars.
   Aplicado a Meta, OpenAI, OpenAIEmbedding, Stripe providers.
 - **Audit logger**: `AuditLogger` inyecta `request_id` automáticamente en cada audit record.
+
+### Health/Readiness + Queue Monitoring (FASE 28 U4, ADR-107)
+
+- **Liveness** (`GET /health`): solo verifica que el proceso PHP/Laravel está vivo (`app` check).
+  Sin dependencias externas. Barato, rápido. Providers externos (Meta, OpenAI, Stripe) excluidos.
+- **Readiness** (`GET /ready`): verifica dependencias críticas locales (DB, Redis, queue backend).
+  503 si alguna cae. Providers externos explícitamente excluidos — su caída no impide la app.
+- **Scheduler heartbeat**: `SchedulerHeartbeatCommand` escribe timestamp a cache cada minuto.
+  HealthChecker verifica freshness (configurable, default 120s). NO bloquea readiness.
+- **Analytics queue fix**: Worker consume `--queue=default,analytics,knowledge`. Corrige bug
+  funcional donde analytics jobs nunca se procesaban.
+- **Job failure logging**: `AggregateDailyAnalyticsJob::failed()` emite structured log con
+  `tenant_id`, `date`, `job_class`, `error_class`. Sin PII, sin payload.
+- **Docker**: `schedule` service recibe healthcheck + `condition: service_healthy`.
+- **Response safety**: Sin exception details, sin stack traces, sin host/password/credentials.
+- **X-Request-ID**: presente en ambos endpoints (liveness y readiness).

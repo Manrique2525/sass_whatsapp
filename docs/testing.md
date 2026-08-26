@@ -1483,3 +1483,35 @@ vendor/bin/pest tests/Feature/Security/TokenExpirationRolloutTest.php
 | F28-U3-CSP-01 | CSP connect-src includes Sentry domain when DSN configured | PASS |
 | F28-U3-CSP-02 | CSP connect-src has no Sentry when DSN empty | PASS |
 | F28-U3-CSP-03 | CSP connect-src has no Sentry when DSN null | PASS |
+
+#### Health/Readiness + Queue Monitoring (`tests/Feature/Security/HealthReadinessTest.php`, 27 tests)
+
+| Test | Description | Status |
+|---|---|---|
+| F28-U4-HEALTH-01 | Liveness healthy returns 200 | PASS |
+| F28-U4-HEALTH-02 | Liveness does not check database | PASS |
+| F28-U4-HEALTH-03 | Liveness does not check redis | PASS |
+| F28-U4-HEALTH-04 | Liveness does not check queue | PASS |
+| F28-U4-HEALTH-05 | Readiness healthy returns 200 | PASS |
+| F28-U4-HEALTH-06 | Readiness does not check external providers | PASS |
+| F28-U4-HEALTH-07 | Safe response format no exception details | PASS |
+| F28-U4-HEALTH-08 | X-Request-ID present on health | PASS |
+| F28-U4-HEALTH-09 | X-Request-ID present on ready | PASS |
+| F28-U4-HEALTH-10 | Readiness includes scheduler info | PASS |
+| F28-U4-HEALTH-11 | checkLiveness returns only app key | PASS |
+| F28-U4-HEALTH-12 | checkReadiness returns database redis queue | PASS |
+| F28-U4-HEALTH-13 | checkApp verifies config is accessible | PASS |
+| F28-U4-HEALTH-14 | Scheduler heartbeat returns null when no heartbeat | PASS |
+| F28-U4-HEALTH-15 | Scheduler heartbeat returns true when fresh | PASS |
+| F28-U4-HEALTH-16 | Scheduler heartbeat returns false when stale | PASS |
+| F28-U4-HEALTH-17 | allOk returns true when all statuses ok | PASS |
+| F28-U4-HEALTH-18 | allOk returns false when any status fail | PASS |
+| F28-U4-SCHED-01 | Scheduler heartbeat command writes timestamp | PASS |
+| F28-U4-SCHED-02 | Scheduler heartbeat timestamp is fresh | PASS |
+| F28-U4-AN-01 | AggregateDailyAnalyticsCommand dispatches to analytics queue | SKIP (no PG tenants table) |
+| F28-U4-AN-02 | AggregateDailyAnalyticsJob failed() logs structured warning | PASS |
+| F28-U4-Q-01 | SentryQueueFailureServiceProvider is registered | PASS |
+| F28-U4-Q-02 | SentryQueueFailureServiceProvider class exists | PASS |
+| F28-U4-Q-03 | Queue config has default and analytics queues | PASS |
+| F28-U4-Q-04 | failed_jobs config uses database-uuids driver | PASS |
+| F28-U4-CFG-01 | observability config is loadable | PASS |

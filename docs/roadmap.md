@@ -2892,11 +2892,17 @@ COMPLETADA — pendiente commit. NO PUSH.
 - 15 tests: 12 frontend scrubber (vitest) + 3 CSP (Pest).
 - Quality: vue-tsc PASS, build PASS, PHPStan 0 errors, Pint PASS, 544 FE + 139 BE tests PASS.
 
-### U4 — Health Checks + Queue Monitoring · PENDIENTE
+### U4 — Health/Readiness + Queue Monitoring · COMPLETADA
 
-- Health check endpoint improvements.
-- Queue monitoring and alerting.
-- Analytics queue mismatch fix (worker listens 'default' but jobs dispatched to 'analytics').
+- Liveness vs Readiness separation: GET /health (liveness), GET /ready (readiness, 503).
+- HealthChecker: checkLiveness() / checkReadiness() / checkAll() / checkSchedulerHeartbeat().
+- Scheduler heartbeat: SchedulerHeartbeatCommand writes timestamp to cache every minute.
+- Analytics queue fix: worker consumes --queue=default,analytics,knowledge.
+- AggregateDailyAnalyticsJob::failed() structured logging.
+- Docker: schedule healthcheck + depends_on service_healthy.
+- config/observability.php: scheduler_heartbeat_max_age_seconds.
+- ADR-107 written.
+- 27 tests: HEALTH-01..18, SCHED-01..02, AN-01..02, Q-01..04, CFG-01.
 
 ### U5 — Alerting + Operational Docs + Closure · PENDIENTE
 
