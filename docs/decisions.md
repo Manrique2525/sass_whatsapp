@@ -3065,3 +3065,40 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - 8 tests LIKE (LIKE-01..08) + 10 tests provider error (ERR-01..10) = 18 tests nuevos.
   - Test existente AI-P09 actualizado para reflejar mensaje sanitizado.
   - No regressions: todos los tests existentes pasan.
+
+## ADR-102 · Security Headers, CSP, CORS y Session Hardening (FASE 27 U1)
+
+- **Estado**: ACEPTADO · FASE 27 U1 COMPLETADA
+- **Contexto**: Auditoría de FASE 27 (refuerzo OWASP) identificó que la aplicación no
+  configuraba headers de seguridad HTTP, no tenía política CORS explícita, y las
+  configuración de sesión no reflejaban las mejores prácticas de producción. Las
+  categorías OWASP A05 (Security Misconfiguration) y A06 (Vulnerable Components)
+  estaban parcialmente cubiertas.
+- **Decisión**:
+  1. **SecurityHeaders middleware** (`app/Http/MITmiddleware/SecurityHeaders.php`):
+     Stateless middleware que agrega 6 headers a toda respuesta web y API:
+     - `X-Content-Type-Options: nosniff` — previene MIME sniffing
+     - `X-Frame-Options: DENY` — previene clickjacking
+     - `X-XSS-Protection: 0` — desactiva XSS auditor legacy (recomendado por OWASP)
+     - `Referrer-Policy: strict-origin-when-cross-origin` — limita referrer
+     - `Permissions-Policy: camera=(), microphone=(), geolocation=()` — restringe APIs del navegador
+     - `Content-Security-Policy` — política CSP con `default-src 'self'`, `script-src 'self'`,
+       `style-src 'self' 'unsafe-inline'` (requerido por Vue scoped styles), `frame-ancestors 'none'`,
+       `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `connect-src 'self' ws: wss:`
+       (para Reverb WebSocket). Sin `unsafe-eval`.
+     - `Strict-Transport-Security` — solo en production + HTTPS.
+  2. **CORS explícito** (`config/cors.php`): Política restrictiva con paths `api/*` y
+     `sanctum/csrf-cookie`. Orígenes driven por env `CORS_ALLOWED_ORIGINS` (default vacío).
+     `supports_credentials = false`. Sin wildcard `*` con credentials.
+  3. **Session hardening** (`.env.example`): Documenta configuración segura para producción:
+     `SESSION_ENCRYPT=true`, `SESSION_SECURE_COOKIE=true`, `SESSION_SAME_SITE=lax`,
+     `SESSION_HTTP_ONLY=true`. La configuración local no se modifica (mantiene compatibilidad).
+- **Consecuencias**:
+  - Todos los responses HTTP ahora incluyen headers de seguridad OWASP-aligned.
+  - CSP previene XSS, data injection, y clickjacking. `unsafe-inline` solo en `style-src`
+    (requerido por Vue scoped styles; sin alternativa sin nonce infrastructure).
+  - CORS es explícito y restrictivo en vez de depender de defaults implícitos de Laravel.
+  - Sesiones en producción usarán cifrado y cookies seguras. Desarrollo local no se afecta.
+  - TrustProxies y Sanctum token expiry quedan pendientes para U2.
+  - 13 tests headers + 6 tests CORS + 7 tests session = 26 tests nuevos.
+  - Total suite: 2,215 passed, 0 failed, 14 skipped, 6,561 assertions.

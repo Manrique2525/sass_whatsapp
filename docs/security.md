@@ -726,4 +726,44 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
         P2-03: Tenant switch clears dialog state (no cross-tenant data leakage).
         P2-04: loadHistory error resets pagination state.
         No new tests. No new features. No new endpoints. No new DDL.
-        Total FASE 24: 252 backend billing + 532 frontend = all green.
+         Total FASE 24: 252 backend billing + 532 frontend = all green.
+
+### Security Headers (FASE 27 U1)
+
+- **Middleware**: `App\Http\Middleware\SecurityHeaders` — stateless, aplicado a `web` y `api`
+  middleware groups en `bootstrap/app.php`.
+- **Headers implementados**:
+  - `X-Content-Type-Options: nosniff` — previene MIME type sniffing.
+  - `X-Frame-Options: DENY` — previene clickjacking via iframe.
+  - `X-XSS-Protection: 0` — desactiva XSS auditor legacy del browser (recomendado por OWASP).
+  - `Referrer-Policy: strict-origin-when-cross-origin` — limita información del referrer.
+  - `Permissions-Policy: camera=(), microphone=(), geolocation=()` — restringe APIs del navegador.
+  - `Content-Security-Policy` — política CSP: `default-src 'self'`, `script-src 'self'`,
+    `style-src 'self' 'unsafe-inline'` (requerido por Vue scoped styles), `img-src 'self' data: blob:`,
+    `font-src 'self'`, `connect-src 'self' ws: wss:` (Reverb WebSocket), `frame-ancestors 'none'`,
+    `base-uri 'self'`, `form-action 'self'`, `object-src 'none'`.
+  - `Strict-Transport-Security: max-age=31536000; includeSubDomains` — solo en production + HTTPS.
+
+### CORS (FASE 27 U1)
+
+- **Config**: `config/cors.php` — política restrictiva explícita.
+- **Paths**: `api/*` y `sanctum/csrf-cookie`.
+- **Orígenes**: driven por env `CORS_ALLOWED_ORIGINS` (default vacío = same-origin only).
+- **Credentials**: `false` por defecto. Sin wildcard `*` con credentials.
+- La app es same-origin Vue/Inertia; CORS es solo para consumidores externos futuros.
+
+### Session Hardening (FASE 27 U1)
+
+- `.env.example` documenta configuración segura para producción:
+  - `SESSION_ENCRYPT=true` — cifra datos de sesión en storage.
+  - `SESSION_SECURE_COOKIE=true` — solo envía cookie por HTTPS.
+  - `SESSION_SAME_SITE=lax` — mitiga CSRF en requests cross-site.
+  - `SESSION_HTTP_ONLY=true` — previene acceso JavaScript a la cookie.
+- Desarrollo local mantiene `SESSION_ENCRYPT=false` para compatibilidad.
+- `SESSION_SECURE_COOKIE` no se setea en `.env` local (HTTP) — production deployment lo configura.
+
+### Pendiente (FASE 27 U2)
+
+- Sanctum token expiry (configurable, nunca expira actualmente).
+- TrustProxies middleware para load balancer.
+- Verificación de error response structure en producción.

@@ -1266,3 +1266,53 @@ Reduced from **13 errors to 0**:
 | MessageApiTest | P1 | FakeCapacityGuard binding (U4 regression) |
 | ReprocessOutboxTest | P1 | FakeCapacityGuard binding (U4 regression) |
 | isPostgres() | P1 | config → DB::connection()->getDriverName() in UsageGuard |
+
+### FASE 27 U1 — Security Headers + CORS + Session (26 tests)
+
+#### Security Headers (`tests/Feature/Security/SecurityHeadersTest.php`, 13 tests)
+
+| Test | Description | Status |
+|---|---|---|
+| HDR-01 | X-Content-Type-Options = nosniff | PASS |
+| HDR-02 | X-Frame-Options = DENY | PASS |
+| HDR-03 | X-XSS-Protection = 0 | PASS |
+| HDR-04 | Referrer-Policy = strict-origin-when-cross-origin | PASS |
+| HDR-05 | Content-Security-Policy present | PASS |
+| HDR-06 | CSP frame-ancestors 'none' | PASS |
+| HDR-07 | CSP no unsafe-eval | PASS |
+| HDR-08 | CSP required directives present | PASS |
+| HDR-09 | Permissions-Policy restricts camera/microphone/geolocation | PASS |
+| HDR-10 | HSTS absent on HTTP | PASS |
+| HDR-11 | Headers present on web GET | PASS |
+| HDR-12 | Headers present on API POST | PASS |
+| HDR-13 | Headers present on WhatsApp webhook verify | PASS |
+
+#### CORS (`tests/Feature/Security/CorsConfigTest.php`, 6 tests)
+
+| Test | Description | Status |
+|---|---|---|
+| CORS-01 | CORS config exists and loadable | PASS |
+| CORS-02 | Paths include api/* and sanctum | PASS |
+| CORS-03 | No wildcard origins with credentials | PASS |
+| CORS-04 | supports_credentials false by default | PASS |
+| CORS-05 | allowed_origins env-driven | PASS |
+| CORS-06 | WhatsApp webhook unaffected | PASS |
+
+#### Session (`tests/Feature/Security/SessionConfigTest.php`, 7 tests)
+
+| Test | Description | Status |
+|---|---|---|
+| SESS-01 | http_only defaults true | PASS |
+| SESS-02 | same_site = lax | PASS |
+| SESS-03 | encrypt config readable | PASS |
+| SESS-04 | secure cookie config readable | PASS |
+| SESS-05 | lifetime positive integer | PASS |
+| SESS-06 | .env.example SESSION_ENCRYPT=true | PASS |
+| SESS-07 | .env.example SESSION_SECURE_COOKIE=true | PASS |
+
+#### Ejecución
+```bash
+vendor/bin/pest tests/Feature/Security/SecurityHeadersTest.php
+vendor/bin/pest tests/Feature/Security/CorsConfigTest.php
+vendor/bin/pest tests/Feature/Security/SessionConfigTest.php
+```
