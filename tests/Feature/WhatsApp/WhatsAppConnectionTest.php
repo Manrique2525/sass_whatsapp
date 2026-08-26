@@ -346,7 +346,7 @@ test('WHATSAPP-26: un error permanente de Meta marca failed con retryable=false 
 
     expect($attempt->status->value)->toBe('failed')
         ->and($attempt->error_code)->toBe('WHATSAPP_MESSAGE_FAILED')
-        ->and($attempt->error_message)->toContain('131030');
+        ->and($attempt->error_message)->not->toContain('131030');
 
     $this->assertDatabaseHas('audit_logs', [
         'action' => 'whatsapp.message_failed',

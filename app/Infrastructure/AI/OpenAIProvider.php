@@ -15,6 +15,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -118,14 +119,19 @@ final class OpenAIProvider implements AIProviderInterface
         }
 
         $status = $response->status();
-        $body = $response->json('error.message', 'Unknown error');
+        $rawBody = $response->json('error.message', 'Unknown error');
+
+        Log::warning('ai.openai_api_error', [
+            'status' => $status,
+            'raw_message' => $rawBody,
+        ]);
 
         match (true) {
-            $status === 401 => throw new AIAuthFailedException($body),
-            $status === 429 => throw new AIRateLimitException($body),
-            $status === 400 => throw new AIInvalidRequestException($body),
-            $status >= 500 => throw new AIProviderException("OpenAI server error: {$body}", retryable: true, status: $status),
-            default => throw new AIProviderException("OpenAI error (HTTP {$status}): {$body}", status: $status),
+            $status === 401 => throw new AIAuthFailedException,
+            $status === 429 => throw new AIRateLimitException,
+            $status === 400 => throw new AIInvalidRequestException('Solicitud inválida al proveedor de IA.'),
+            $status >= 500 => throw new AIProviderException('Error del servidor del proveedor de IA.', retryable: true, status: $status),
+            default => throw new AIProviderException('Error desconocido del proveedor de IA.', status: $status),
         };
     }
 

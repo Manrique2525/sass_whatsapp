@@ -770,6 +770,44 @@ vendor/bin/pest --filter="UsageGuardEdgeCaseTest"
 vendor/bin/pest --filter="F26-U3"
 ```
 
+### LIKE Wildcard Escaping (FASE 26 U4, 8 tests en `tests/Feature/Flows/FlowWebhookLikeEscapingTest.php`)
+
+| Test | Description | Status |
+|---|---|---|
+| LIKE-01 | Número normal resuelve conversación | PASS |
+| LIKE-02 | Phone con % no expande wildcards | PASS |
+| LIKE-03 | Phone con _ no matchea un solo carácter | PASS |
+| LIKE-04 | Phone con \% no actúa como wildcard | PASS |
+| LIKE-05 | Phone con backslash se escapa correctamente | PASS |
+| LIKE-06 | Phone vacío retorna 400 | PASS |
+| LIKE-07 | Phone con + normalizado se resuelve | PASS |
+| LIKE-08 | Phone con espacios/guiones se normaliza y escapa | PASS |
+
+#### Ejecución
+```bash
+vendor/bin/pest tests/Feature/Flows/FlowWebhookLikeEscapingTest.php
+```
+
+### Provider Error Sanitization (FASE 26 U4, 10 tests en `tests/Feature/Security/ProviderErrorSanitizationTest.php`)
+
+| Test | Description | Status |
+|---|---|---|
+| ERR-01 | Meta connection error no expone raw message | PASS |
+| ERR-02 | Meta API error no expone raw Meta message | PASS |
+| ERR-03 | Meta API auth error no expone token detail | PASS |
+| ERR-04 | OpenAI auth error no expone raw detail | PASS |
+| ERR-05 | OpenAI rate limit error no expone raw detail | PASS |
+| ERR-06 | OpenAI server error no expone raw detail | PASS |
+| ERR-07 | OpenAI invalid request error no expone raw detail | PASS |
+| ERR-08 | Meta raw error aparece en log | PASS |
+| ERR-09 | OpenAI raw error aparece en log | PASS |
+| ERR-10 | WhatsApp exception errorCode y status se preservan | PASS |
+
+#### Ejecución
+```bash
+vendor/bin/pest tests/Feature/Security/ProviderErrorSanitizationTest.php
+```
+
 ## 5. Comandos
 
 ```bash

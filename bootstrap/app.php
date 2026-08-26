@@ -2,9 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Domain\AI\Exceptions\AIException;
+use App\Domain\Billing\Exceptions\BillingProviderException;
 use App\Domain\Billing\Exceptions\SubscriptionNotActiveException;
 use App\Domain\Billing\Exceptions\SubscriptionNotFoundException;
 use App\Domain\Billing\Exceptions\TenantQuotaExceededException;
+use App\Domain\WhatsApp\Exceptions\WhatsAppException;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\TenantMiddleware;
 use Illuminate\Auth\AuthenticationException;
@@ -99,6 +102,34 @@ return Application::configure(basePath: dirname(__DIR__))
                     'code' => 'SUBSCRIPTION_NOT_FOUND',
                     'errors' => new stdClass,
                 ], 409);
+            }
+        });
+
+        $exceptions->render(function (WhatsAppException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json([
+                    'message' => $e->getMessage(),
+                    'code' => $e->errorCode()->value,
+                ], $e->status());
+            }
+        });
+
+        $exceptions->render(function (AIException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json([
+                    'message' => $e->getMessage(),
+                    'code' => $e->errorCode()->value,
+                ], $e->status());
+            }
+        });
+
+        $exceptions->render(function (BillingProviderException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json([
+                    'message' => $e->getMessage(),
+                    'code' => 'BILLING_PROVIDER_ERROR',
+                    'errors' => new stdClass,
+                ], 502);
             }
         });
     })->create();

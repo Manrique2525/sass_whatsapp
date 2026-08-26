@@ -3022,3 +3022,46 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Timeout explícito: visible, auditable, consistente con otros jobs de WhatsApp.
   - 15 tests (F26-U3-STAT-01..08, LIFECYCLE-01, ORDER-01, IN-01..02, QUOTA-01).
   - No regressions: PHPStan 0 errors, Pint PASS, frontend build+typecheck PASS.
+
+## ADR-101 · Provider Error Sanitization + LIKE Wildcard Escaping (FASE 26 U4)
+
+- **Estado**: ACEPTADO · FASE 26 U4 COMPLETADA
+- **Contexto**: Auditoría de FASE 26 detectó:
+  - **P1-8**: `FlowWebhookController::resolveByPhone()` usa `LIKE ?` sin escapar
+    `%`, `_`, `\` del input del usuario. Un payload con `%` o `_` expande wildcards,
+    permitiendo bypass del filtro de búsqueda por teléfono.
+  - **P2-1**: Exposición de errores de proveedores externos (Meta, OpenAI, Stripe).
+    `MetaWhatsAppProvider` incluye `error.message` raw de Meta en la excepción.
+    `OpenAIProvider` incluye el mensaje raw de OpenAI (que puede contener API keys
+    parciales, internal request IDs, etc.). `StripeProvider` incluye `getMessage()`
+    del SDK de Stripe. Si un controller no atrapa estas excepciones, el mensaje
+    raw se expone al cliente en modo debug.
+  - **P2-4**: README.md era boilerplate de Laravel sin información del proyecto.
+- **Decisión**:
+  1. **LIKE escaping** (P1-8): Se agregó `escapeLike()` privado en
+     `FlowWebhookController` que escapa `\`, `%`, `_`. Se usa `LIKE ? ESCAPE '\'`
+     en la query. PostgreSQL y SQLite soportan cláusula `ESCAPE`.
+  2. **Provider error sanitization** (P2-1):
+     - `MetaWhatsAppProvider`: `http()`, `metaErrorMessage()`, `messageException()`
+       ahora registran el error raw en `Log::warning()` y devuelven mensajes genéricos
+       (ej: "Error de conexión con Meta.", fallback del caller).
+     - `OpenAIProvider`: `handleError()` registra status + raw message en
+       `Log::warning('ai.openai_api_error', ...)` y lanza excepciones con mensajes
+       genéricos por tipo (ej: "Error del servidor del proveedor de IA.").
+     - `StripeProvider`: `mapException()` registra status + stripe code + raw message
+       en `Log::warning('billing.stripe_api_error', ...)` y usa
+       "Error en el proveedor de facturación."
+     - **Global exception renderers**: Se agregaron handlers para `WhatsAppException`,
+       `AIException`, `BillingProviderException` en `bootstrap/app.php` como safety
+       net para excepciones que escapen de controllers.
+  3. **README.md** (P2-4): Reemplazado con documentación real del proyecto (stack,
+     arquitectura, quickstart, testing, seguridad, links a docs).
+- **Consecuencias**:
+  - Los errores de proveedores NUNCA llegan al cliente. Los raw errors se loguean
+    para debugging.
+  - Los global renderers son safety net; los controllers existentes ya atrapan
+    estas excepciones en la mayoría de rutas.
+  - LIKE queries son ahora seguras contra wildcard injection.
+  - 8 tests LIKE (LIKE-01..08) + 10 tests provider error (ERR-01..10) = 18 tests nuevos.
+  - Test existente AI-P09 actualizado para reflejar mensaje sanitizado.
+  - No regressions: todos los tests existentes pasan.

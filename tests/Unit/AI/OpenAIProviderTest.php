@@ -212,7 +212,7 @@ test('AI-P09: HTTP 401 lanza AIAuthFailedException', function (): void {
     ]);
 
     expect(fn () => ai_provider()->generateResponse(new AIRequest(prompt: 'Test')))
-        ->toThrow(AIAuthFailedException::class, 'Invalid API key');
+        ->toThrow(AIAuthFailedException::class, 'AI authentication failed');
 });
 
 // ---------------------------------------------------------------------------

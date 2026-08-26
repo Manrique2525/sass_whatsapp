@@ -569,7 +569,7 @@ test('EMB-P33: HTTP error body does not leak in exception message', function ():
         emb_provider()->embed(new EmbeddingRequest(input: ['test']));
         $this->fail('Expected exception.');
     } catch (EmbeddingProviderException $e) {
-        expect($e->getMessage())->toContain('OpenAI server error');
+        expect($e->getMessage())->toContain('proveedor de IA');
     }
 });
 

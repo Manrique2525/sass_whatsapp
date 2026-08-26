@@ -281,10 +281,12 @@ final class FlowWebhookController extends Controller
 
         $normalized = ltrim(trim($phone), '+');
 
+        $escaped = $this->escapeLike($normalized);
+
         $contact = Contact::query()
             ->withoutTenantScope()
             ->where('tenant_id', $trigger->tenant_id)
-            ->whereRaw("REPLACE(REPLACE(phone, ' ', ''), '-', '') LIKE ?", ['%'.$normalized.'%'])
+            ->whereRaw("REPLACE(REPLACE(phone, ' ', ''), '-', '') LIKE ? ESCAPE '\\'", ['%'.$escaped.'%'])
             ->first();
 
         if ($contact === null) {
@@ -309,6 +311,20 @@ final class FlowWebhookController extends Controller
         $allowed = ['conversation_id', 'contact_id', 'phone', 'payload'];
 
         return array_intersect_key($payload, array_flip($allowed));
+    }
+
+    /**
+     * Escapa caracteres especiales de LIKE (\, %, _) para búsqueda literal.
+     *
+     * @see FASE 26 U4 — P1-8 wildcard expansion / search semantics bypass
+     */
+    private function escapeLike(string $value): string
+    {
+        return str_replace(
+            ['\\', '%', '_'],
+            ['\\\\', '\\%', '\\_'],
+            $value,
+        );
     }
 
     private function genericUnauthorized(): JsonResponse

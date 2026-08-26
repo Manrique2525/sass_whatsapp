@@ -10,6 +10,7 @@ use App\Domain\Billing\DTOs\CheckoutSessionData;
 use App\Domain\Billing\DTOs\PortalSessionData;
 use App\Domain\Billing\DTOs\ProviderWebhookEvent;
 use App\Domain\Billing\Exceptions\BillingProviderException;
+use Illuminate\Support\Facades\Log;
 use Stripe\BillingPortal;
 use Stripe\Checkout\Session as CheckoutSession;
 use Stripe\Customer;
@@ -209,10 +210,16 @@ final class StripeProvider implements BillingProviderInterface
 
     private function mapException(ApiErrorException $e): BillingProviderException
     {
+        Log::warning('billing.stripe_api_error', [
+            'status' => $e->getHttpStatus(),
+            'type' => $e->getStripeCode(),
+            'raw_message' => $e->getMessage(),
+        ]);
+
         $retryable = in_array($e->getHttpStatus(), [429, 500, 502, 503, 504], true);
 
         return new BillingProviderException(
-            'Stripe API error: '.$e->getMessage(),
+            'Error en el proveedor de facturación.',
             $retryable,
             $e,
         );

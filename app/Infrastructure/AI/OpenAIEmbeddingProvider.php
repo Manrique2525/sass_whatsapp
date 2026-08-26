@@ -15,6 +15,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use Throwable;
 
@@ -124,14 +125,19 @@ final class OpenAIEmbeddingProvider implements EmbeddingProviderInterface
         }
 
         $status = $response->status();
-        $body = $response->json('error.message', 'Unknown error');
+        $rawBody = $response->json('error.message', 'Unknown error');
+
+        Log::warning('ai.openai_embedding_api_error', [
+            'status' => $status,
+            'raw_message' => $rawBody,
+        ]);
 
         match (true) {
-            $status === 401 || $status === 403 => throw new EmbeddingAuthFailedException($body),
-            $status === 429 => throw new EmbeddingRateLimitException($body),
-            $status === 400 || $status === 422 => throw new EmbeddingProviderException("Invalid embedding request: {$body}", status: $status),
-            $status >= 500 => throw new EmbeddingProviderException("OpenAI server error: {$body}", retryable: true, status: $status),
-            default => throw new EmbeddingProviderException("OpenAI embedding error (HTTP {$status}): {$body}", status: $status),
+            $status === 401 || $status === 403 => throw new EmbeddingAuthFailedException,
+            $status === 429 => throw new EmbeddingRateLimitException,
+            $status === 400 || $status === 422 => throw new EmbeddingProviderException('Solicitud de embedding inválida.', status: $status),
+            $status >= 500 => throw new EmbeddingProviderException('Error del servidor del proveedor de IA.', retryable: true, status: $status),
+            default => throw new EmbeddingProviderException('Error desconocido del proveedor de IA.', status: $status),
         };
     }
 

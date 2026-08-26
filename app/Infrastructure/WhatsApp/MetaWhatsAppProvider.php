@@ -15,6 +15,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Proveedor oficial de la Meta WhatsApp Cloud API (FASE 6, ADR-029).
@@ -25,6 +26,8 @@ use Illuminate\Support\Facades\Http;
  *   marca `retryable` (transitorios: timeout/5xx/429; permanentes: 4xx).
  * - La firma del webhook (X-Hub-Signature-256) se valida SIEMPRE sobre el body
  *   crudo con hash_equals; jamás sobre un JSON re-serializado.
+ * - FASE 26 U4: Los errores raw del provider NUNCA se exponen en el mensaje de
+ *   la excepción. Se registran en log y se devuelven mensajes genéricos.
  */
 final class MetaWhatsAppProvider implements WhatsAppProviderInterface
 {
@@ -226,8 +229,12 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
         try {
             return $callable();
         } catch (ConnectionException $e) {
+            Log::warning('whatsapp.meta_connection_error', [
+                'error' => $e->getMessage(),
+            ]);
+
             throw new WhatsAppMessageFailedException(
-                'Error de conexión con Meta: '.$e->getMessage(),
+                'Error de conexión con Meta.',
                 null,
                 true,
             );
@@ -248,9 +255,18 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
     {
         $body = $this->body($response);
 
-        return is_array($body) && isset($body['error']['message'])
+        $raw = is_array($body) && isset($body['error']['message'])
             ? (string) $body['error']['message']
-            : $fallback;
+            : null;
+
+        if ($raw !== null) {
+            Log::warning('whatsapp.meta_api_error', [
+                'status' => $response->status(),
+                'raw_message' => $raw,
+            ]);
+        }
+
+        return $fallback;
     }
 
     private function mapSendResponse(Response $response, string $fallback): MessageSendResult
@@ -274,14 +290,20 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
             ? (string) $body['error']['code']
             : '';
 
-        $message = is_array($body) && isset($body['error']['message'])
+        $rawMessage = is_array($body) && isset($body['error']['message'])
             ? (string) $body['error']['message']
-            : $fallback;
+            : null;
+
+        Log::warning('whatsapp.meta_api_error', [
+            'status' => $response->status(),
+            'provider_code' => $providerCode,
+            'raw_message' => $rawMessage,
+        ]);
 
         $retryable = $response->serverError() || $response->status() === 429;
 
         return new WhatsAppMessageFailedException(
-            $message,
+            $fallback,
             $providerCode !== '' ? $providerCode : null,
             $retryable,
         );
