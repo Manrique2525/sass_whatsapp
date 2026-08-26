@@ -815,3 +815,20 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
   importar el valor de `APP_DEBUG`.
 - **Web/Inertia**: Las rutas web NO se convierten a JSON. Los handlers solo aplican a `$request->is('api/*')`.
 - **Tenant isolation**: Los 404 cross-tenant se preservan intencionalmente (no se convierten a 403).
+
+### Structured Logging + Correlation (FASE 28 U1)
+
+- **JSON log channels**: Canales `json` (stderr) y `json_file` con Monolog `JsonFormatter`. Canal
+  `single` preservado para dev local. Configurable vía `LOG_STACK`.
+- **Correlation ID**: `RequestCorrelationId` middleware genera UUID v4 en `X-Request-ID`, valida
+  incoming (alphanumeric + hyphen + underscore, max 128 chars), almacena en Request attributes
+  y `Log::shareContext()`. Retorna en response header. Permite trazar request → job → provider.
+- **Tenant context**: `TenantContextProcessor` inyecta `tenant_id` a log-time (no cached) para
+  worker safety. Nunca filtra entre tenants.
+- **Job correlation**: `LoggingContextServiceProvider` propaga `request_id` en payloads via
+  `Queue::createPayloadUsing`. `JobCorrelationMiddleware` restaura contexto durante ejecución
+  y limpia en `finally`.
+- **Provider sanitization**: `SafeLogContext::sanitizeProviderMessage()` stripa API keys
+  (`sk-*`, `sk_live_*`, `sk_test_*`), Bearer tokens, teléfonos E.164, emails. Trunca a 200 chars.
+  Aplicado a Meta, OpenAI, OpenAIEmbedding, Stripe providers.
+- **Audit logger**: `AuditLogger` inyecta `request_id` automáticamente en cada audit record.

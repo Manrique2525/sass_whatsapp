@@ -11,6 +11,7 @@ use App\Domain\AI\Exceptions\EmbeddingProviderException;
 use App\Domain\AI\Exceptions\EmbeddingRateLimitException;
 use App\Domain\AI\ValueObjects\EmbeddingRequest;
 use App\Domain\AI\ValueObjects\EmbeddingResponse;
+use App\Infrastructure\Logging\SafeLogContext;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
@@ -129,7 +130,7 @@ final class OpenAIEmbeddingProvider implements EmbeddingProviderInterface
 
         Log::warning('ai.openai_embedding_api_error', [
             'status' => $status,
-            'raw_message' => $rawBody,
+            'raw_message' => SafeLogContext::sanitizeProviderMessage($rawBody),
         ]);
 
         match (true) {

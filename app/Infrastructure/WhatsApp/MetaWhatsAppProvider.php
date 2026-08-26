@@ -11,6 +11,7 @@ use App\Domain\WhatsApp\Exceptions\WhatsAppPhoneNotFoundException;
 use App\Domain\WhatsApp\ValueObjects\InteractiveMessage;
 use App\Domain\WhatsApp\ValueObjects\MessageSendResult;
 use App\Domain\WhatsApp\ValueObjects\PhoneNumberInfo;
+use App\Infrastructure\Logging\SafeLogContext;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
@@ -262,7 +263,7 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
         if ($raw !== null) {
             Log::warning('whatsapp.meta_api_error', [
                 'status' => $response->status(),
-                'raw_message' => $raw,
+                'raw_message' => SafeLogContext::sanitizeProviderMessage($raw),
             ]);
         }
 
@@ -297,7 +298,7 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
         Log::warning('whatsapp.meta_api_error', [
             'status' => $response->status(),
             'provider_code' => $providerCode,
-            'raw_message' => $rawMessage,
+            'raw_message' => SafeLogContext::sanitizeProviderMessage($rawMessage),
         ]);
 
         $retryable = $response->serverError() || $response->status() === 429;

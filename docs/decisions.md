@@ -3139,3 +3139,43 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
     manejar `code` field de forma unificada.
   - 34 tests nuevos (U2+U3): TOK-01..10, PROXY-01..08, ERR-01..10, ROLL-01..06.
   - Total suite: 2,249 passed, 0 failed, 14 skipped, 6,667 assertions.
+
+## ADR-104 · Structured Logging + Request Correlation IDs (FASE 28 U1)
+
+- **Estado**: Aceptado · FASE 28 U1
+- **Contexto**: Los logs usan `single` channel (texto plano), sin correlación request → job → provider.
+  No hay forma de agrupar logs de una operación distribuida. Proveedores loguean `raw_message`
+  con riesgo de filtrar API keys, teléfonos o tokens.
+- **Decisión**:
+  1. **JSON log channels**: Canales `json` (stderr) y `json_file` con `JsonFormatter` + procesadores
+     `TenantContextProcessor` y `RequestContextProcessor`. Canal `single` preservado para local.
+     Configurable vía `LOG_STACK`.
+  2. **Request Correlation ID**: `RequestCorrelationId` middleware genera/valida UUID v4 en
+     `X-Request-ID`. Almacena en `Request::attributes` + `Log::shareContext()`. Retorna en header.
+  3. **Monolog processors**: `TenantContextProcessor` resuelve `TenantContext::id()` a log-time
+     (no cached, safe para workers multi-tenant). `RequestContextProcessor` resuelve desde
+     Request attributes → job payload → null.
+  4. **Job correlation propagation**: `LoggingContextServiceProvider` inyecta `request_id` en payloads
+     via `Queue::createPayloadUsing`. `JobCorrelationMiddleware` restaura contexto y limpia en
+     `finally`. `Queue::after` limpia shared context post-job.
+  5. **Provider log sanitization**: `SafeLogContext::sanitizeProviderMessage()` stripa API keys,
+     Bearer tokens, teléfonos E.164, emails, trunca a 200 chars. Aplicado a Meta, OpenAI,
+     OpenAIEmbedding y Stripe.
+  6. **AuditLogger**: Inyecta `request_id` automáticamente en cada audit record.
+- **Consecuencias**:
+  - JSON structured logs permiten ingestion en Datadog/Grafana/ELK sin parsing custom.
+  - Correlation ID permite trazar request → job → provider call en una sola operación.
+  - `Log::shareContext()` (no `sharedContext()`) es el setter correcto de Laravel 11+.
+  - `Queue::createPayloadUsing`: 3er arg es `array $payload` (no `object $job`); `$queue` puede
+    ser `null` en SyncQueue.
+  - 34 tests nuevos: LOG-01..20, REQ-01..09, PII-01..05.
+  - Total suite: 2,283 passed, 0 failed, 14 skipped.
+
+### FASE 28 — Observabilidad (Plan)
+
+- **U1** (COMPLETADA): Structured Logging + Correlation IDs
+- **U2** (PENDIENTE): Backend Sentry — error/exception/performance tracking
+- **U3** (PENDIENTE): Frontend Sentry — `@sentry/vue` + error tracking + breadcrumbs
+- **U4** (PENDIENTE): Health Checks + Queue Monitoring — endpoint salud, alertas cola fallida,
+  analytics queue mismatch fix
+- **U5** (PENDIENTE): Alerting + Operational Docs + Closure — runbooks, escalation, retention

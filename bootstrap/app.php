@@ -9,6 +9,7 @@ use App\Domain\Billing\Exceptions\SubscriptionNotFoundException;
 use App\Domain\Billing\Exceptions\TenantQuotaExceededException;
 use App\Domain\WhatsApp\Exceptions\WhatsAppException;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\RequestCorrelationId;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\TenantMiddleware;
 use Illuminate\Auth\AuthenticationException;
@@ -38,10 +39,15 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->api(prepend: [
             EnsureFrontendRequestsAreStateful::class,
+            RequestCorrelationId::class,
         ]);
 
         $middleware->api(append: [
             SecurityHeaders::class,
+        ]);
+
+        $middleware->web(prepend: [
+            RequestCorrelationId::class,
         ]);
 
         $middleware->alias([

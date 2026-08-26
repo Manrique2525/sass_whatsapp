@@ -37,8 +37,25 @@ final class AuditLogger
         $audit->ip_address = request()->ip();
         $audit->user_agent = Str::limit((string) request()->userAgent(), 500);
 
+        // Inject request_id for correlation if available
+        $requestId = $this->resolveRequestId();
+        if ($requestId !== null) {
+            $auditData = (array) $audit->data;
+            $auditData['request_id'] = $requestId;
+            $audit->data = $auditData;
+        }
+
         $audit->save();
 
         return $audit;
+    }
+
+    private function resolveRequestId(): ?string
+    {
+        try {
+            return request()->attributes->get('request_id');
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

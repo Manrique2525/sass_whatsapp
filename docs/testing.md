@@ -1374,3 +1374,57 @@ vendor/bin/pest tests/Feature/Security/TokenExpirationRolloutTest.php
 | ROLL-04 | Null expiration disables created_at check entirely | PASS |
 | ROLL-05 | Old token with future expires_at fails global age check (ANDed) | PASS |
 | ROLL-06 | Login token metadata matches actual validation | PASS |
+
+#### Structured Logging (`tests/Feature/Security/StructuredLoggingTest.php`, 13 tests)
+
+| Test | Description | Status |
+|---|---|---|
+| LOG-01 | Log line is valid JSON | PASS |
+| LOG-02 | Timestamp field present | PASS |
+| LOG-03 | Level field present | PASS |
+| LOG-04 | Message/event key present | PASS |
+| LOG-05 | Channel and extra fields present | PASS |
+| LOG-06 | Context fields preserved | PASS |
+| LOG-07 | Multiple log lines are separate JSON objects | PASS |
+| LOG-08 | Newline-safe JSON | PASS |
+| LOG-09 | No PII fields auto-injected | PASS |
+| LOG-10 | SafeLogContext sanitizes provider messages | PASS |
+| LOG-11 | SafeLogContext sanitizes phone numbers | PASS |
+| LOG-12 | SafeLogContext truncates long messages | PASS |
+| LOG-13 | SafeLogContext handles null/empty | PASS |
+
+#### Request Correlation (`tests/Feature/Security/RequestCorrelationTest.php`, 9 tests)
+
+| Test | Description | Status |
+|---|---|---|
+| REQ-01 | Missing X-Request-ID generates UUID | PASS |
+| REQ-02 | Valid incoming UUID preserved | PASS |
+| REQ-03 | Invalid incoming ID replaced | PASS |
+| REQ-04 | Oversized incoming ID replaced | PASS |
+| REQ-05 | Response contains X-Request-ID | PASS |
+| REQ-06 | Request attributes contain request_id | PASS |
+| REQ-07 | Two sequential requests do not leak IDs | PASS |
+| REQ-08 | Error response still has X-Request-ID | PASS |
+| REQ-09 | Safe alphanumeric IDs accepted | PASS |
+
+#### Log Context Processors (`tests/Feature/Security/LogContextTest.php`, 7 tests)
+
+| Test | Description | Status |
+|---|---|---|
+| LOG-14 | TenantContextProcessor adds tenant_id when bound | PASS |
+| LOG-15 | TenantContextProcessor omits tenant_id when no context | PASS |
+| LOG-16 | TenantContextProcessor does not leak between tenants | PASS |
+| LOG-17 | RequestContextProcessor resolves from request attributes | PASS |
+| LOG-18 | RequestContextProcessor omits request_id when no context | PASS |
+| LOG-19 | SafeLogContext strips Bearer tokens | PASS |
+| LOG-20 | SafeLogContext strips email addresses | PASS |
+
+#### Provider Log Privacy (`tests/Feature/Security/ProviderLogPrivacyTest.php`, 5 tests)
+
+| Test | Description | Status |
+|---|---|---|
+| PII-01 | Meta raw text with phone not in logs | PASS |
+| PII-02 | OpenAI raw error with API key not emitted | PASS |
+| PII-03 | Stripe sensitive content scrubbed | PASS |
+| PII-04 | Authorization header never emitted raw | PASS |
+| PII-05 | Message body not auto-emitted in provider logs | PASS |

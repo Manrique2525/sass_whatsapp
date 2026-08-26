@@ -11,6 +11,7 @@ use App\Domain\AI\Exceptions\AIProviderException;
 use App\Domain\AI\Exceptions\AIRateLimitException;
 use App\Domain\AI\ValueObjects\AIRequest;
 use App\Domain\AI\ValueObjects\AIResponse;
+use App\Infrastructure\Logging\SafeLogContext;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
@@ -123,7 +124,7 @@ final class OpenAIProvider implements AIProviderInterface
 
         Log::warning('ai.openai_api_error', [
             'status' => $status,
-            'raw_message' => $rawBody,
+            'raw_message' => SafeLogContext::sanitizeProviderMessage($rawBody),
         ]);
 
         match (true) {

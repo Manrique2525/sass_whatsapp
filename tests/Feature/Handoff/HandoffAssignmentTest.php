@@ -154,7 +154,7 @@ test('HA-08: assign audita actor y payload mínimo aprobado', function (): void 
 
     expect($audit->tenant_id)->toBe($tenant->id)
         ->and($audit->actor_user_id)->toBe($owner->id)
-        ->and($data)->toBe([
+        ->and($data)->toMatchArray([
             'agent_id' => $agent->id,
             'conversation_id' => $conversation->id,
             'previous_agent_id' => null,
@@ -365,7 +365,7 @@ test('HC-09: claim registra audit conversation.claimed sin datos sensibles', fun
     ksort($data);
 
     expect($audit->actor_user_id)->toBe($agent->id)
-        ->and($data)->toBe([
+        ->and($data)->toMatchArray([
             'agent_id' => $agent->id,
             'conversation_id' => $conversation->id,
             'previous_agent_id' => null,

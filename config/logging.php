@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Infrastructure\Logging\Processors\RequestContextProcessor;
+use App\Infrastructure\Logging\Processors\TenantContextProcessor;
+use Monolog\Formatter\JsonFormatter;
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
@@ -75,6 +78,47 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'stderr' => [
+            'driver' => 'monolog',
+            'level' => env('LOG_LEVEL', 'debug'),
+            'handler' => StreamHandler::class,
+            'formatter' => env('LOG_STDERR_FORMATTER'),
+            'with' => [
+                'stream' => 'php://stderr',
+            ],
+            'processors' => [PsrLogMessageProcessor::class],
+        ],
+
+        'json' => [
+            'driver' => 'monolog',
+            'level' => env('LOG_LEVEL', 'debug'),
+            'handler' => StreamHandler::class,
+            'formatter' => JsonFormatter::class,
+            'with' => [
+                'stream' => 'php://stderr',
+            ],
+            'processors' => [
+                PsrLogMessageProcessor::class,
+                TenantContextProcessor::class,
+                RequestContextProcessor::class,
+            ],
+        ],
+
+        'json_file' => [
+            'driver' => 'monolog',
+            'level' => env('LOG_LEVEL', 'debug'),
+            'handler' => StreamHandler::class,
+            'formatter' => JsonFormatter::class,
+            'with' => [
+                'path' => storage_path('logs/laravel.log'),
+            ],
+            'processors' => [
+                PsrLogMessageProcessor::class,
+                TenantContextProcessor::class,
+                RequestContextProcessor::class,
+            ],
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),
@@ -92,17 +136,6 @@ return [
                 'host' => env('PAPERTRAIL_URL'),
                 'port' => env('PAPERTRAIL_PORT'),
                 'connectionString' => 'tls://'.env('PAPERTRAIL_URL').':'.env('PAPERTRAIL_PORT'),
-            ],
-            'processors' => [PsrLogMessageProcessor::class],
-        ],
-
-        'stderr' => [
-            'driver' => 'monolog',
-            'level' => env('LOG_LEVEL', 'debug'),
-            'handler' => StreamHandler::class,
-            'formatter' => env('LOG_STDERR_FORMATTER'),
-            'with' => [
-                'stream' => 'php://stderr',
             ],
             'processors' => [PsrLogMessageProcessor::class],
         ],

@@ -10,6 +10,7 @@ use App\Domain\Billing\DTOs\CheckoutSessionData;
 use App\Domain\Billing\DTOs\PortalSessionData;
 use App\Domain\Billing\DTOs\ProviderWebhookEvent;
 use App\Domain\Billing\Exceptions\BillingProviderException;
+use App\Infrastructure\Logging\SafeLogContext;
 use Illuminate\Support\Facades\Log;
 use Stripe\BillingPortal;
 use Stripe\Checkout\Session as CheckoutSession;
@@ -213,7 +214,7 @@ final class StripeProvider implements BillingProviderInterface
         Log::warning('billing.stripe_api_error', [
             'status' => $e->getHttpStatus(),
             'type' => $e->getStripeCode(),
-            'raw_message' => $e->getMessage(),
+            'raw_message' => SafeLogContext::sanitizeProviderMessage($e->getMessage()),
         ]);
 
         $retryable = in_array($e->getHttpStatus(), [429, 500, 502, 503, 504], true);
