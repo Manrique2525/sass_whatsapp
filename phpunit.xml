@@ -16,7 +16,18 @@
         <include>
             <directory>app</directory>
         </include>
+        <exclude>
+            <directory>app/Domain/*/Exceptions</directory>
+            <directory>app/Domain/*/Enums</directory>
+        </exclude>
     </source>
+    <coverage>
+        <report>
+            <text outputFile="php://stdout" showUncoveredFiles="false"/>
+            <clover outputFile="coverage.xml"/>
+            <html outputDirectory="coverage-html"/>
+        </report>
+    </coverage>
     <php>
         <!-- Usamos <server> en lugar de <env> para que las variables de la
              plataforma de pruebas (sqlite/array/sync) SIEMPRE ganen frente a

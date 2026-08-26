@@ -74,3 +74,16 @@ EXPOSE 9000
 
 ENTRYPOINT ["entrypoint.sh"]
 CMD ["php-fpm"]
+
+# ============================================================
+# Etapa 4: coverage (dev/test only — NOT for production)
+# Adds PCOV extension for PHPUnit/Pest code coverage.
+# Use: docker compose -f docker-compose.yml -f docker-compose.coverage.yml run --rm coverage ...
+# ============================================================
+FROM runtime AS coverage
+
+RUN pecl install pcov \
+    && docker-php-ext-enable pcov \
+    && pecl clear-cache
+
+RUN echo "pcov.enabled=1" > /usr/local/etc/php/conf.d/docker-php-ext-pcov.ini

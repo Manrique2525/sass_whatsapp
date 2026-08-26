@@ -1,0 +1,37 @@
+# docker-compose.coverage.yml
+# Coverage runner — dev/test only. Uses the "coverage" build target.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.coverage.yml run --rm coverage php vendor/bin/pest --coverage
+name: whatsapp-saas
+
+services:
+  coverage:
+    build:
+      context: .
+      target: coverage
+    image: whatsapp-saas-app:coverage
+    pull_policy: build
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+    environment:
+      APP_ENV: testing
+      APP_DEBUG: "true"
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_DATABASE: whatsapp_saas
+      DB_USERNAME: saas
+      DB_PASSWORD: saas_secret
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+      BROADCAST_CONNECTION: null
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - saas

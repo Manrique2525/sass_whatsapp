@@ -1537,3 +1537,48 @@ vendor/bin/pest tests/Feature/Security/TokenExpirationRolloutTest.php
 | F28-U5-RET-04 | Audit prune respects cutoff boundary | PASS |
 | F28-U5-RET-05 | Failed jobs prune removes old records | PASS |
 | F28-U5-RET-06 | Failed jobs prune dry run does not delete | PASS |
+
+### FASE 29 U1 — Coverage Infrastructure + Critical Authorization/Billing Baseline
+
+#### Coverage Setup
+
+| Component | Tool | Config |
+|---|---|---|
+| Backend PHP coverage | PCOV | Dockerfile `coverage` build target, `docker-compose.coverage.yml` |
+| Backend config | phpunit.xml | `<coverage>` with text, clover (`coverage.xml`), html (`coverage-html/`) reporters |
+| Frontend JS/TS coverage | `@vitest/coverage-v8` | `vitest.config.ts` coverage config (v8 provider) |
+
+**Measuring backend coverage (Docker required)**:
+```bash
+docker compose -f docker-compose.yml -f docker-compose.coverage.yml build coverage
+docker compose -f docker-compose.yml -f docker-compose.coverage.yml run --rm coverage \
+  php -d memory_limit=512M vendor/bin/pest --coverage
+```
+
+**Measuring frontend coverage (host)**:
+```bash
+npx vitest run --coverage
+```
+
+#### Authorization Policy Tests (POL-01..26)
+
+| File | Tests | Coverage |
+|---|---|---|
+| `TenantUserPolicyTest.php` | POL-01..10 | viewAny/update/delete for Owner/Admin/Agent + cross-tenant |
+| `TenantPolicyTest.php` | POL-11..18 | viewAny/view/update/switch for member/non-member/suspended |
+| `TenantInvitationPolicyTest.php` | POL-19..26 | create/viewAny/delete for Owner/Admin/Agent + cross-tenant |
+
+#### Billing Service Tests (SUB-01..14, CUST-01..08)
+
+| File | Tests | Coverage |
+|---|---|---|
+| `SubscriptionServiceTest.php` | SUB-01..14 | listPlans, currentSubscription, assignPlan, changePlan, cancel + tenant isolation |
+| `BillingCustomerServiceTest.php` | CUST-01..08 | findByTenant, ensureCustomer, idempotency, provider error safety, no PII, tenant isolation |
+
+#### Test Totals After FASE 29 U1
+
+| Layer | Before | After | Delta |
+|---|---|---|---|
+| Backend (Pest) | 2344 | 2392 | +48 |
+| Frontend (Vitest) | 544 | 544 | 0 |
+| Total | 2888 | 2936 | +48 |

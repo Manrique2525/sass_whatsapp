@@ -3329,5 +3329,37 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - audit_logs y failed_jobs ya no crecen indefinidamente — 90 y 30 días respectivamente.
   - Webhook events y flow execution logs quedan sin retención (documentado, justificado).
   - Runbooks proporcionan guía de containment sin ejecutar comandos destructivos.
-  - 12 tests nuevos: AUTH-01..06 (failed login audit), RET-01..06 (retention commands).
-  - Total suite: 177 passed (BE), 544 passed (FE), 0 failures.
+   - 12 tests nuevos: AUTH-01..06 (failed login audit), RET-01..06 (retention commands).
+   - Total suite: 177 passed (BE), 544 passed (FE), 0 failures.
+
+## ADR-109 · Coverage Infrastructure + Critical Gap Baseline (FASE 29 U1)
+
+- **Estado**: Aceptado · FASE 29 U1
+- **Contexto**: FASE 26-28 establecieron observabilidad, seguridad y auditoría. El sistema tiene
+  2344 tests backend y 544 frontend, pero sin coverage tooling habilitado. El audit de FASE 29
+  reveló 3 Policies con ZERO tests directos (TenantUserPolicy, TenantPolicy, TenantInvitationPolicy),
+  SubscriptionService sin tests, BillingCustomerService sin tests, y frontend pages con solo 11%
+  de cobertura. Sin infrastructure de coverage, no hay forma medible de cerrar gaps.
+- **Decisión**:
+  1. **Backend coverage**: Dockerfile `coverage` build target con extensión PCOV. Compose override
+     `docker-compose.coverage.yml` para medición. `phpunit.xml` con reporters text/clover/html.
+     Coverage mided via `docker compose run --rm coverage php vendor/bin/pest --coverage`.
+  2. **Frontend coverage**: `@vitest/coverage-v8` (v3.2.x compatible con vitest 3.2.7). Config en
+     `vitest.config.ts` con providers, reporters (text/json/html) y paths.
+  3. **Baseline critical tests**:
+     - `TenantUserPolicyTest` (POL-01..10): viewAny/update/delete for Owner/Admin/Agent + cross-tenant.
+     - `TenantPolicyTest` (POL-11..18): viewAny/view/update/switch for member/non-member/suspended.
+     - `TenantInvitationPolicyTest` (POL-19..26): create/viewAny/delete for Owner/Admin/Agent + cross-tenant.
+     - `SubscriptionServiceTest` (SUB-01..14): listPlans, currentSubscription, assignPlan, changePlan, cancel.
+     - `BillingCustomerServiceTest` (CUST-01..08): findByTenant, ensureCustomer, idempotency, provider error safety.
+  4. **Key insight**: `BelongsToTenant` trait auto-overwrites `tenant_id` on creating event with
+     `TenantContext::id()`. Cross-tenant tests must switch TenantContext before creating records
+     for a different tenant.
+  5. **Key insight**: `TenantInvitation` has no factory (only UUID + hash creation). Tests use
+     `DB::table('tenant_invitations')->insert()` directly.
+- **Consecuencias**:
+  - Coverage tooling operativo para backend (PCOV en Docker) y frontend (v8 en host).
+  - 48 tests nuevos cierran los gaps más críticos (3 Policies + 2 Billing services).
+  - Total suite: 2392 passed (BE), 544 passed (FE), 0 failures.
+  - Baseline medible para futuras unidades de FASE 29 (U2-U5).
+  - `.gitignore` actualizado para exclude coverage artifacts del repo.
