@@ -2853,3 +2853,54 @@ COMPLETADA — pendiente commit. NO PUSH.
 
 #### ESTADO
 COMPLETADA — pendiente commit. NO PUSH.
+
+---
+
+## FASE 28 — Observabilidad
+
+### U1 — Structured Logging + Correlation IDs · COMPLETADA
+
+- JSON log channels (json stderr + json_file) con Monolog JsonFormatter.
+- RequestCorrelationId middleware: UUID v4 en X-Request-ID.
+- Monolog processors: TenantContextProcessor, RequestContextProcessor.
+- Job correlation propagation via Queue::createPayloadUsing + JobCorrelationMiddleware.
+- Provider log sanitization: SafeLogContext::sanitizeProviderMessage().
+- 27 tests: LOG-01..20, REQ-01..09, PII-01..05.
+- Commit: fa93e17.
+
+### U2 — Backend Sentry Error Tracking · COMPLETADA
+
+- config/sentry.php: privacy-safe defaults (no PII, no bodies, no tracing).
+- SentryEventScrubber (before_send): strips headers, query params, bodies, PII regex.
+- SentryScopeMiddleware: request_id + tenant_id as Sentry tags.
+- SentryQueueFailureServiceProvider: captures job exhaustions with context.
+- ignore_exceptions: 4xx business exceptions (Validation, Auth, NotFound, Billing).
+- 20 tests: SCRUB-01..12, QUEUE-01..06, FAIL-01..02.
+- Commit: 53b557d.
+
+### U3 — Frontend Sentry Error Tracking · COMPLETADA
+
+- @sentry/vue@10.71.0 installed, DSN-gated init (VITE_SENTRY_DSN).
+- resources/js/sentry.ts: initSentry(app) + scrubEvent (beforeSend).
+- Privacy scrubber: URLs, headers, request data, user, PII regex, fail-safe.
+- Auto-included integrations: vue, globalHandlers, breadcrumbs, dedupe, inboundFilters.
+- NO tracing, NO replay (bundle size unchanged: 777→1120 modules, same chunk sizes).
+- CSP: SecurityHeaders adds Sentry ingest host to connect-src (conditional).
+- vite-env.d.ts: VITE_SENTRY_DSN, VITE_SENTRY_ENVIRONMENT, VITE_SENTRY_RELEASE.
+- .env.example: VITE_SENTRY_* vars documented.
+- ADR-106 written.
+- 15 tests: 12 frontend scrubber (vitest) + 3 CSP (Pest).
+- Quality: vue-tsc PASS, build PASS, PHPStan 0 errors, Pint PASS, 544 FE + 139 BE tests PASS.
+
+### U4 — Health Checks + Queue Monitoring · PENDIENTE
+
+- Health check endpoint improvements.
+- Queue monitoring and alerting.
+- Analytics queue mismatch fix (worker listens 'default' but jobs dispatched to 'analytics').
+
+### U5 — Alerting + Operational Docs + Closure · PENDIENTE
+
+- Sentry alert rules (Slack/email).
+- Runbooks for common failure scenarios.
+- Retention policies.
+- Final closure and documentation.

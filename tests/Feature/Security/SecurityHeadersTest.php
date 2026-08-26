@@ -110,3 +110,35 @@ it('F27-U1-HDR-13: Security headers present on WhatsApp webhook verify', functio
     $response->assertHeader('X-Content-Type-Options', 'nosniff');
     $response->assertHeader('X-Frame-Options', 'DENY');
 });
+
+it('F28-U3-CSP-01: CSP connect-src includes Sentry domain when DSN configured', function (): void {
+    config(['sentry.dsn' => 'https://abc123@o123456.ingest.sentry.io/789']);
+
+    $response = $this->get('/health');
+
+    $csp = $response->headers->get('Content-Security-Policy');
+
+    expect($csp)->toContain("connect-src 'self' ws: wss: https://o123456.ingest.sentry.io");
+});
+
+it('F28-U3-CSP-02: CSP connect-src has no Sentry when DSN empty', function (): void {
+    config(['sentry.dsn' => '']);
+
+    $response = $this->get('/health');
+
+    $csp = $response->headers->get('Content-Security-Policy');
+
+    expect($csp)->toContain("connect-src 'self' ws: wss:")
+        ->and($csp)->not->toContain('sentry');
+});
+
+it('F28-U3-CSP-03: CSP connect-src has no Sentry when DSN null', function (): void {
+    config(['sentry.dsn' => null]);
+
+    $response = $this->get('/health');
+
+    $csp = $response->headers->get('Content-Security-Policy');
+
+    expect($csp)->toContain("connect-src 'self' ws: wss:")
+        ->and($csp)->not->toContain('sentry');
+});

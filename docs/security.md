@@ -388,6 +388,27 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
   - `ignore_exceptions` para 4xx esperados (Validation, Auth, NotFound, Billing quotas).
   - Tracing deshabilitado por defecto (opt-in via `SENTRY_TRACES_SAMPLE_RATE`).
 
+### Frontend Sentry Error Tracking (FASE 28 U3, ADR-106)
+
+- **@sentry/vue@10.71.0** con DSN-gated init: solo se inicializa si `VITE_SENTRY_DSN` está
+  definido. Sin DSN = 0 bytes transferidos, 0 overhead.
+- **Privacy scrubber** (`beforeSend` callback en `resources/js/sentry.ts`):
+  - URLs: query params sensibles (token, code, secret, key, invite) → eliminados.
+  - Headers: Authorization, Cookie, Set-Cookie, CSRF → eliminados.
+  - Request data (form bodies) → eliminado completamente.
+  - User: solo `id` se preserva; email/ip_address eliminados.
+  - PII regex: emails → [EMAIL], phones → [PHONE], API keys → [REDACTED].
+  - Fail-safe: catch interno nunca rompe el scrubber.
+- **Integrations auto-incluidas** (sin configuración): vueIntegration (errorHandler),
+  globalHandlersIntegration (unhandledrejection, onerror), breadcrumbsIntegration (fetch, console),
+  dedupeIntegration, inboundFiltersIntegration.
+- **Integrations NO incluidas** (deshabilitadas): browserTracingIntegration, replayIntegration.
+- **ignoreErrors**: ResizeObserver loop, AbortError, CanceledError, Non-Error promise rejection.
+- **CSP**: `SecurityHeaders` agrega host de `SENTRY_LARAVEL_DSN` a `connect-src` condicionalmente.
+  Sin DSN = CSP sin cambios.
+- **No duplicate reporting**: Sin handler manual (window.onerror, errorHandler). Sentry configura
+  automáticamente vía vueIntegration + globalHandlersIntegration. Sin axios interceptor global.
+
 ### Motor de flujos (FASE 11, ADR-034..039)
 - **Validación backend-first**: `FlowValidator` valida el grafo ANTES de publicar (un solo
   `is_start`, grafo conexo, `end` alcanzable, config de nodo por tipo). El frontend es

@@ -3175,7 +3175,7 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
 
 - **U1** (COMPLETADA): Structured Logging + Correlation IDs
 - **U2** (COMPLETADA): Backend Sentry — privacy-safe error tracking
-- **U3** (PENDIENTE): Frontend Sentry — `@sentry/vue` + error tracking + breadcrumbs
+- **U3** (COMPLETADA): Frontend Sentry — `@sentry/vue` + error tracking + privacy scrubber
 - **U4** (PENDIENTE): Health Checks + Queue Monitoring — endpoint salud, alertas cola fallida,
   analytics queue mismatch fix
 - **U5** (PENDIENTE): Alerting + Operational Docs + Closure — runbooks, escalation, retention
@@ -3212,3 +3212,52 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - `SentryEventScrubber` reutiliza deny-lists similares a `SafeLogContext` (U1) pero para el
     payload Sentry (no para logs Monolog).
   - 20 tests nuevos: SCRUB-01..12, QUEUE-01..06, FAIL-01..02.
+
+## ADR-106 · Privacy-Safe Frontend Error Tracking with Sentry Vue (FASE 28 U3)
+
+- **Estado**: Aceptado · FASE 28 U3
+- **Contexto**: El frontend (Vue 3 + Inertia) no tiene ningún error handler global. Los errores
+  de JavaScript, promise rejections y errores de window se pierden silenciosamente. No existe
+  observabilidad sobre errores que ocurren en el navegador del usuario. Sentry ofrece error
+  tracking para frontend pero su configuración por defecto captura PII, cookies, tokens de auth
+  y contenido de formularios.
+- **Decisión**:
+  1. **@sentry/vue@10.71.0**: Instalado como dependency. `Sentry.init()` incluye auto-detected:
+     `vueIntegration` (app.config.errorHandler), `globalHandlersIntegration` (unhandledrejection,
+     onerror), `breadcrumbsIntegration` (fetch, console, DOM), `dedupeIntegration`,
+     `inboundFiltersIntegration`. NO incluye: `browserTracingIntegration`, `replayIntegration`.
+     Tracing y replay deshabilitados (sin tracesSampleRate, sin replayIntegration).
+  2. **DSN-gated init**: `resources/js/sentry.ts` — `initSentry(app)` solo inicializa si
+     `VITE_SENTRY_DSN` está definido y no vacío. Si no existe, Sentry no se carga (0 bytes
+     transferidos, 0 overhead). Fail-safe: try/catch alrededor de `Sentry.init()` — nunca bloquea
+     `app.mount()`.
+  3. **Privacy scrubber** (`scrubEvent` via `beforeSend`):
+     - Request: URLs con query params sensibles (token, code, secret, key, etc.) → eliminados.
+     - Headers: Authorization, Cookie, Set-Cookie, X-CSRF-TOKEN, X-XSRF-TOKEN → eliminados.
+     - Request data (form bodies) → eliminado completamente.
+     - User: solo `id` se preserva; email, ip_address → eliminados.
+     - Extra/contexts: scrubbing recursivo de PII regex (emails → [EMAIL], phones → [PHONE],
+       API keys → [REDACTED]).
+     - Message: PII regex aplicada a message strings.
+     - Fail-safe: catch interno nunca rompe el scrubber.
+  4. **No duplicate reporting**: No hay global error handler manual (`window.onerror`,
+     `app.config.errorHandler`). Sentry lo configura automáticamente via `vueIntegration` y
+     `globalHandlersIntegration`. No hay axios interceptor de errores (cada `.catch()` inline
+     propagará al handler global de Sentry si no se maneja).
+  5. **CSP compatibility**: `SecurityHeaders` middleware extrae el host del `SENTRY_LARAVEL_DSN`
+     y lo agrega a `connect-src` (condicional). Si no hay DSN, CSP permanece sin cambios.
+  6. **Env vars**: `VITE_SENTRY_DSN`, `VITE_SENTRY_ENVIRONMENT`, `VITE_SENTRY_RELEASE` en
+     `.env.example` y `vite-env.d.ts`.
+- **Consecuencias**:
+  - Sentry se inicializa condicionalmente: sin DSN = 0 bytes transferidos, 0 overhead. Con DSN
+    = error tracking completo sin PII leakage.
+  - El scrubber frontend está alineado con el scrubber backend (U2, ADR-105): misma deny-list,
+    mismos patrones PII, misma filosofía fail-safe. Diferencia: el frontend no tiene acceso a
+    `TenantContext` (no hace API call para tenant_id).
+  - CSP dinámico evita problemas de `connect-src` cuando Sentry no está configurado. El host se
+    extrae del DSN del backend (config server-side), no del frontend.
+  - `ignoreErrors` lista errores de browser conocidos (ResizeObserver, AbortError) que no son
+    errores reales de la aplicación.
+  - No se agregan dependencias de tracing/replay → bundle size no aumenta significativamente.
+    Package tree-shaken eficientemente (777 → 1120 modules; bundle sizes idénticas).
+  - 12 tests frontend (scrubber PII) + 3 tests backend (CSP Sentry domain) = 15 tests nuevos.

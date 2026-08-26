@@ -1458,3 +1458,28 @@ vendor/bin/pest tests/Feature/Security/TokenExpirationRolloutTest.php
 | QUEUE-06 | ignore_exceptions includes business exceptions | PASS |
 | FAIL-01 | Scrubber returns event (fail-open) | PASS |
 | FAIL-02 | Scrubber survives invalid request data | PASS |
+
+#### Frontend Sentry Scrubber (`resources/js/sentry.test.ts`, 12 tests)
+
+| Test | Description | Status |
+|---|---|---|
+| F28-U3-SCRUB-01 | Email removed from extra | PASS |
+| F28-U3-SCRUB-02 | Phone removed from extra | PASS |
+| F28-U3-SCRUB-03 | Token query param removed from URL | PASS |
+| F28-U3-SCRUB-04 | Authorization header removed | PASS |
+| F28-U3-SCRUB-05 | Request data removed | PASS |
+| F28-U3-SCRUB-06 | Message content scrubbed | PASS |
+| F28-U3-SCRUB-07 | Stack trace preserved (message field) | PASS |
+| F28-U3-SCRUB-08 | Malformed event does not throw | PASS |
+| F28-U3-SCRUB-09 | API key scrubbed from extra | PASS |
+| F28-U3-SCRUB-10 | User keeps only id | PASS |
+| F28-U3-SCRUB-11 | Nested context values scrubbed | PASS |
+| F28-U3-SCRUB-12 | CSRF token header removed | PASS |
+
+#### CSP Sentry Domain (`tests/Feature/Security/SecurityHeadersTest.php`, 3 new tests)
+
+| Test | Description | Status |
+|---|---|---|
+| F28-U3-CSP-01 | CSP connect-src includes Sentry domain when DSN configured | PASS |
+| F28-U3-CSP-02 | CSP connect-src has no Sentry when DSN empty | PASS |
+| F28-U3-CSP-03 | CSP connect-src has no Sentry when DSN null | PASS |

@@ -27,7 +27,7 @@ final class SecurityHeaders
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: blob:",
             "font-src 'self'",
-            "connect-src 'self' ws: wss:",
+            "connect-src 'self' ws: wss:".self::sentryConnectSrc(),
             "frame-ancestors 'none'",
             "base-uri 'self'",
             "form-action 'self'",
@@ -41,5 +41,26 @@ final class SecurityHeaders
         }
 
         return $response;
+    }
+
+    /**
+     * Extract the Sentry ingest host from the DSN for CSP connect-src.
+     * Returns empty string when no DSN is configured.
+     */
+    private static function sentryConnectSrc(): string
+    {
+        $dsn = config('sentry.dsn');
+
+        if (! is_string($dsn) || $dsn === '') {
+            return '';
+        }
+
+        $host = parse_url($dsn, PHP_URL_HOST);
+
+        if (! is_string($host) || $host === '') {
+            return '';
+        }
+
+        return " https://{$host}";
     }
 }
