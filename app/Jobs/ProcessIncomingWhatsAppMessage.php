@@ -47,6 +47,8 @@ final class ProcessIncomingWhatsAppMessage implements ShouldQueue
     use SerializesModels;
     use TenantAwareJob;
 
+    public int $timeout = 60;
+
     public int $tries = 3;
 
     /**

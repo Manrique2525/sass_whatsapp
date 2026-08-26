@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 AUDIT COMPLETADA · FASE 26 U1 COMPLETADA · FASE 26 U2 COMPLETADA · FASE 26 U3-U4 PENDIENTE**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 AUDIT COMPLETADA · FASE 26 U1 COMPLETADA · FASE 26 U2 COMPLETADA · FASE 26 U3 COMPLETADA · FASE 26 U4 PENDIENTE**.
 
 ## Fases
 
@@ -2759,6 +2759,96 @@ Auditoría de 71 secciones completada. Hallazgos clasificados:
 #### Pendientes (U2-U4)
 - **U2**: Billing atomicity + UsageGuard commit atomic (P1-1..P1-4).
 - **U3**: ProcessWhatsAppStatusUpdate job hardening (P1-5).
+- **U4**: Frontend security hardening (P2 audit-only items).
+
+#### ESTADO
+COMPLETADA — pendiente commit. NO PUSH.
+
+### U3 — WhatsApp Job Hardening (COMPLETADA)
+
+#### Contexto
+- **P1-5**: `ProcessWhatsAppStatusUpdate` no implementa `failed()`. Cuando los 3 reintentos
+  se agotan, el `WebhookEvent` queda en `enqueued` indefinidamente — sin cleanup, sin audit
+  trail. El sweeper no puede ayudar porque `enqueued` ≠ `received`.
+- **P2-2**: `ProcessIncomingWhatsAppMessage` no declara `$timeout` explícito. Depende del
+  default de Laravel (60s), invisible en code review y no documentado.
+
+#### Root Cause Analysis
+- P1-5: El job delega la lógica en `executeInTenantContext()` que maneja errores conocidos
+  (tipo no soportado, quota de contacts, subscription no activa) y los marca `failed` en
+  el evento. Pero errores desconocidos (DB down, timeout, exception inesperada) propagan
+  la excepción a la cola → `failed_jobs` table → el WebhookEvent queda `enqueued` forever.
+- P2-2: Sin `$timeout` explícito, el job usa 60s (Laravel default). Aceptable vs
+  `retry_after=90` pero no visible ni documentado.
+
+#### Cambios implementados
+1. **ProcessWhatsAppStatusUpdate.php**:
+   - Agregado `use Throwable;`
+   - Agregado `public int $timeout = 60;` (explícito)
+   - Agregado `failed(?Throwable $exception): void` — marca evento `failed` con
+     `error_code = 'job_exhausted'` si el evento sigue `enqueued`. Idempotente:
+     no-op si evento es null, ya processed, o ya failed.
+2. **ProcessIncomingWhatsAppMessage.php**:
+   - Agregado `public int $timeout = 60;` (explícito, match SendWhatsAppMessage +
+     ContinueFlowExecution, safe vs retry_after=90)
+
+#### Análisis de timeout/retry_after
+- Queue config: `retry_after = 90` (todas las conexiones).
+- Worker command: `queue:work --sleep=1 --tries=3 --max-time=3600`.
+- `$timeout = 60` < `retry_after = 90` → seguro (no re-release premature).
+- Patrón consistente: `SendWhatsAppMessage($timeout=60)`, `ContinueFlowExecution($timeout=60)`.
+
+#### Análisis de ShouldBeUnique
+- `ProcessWhatsAppStatusUpdate`: No `ShouldBeUnique` — correcto: cada evento es único
+  por UUID, la dedup real es `INSERT ... ON CONFLICT DO NOTHING` en `WebhookEvent`.
+- `ProcessIncomingWhatsAppMessage`: No `ShouldBeUnique` — correcto: misma dedup vía
+  `WebhookEvent.provider_event_id` UNIQUE.
+
+#### Tests (15 nuevos: F26-U3-STAT-01..08, LIFECYCLE-01, ORDER-01, IN-01..02, QUOTA-01)
+- **F26-U3-STAT-01**: ProcessWhatsAppStatusUpdate timeout = 60.
+- **F26-U3-STAT-02**: ProcessWhatsAppStatusUpdate tries = 3.
+- **F26-U3-STAT-03**: ProcessWhatsAppStatusUpdate backoff = [5, 15, 60].
+- **F26-U3-STAT-04**: ProcessWhatsAppStatusUpdate implements failed().
+- **F26-U3-STAT-05**: failed() marks Enqueued event as failed (job_exhausted).
+- **F26-U3-STAT-06**: failed() idempotent for Processed event (no-op).
+- **F26-U3-STAT-07**: failed() idempotent for Failed event (no-op).
+- **F26-U3-STAT-08**: failed() handles null event gracefully.
+- **F26-U3-LIFECYCLE-01**: Full lifecycle — failed() after exhaustion marks event.
+- **F26-U3-ORDER-01**: Status ordering — delivered then read preserves correct state.
+- **F26-U3-IN-01**: ProcessIncomingWhatsAppMessage timeout = 60.
+- **F26-U3-IN-01b**: ProcessIncomingWhatsAppMessage tries = 3.
+- **F26-U3-IN-01c**: ProcessIncomingWhatsAppMessage backoff = [5, 15, 60].
+- **F26-U3-IN-02**: Inbound processing regression — basic inbound still works.
+- **F26-U3-QUOTA-01**: Contact quota exceeded marks inbound event as failed.
+
+#### Quality Gates
+- Backend: **15/15 PASS** (34 assertions).
+- PHPStan: **0 errors**.
+- Pint: **PASS** (774 files).
+- Frontend build: **PASS**.
+- Frontend typecheck: **PASS**.
+
+#### Archivos modificados
+- `app/Jobs/ProcessWhatsAppStatusUpdate.php` — +failed(), +timeout, +Throwable import.
+- `app/Jobs/ProcessIncomingWhatsAppMessage.php` — +timeout.
+- `tests/Feature/Jobs/WhatsAppJobHardeningTest.php` — NEW: 15 tests.
+
+#### Scope Check
+- Solo archivos autorizados modificados.
+- NO se modificó: FlowWebhookController, provider error sanitization, Docker, Sentry,
+  TrustProxies/HSTS, billing changes, crc32, README rewrite.
+- NO se ejecutó migración en producción.
+- NO se hizo push.
+
+#### SEGURIDAD
+- `failed()` NO expone la excepción al usuario ni al webhook.
+- Error code `job_exhausted` es genérico (sin PII, sin stack trace).
+- Idempotencia preservada: evento ya processed/failed no se re-falla.
+- Tenant context: `failed()` se ejecuta DESPUÉS del `finally` block de `TenantAwareJob`
+  (contexto limpio). WebhookEvent no tiene `BelongsToTenant` global scope → query segura
+  sin TenantContext.
+
+#### Pendientes (U4)
 - **U4**: Frontend security hardening (P2 audit-only items).
 
 #### ESTADO

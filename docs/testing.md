@@ -738,6 +738,38 @@ Ejecución SQLite:
 vendor/bin/pest --filter="UsageGuardEdgeCaseTest"
 ```
 
+### WhatsApp Job Hardening (FASE 26 U3, 15 tests en `tests/Feature/Jobs/WhatsAppJobHardeningTest.php`)
+
+#### ProcessWhatsAppStatusUpdate — failed() + Timeout (F26-U3-STAT-01..08, LIFECYCLE-01, ORDER-01)
+
+| Test | Description | Status |
+|---|---|---|
+| F26-U3-STAT-01 | ProcessWhatsAppStatusUpdate has explicit timeout = 60 | PASS |
+| F26-U3-STAT-02 | ProcessWhatsAppStatusUpdate has tries = 3 | PASS |
+| F26-U3-STAT-03 | ProcessWhatsAppStatusUpdate has backoff [5, 15, 60] | PASS |
+| F26-U3-STAT-04 | ProcessWhatsAppStatusUpdate implements failed() method | PASS |
+| F26-U3-STAT-05 | failed() marks Enqueued event as failed with job_exhausted | PASS |
+| F26-U3-STAT-06 | failed() is idempotent for already Processed event | PASS |
+| F26-U3-STAT-07 | failed() is idempotent for already Failed event | PASS |
+| F26-U3-STAT-08 | failed() handles null event gracefully | PASS |
+| F26-U3-LIFECYCLE-01 | Full failed lifecycle marks event as job_exhausted | PASS |
+| F26-U3-ORDER-01 | Status ordering — delivered then read preserves correct state | PASS |
+
+#### ProcessIncomingWhatsAppMessage — Explicit Timeout (F26-U3-IN-01..02, QUOTA-01)
+
+| Test | Description | Status |
+|---|---|---|
+| F26-U3-IN-01 | ProcessIncomingWhatsAppMessage has explicit timeout = 60 | PASS |
+| F26-U3-IN-01b | ProcessIncomingWhatsAppMessage has tries = 3 | PASS |
+| F26-U3-IN-01c | ProcessIncomingWhatsAppMessage has backoff [5, 15, 60] | PASS |
+| F26-U3-IN-02 | Inbound processing regression — basic inbound still works | PASS |
+| F26-U3-QUOTA-01 | Contact quota exceeded marks inbound event as failed | PASS |
+
+#### Ejecución
+```bash
+vendor/bin/pest --filter="F26-U3"
+```
+
 ## 5. Comandos
 
 ```bash

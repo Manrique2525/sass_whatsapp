@@ -14,6 +14,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Throwable;
 
 /**
  * Procesa un status update (sent/delivered/read/failed) de Meta (FASE 6 + FASE 9).
@@ -29,6 +30,8 @@ final class ProcessWhatsAppStatusUpdate implements ShouldQueue
     use InteractsWithQueue;
     use SerializesModels;
     use TenantAwareJob;
+
+    public int $timeout = 60;
 
     public int $tries = 3;
 
@@ -73,5 +76,16 @@ final class ProcessWhatsAppStatusUpdate implements ShouldQueue
         }
 
         $event->markProcessed();
+    }
+
+    public function failed(?Throwable $exception): void
+    {
+        $event = WebhookEvent::query()->find($this->webhookEventId);
+
+        if ($event === null || $event->status !== WebhookEventStatus::Enqueued) {
+            return;
+        }
+
+        $event->markFailed('job_exhausted');
     }
 }

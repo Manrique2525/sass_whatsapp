@@ -2994,3 +2994,31 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
     procesos PHP independientes.
   - 15 tests de edge-case SQLite (UA-EDGE-01..15) verifican lifecycle completo.
   - No regressions: 2141 tests backend + 532 Vitest + PHPStan 0 errors.
+
+## ADR-100 · WhatsApp Job Hardening — failed() and Explicit Timeout (FASE 26 U3)
+
+- **Estado**: ACEPTADO · FASE 26 U3 COMPLETADA
+- **Contexto**: Auditoría de FASE 26 detectó P1-5 (`ProcessWhatsAppStatusUpdate` sin
+  `failed()`) y P2-2 (`ProcessIncomingWhatsAppMessage` sin `$timeout` explícito).
+  P1-5: cuando los3 reintentos del job se agotan, el `WebhookEvent` queda en `enqueued`
+  indefinidamente — sin cleanup, sin audit trail. El sweeper no puede ayudar porque
+  `enqueued` ≠ `received`. P2-2: sin `$timeout` explícito, el job depende del default
+  de Laravel (60s), invisible en code review.
+- **Decisión**:
+  1. **ProcessWhatsAppStatusUpdate.failed()**: marca `WebhookEvent` como `failed` con
+     `error_code = 'job_exhausted'` si el evento sigue en estado `Enqueued`. Idempotente:
+     no-op si evento es null, ya `processed`, o ya `failed`. No necesita TenantContext
+     porque WebhookEvent no tiene `BelongsToTenant` global scope.
+  2. **ProcessWhatsAppStatusUpdate.timeout**: `public int $timeout = 60;` explícito.
+     Consistente con `SendWhatsAppMessage` y `ContinueFlowExecution`. Safe vs
+     `retry_after=90` (timeout < retry_after evita re-release premature).
+  3. **ProcessIncomingWhatsAppMessage.timeout**: `public int $timeout = 60;` explícito.
+     Mismo patrón, safe vs retry_after.
+  4. **No ShouldBeUnique** en ambos jobs: la dedup real es `WebhookEvent.provider_event_id`
+     UNIQUE (INSERT ON CONFLICT DO NOTHING). No se agregó sin justificación.
+- **Consecuencias**:
+  - WebhookEvents en estado `enqueued` ahora se limpian tras agotar reintentos.
+  - Error code `job_exhausted` es genérico (sin PII, sin stack trace).
+  - Timeout explícito: visible, auditable, consistente con otros jobs de WhatsApp.
+  - 15 tests (F26-U3-STAT-01..08, LIFECYCLE-01, ORDER-01, IN-01..02, QUOTA-01).
+  - No regressions: PHPStan 0 errors, Pint PASS, frontend build+typecheck PASS.
