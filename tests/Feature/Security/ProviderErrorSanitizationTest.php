@@ -108,15 +108,13 @@ test('ERR-02: Meta API error no expone raw Meta message', function (): void {
 // ---------------------------------------------------------------------------
 
 test('ERR-03: Meta API auth error no expone token detail', function (): void {
-    Http::fake([
-        'graph.facebook.com/v26.0/phone-1' => Http::response([
-            'error' => [
-                'message' => 'Error validating access token: Session expired for user 123456',
-                'type' => 'OAuthException',
-                'code' => 190,
-            ],
-        ], 401),
-    ]);
+    Http::fake(fn () => Http::response([
+        'error' => [
+            'message' => 'Error validating access token: Session expired for user 123456',
+            'type' => 'OAuthException',
+            'code' => 190,
+        ],
+    ], 401));
 
     Log::shouldReceive('warning')->once()->with('whatsapp.meta_api_error', Mockery::type('array'));
 
