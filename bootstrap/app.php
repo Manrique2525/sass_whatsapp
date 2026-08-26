@@ -18,6 +18,8 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
+use Symfony\Component\HttpKernel\Exception\HttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -47,6 +49,47 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
+        $exceptions->render(function (NotFoundHttpException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json([
+                    'message' => 'El recurso solicitado no existe.',
+                    'code' => 'NOT_FOUND',
+                    'errors' => new stdClass,
+                ], 404);
+            }
+        });
+
+        $exceptions->render(function (TooManyRequestsHttpException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json([
+                    'message' => $e->getMessage(),
+                    'code' => 'RATE_LIMITED',
+                    'errors' => new stdClass,
+                ], 429);
+            }
+        });
+
+        $exceptions->render(function (HttpException $e, Request $request) {
+            if ($request->is('api/*')) {
+                $code = match ($e->getStatusCode()) {
+                    403 => 'FORBIDDEN',
+                    419 => 'SESSION_EXPIRED',
+                    default => 'HTTP_ERROR',
+                };
+                $message = match ($e->getStatusCode()) {
+                    403 => 'No tienes permiso para realizar esta acción.',
+                    419 => 'La sesión ha expirado.',
+                    default => 'Error de solicitud.',
+                };
+
+                return response()->json([
+                    'message' => $message,
+                    'code' => $code,
+                    'errors' => new stdClass,
+                ], $e->getStatusCode());
+            }
+        });
+
         $exceptions->render(function (ValidationException $e, Request $request) {
             if ($request->is('api/*')) {
                 return response()->json([
@@ -136,6 +179,18 @@ return Application::configure(basePath: dirname(__DIR__))
                     'code' => 'BILLING_PROVIDER_ERROR',
                     'errors' => new stdClass,
                 ], 502);
+            }
+        });
+
+        $exceptions->render(function (Throwable $e, Request $request) {
+            if ($request->is('api/*')) {
+                report($e);
+
+                return response()->json([
+                    'message' => 'Ocurrió un error interno del servidor.',
+                    'code' => 'SERVER_ERROR',
+                    'errors' => new stdClass,
+                ], 500);
             }
         });
     })->create();

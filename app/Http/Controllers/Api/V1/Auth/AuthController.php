@@ -14,6 +14,7 @@ use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Http\Resources\TenantResource;
 use App\Http\Resources\UserResource;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -35,11 +36,18 @@ final class AuthController extends Controller
 
         $user->sendEmailVerificationNotification();
 
-        $token = $user->createToken('api')->plainTextToken;
+        $tokenInstance = $user->createToken('api');
+        $token = $tokenInstance->plainTextToken;
+        $expiresAt = $tokenInstance->accessToken->expires_at;
 
         return response()->json([
             'message' => 'Usuario registrado.',
             'token' => $token,
+            'token_type' => 'Bearer',
+            'expires_at' => $expiresAt?->toISOString(),
+            'expires_in' => $expiresAt !== null
+                ? (int) Carbon::now()->diffInSeconds($expiresAt, false)
+                : null,
             'user' => new UserResource($user),
         ], 201);
     }
@@ -63,11 +71,18 @@ final class AuthController extends Controller
             actorUserId: $user->id,
         );
 
-        $token = $user->createToken('api')->plainTextToken;
+        $tokenInstance = $user->createToken('api');
+        $token = $tokenInstance->plainTextToken;
+        $expiresAt = $tokenInstance->accessToken->expires_at;
 
         return response()->json([
             'message' => 'Sesión iniciada.',
             'token' => $token,
+            'token_type' => 'Bearer',
+            'expires_at' => $expiresAt?->toISOString(),
+            'expires_in' => $expiresAt !== null
+                ? (int) Carbon::now()->diffInSeconds($expiresAt, false)
+                : null,
             'user' => new UserResource($user),
         ]);
     }

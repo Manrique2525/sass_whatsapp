@@ -3101,4 +3101,35 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Sesiones en producción usarán cifrado y cookies seguras. Desarrollo local no se afecta.
   - TrustProxies y Sanctum token expiry quedan pendientes para U2.
   - 13 tests headers + 6 tests CORS + 7 tests session = 26 tests nuevos.
-  - Total suite: 2,215 passed, 0 failed, 14 skipped, 6,561 assertions.
+   - Total suite: 2,215 passed, 0 failed, 14 skipped, 6,561 assertions.
+
+## ADR-103 · Token Expiration + Trusted Proxy + API Error Policy
+
+- **Estado**: ACEPTADO · FASE 27 U2
+- **Contexto**: FASE 27 U1 añadió headers de seguridad, CORS y session hardening. Pendientes:
+  1) Sanctum tokens sin expiración — tokens comprometidos se usan indefinidamente.
+  2) Sin TrustProxies — detrás de un LB, `secure()` y `ip()` retornan valores incorrectos.
+  3) Excepciones no controladas (403, 404, 419, 500) sin formato estructurado para la API.
+- **Opciones**:
+  - A) Global expiry + config TRUSTED_PROXIES + exception renderers para 403/404/419/500.
+  - B) Per-token expiry explícito + IP whitelisting hardcoded + error middleware.
+  - C) No hacer nada (tokens infinitos, proxies no confiables, errores inconsistentes).
+- **Decisión**: A.
+  1. **Token expiry**: `SANCTUM_TOKEN_EXPIRATION` env-driven, default 1440 (24h). Config en
+     `config/sanctum.php`. Login/ Register retornan `expires_at`/`expires_in` sin romper contract.
+     Tokens existentes sin `expires_at` en DB siguen válidos (compatibilidad).
+  2. **TrustProxies**: `config/trustedproxy.php` con env `TRUSTED_PROXIES` (null por defecto).
+     TrustProxies middleware ya está en global stack de Laravel 12; lee config a nivel de request.
+     No se usa `'*'` por defecto; documentado para uso detrás de LB conocido.
+  3. **Structured errors**: Exception renderers en `bootstrap/app.php` para `NotFoundHttpException`,
+     `HttpException` (403/419), `TooManyRequestsHttpException` (429) y `\Throwable` catch-all (500).
+     Solo aplican a `$request->is('api/*')`. Reporting intacto. APP_DEBUG no afecta contract.
+- **Consecuencias**:
+  - Tokens se invalidan después de 24h por defecto; clientes móviles/integraciones necesitan
+    refresh flow o re-login. Configurable a null para rollout gradual.
+  - Detrás de LB, `$request->ip()` y `$request->secure()` retornan valores correctos cuando se
+    configura `TRUSTED_PROXIES`. Sin config, headers se ignoran (fail-safe).
+  - API tiene formato de error consistente para todos los HTTP codes comunes. Frontend puede
+    manejar `code` field de forma unificada.
+  - 28 tests nuevos: TOK-01..10, PROXY-01..08, ERR-01..10.
+  - Total suite: 2,243 passed, 0 failed, 14 skipped, 6,656 assertions.

@@ -1315,4 +1315,50 @@ Reduced from **13 errors to 0**:
 vendor/bin/pest tests/Feature/Security/SecurityHeadersTest.php
 vendor/bin/pest tests/Feature/Security/CorsConfigTest.php
 vendor/bin/pest tests/Feature/Security/SessionConfigTest.php
+vendor/bin/pest tests/Feature/Security/TokenExpirationTest.php
+vendor/bin/pest tests/Feature/Security/TrustProxiesTest.php
+vendor/bin/pest tests/Feature/Security/StructuredErrorTest.php
 ```
+
+#### Token Expiration (`tests/Feature/Security/TokenExpirationTest.php`, 10 tests)
+
+| Test | Description | Status |
+|---|---|---|
+| TOK-01 | Token valid before expiration | PASS |
+| TOK-02 | Token rejected after expiration | PASS |
+| TOK-03 | Expired token returns 401 | PASS |
+| TOK-04 | Expired token does not leak reason/details | PASS |
+| TOK-05 | Valid token still works when not expired | PASS |
+| TOK-06 | Logout still revokes token | PASS |
+| TOK-07 | Tenant context unchanged with token expiration | PASS |
+| TOK-08 | Expiration config readable and configurable | PASS |
+| TOK-09 | Register response includes token metadata | PASS |
+| TOK-10 | Login response includes token metadata | PASS |
+
+#### TrustProxies (`tests/Feature/Security/TrustProxiesTest.php`, 8 tests)
+
+| Test | Description | Status |
+|---|---|---|
+| PROXY-01 | Untrusted forwarded-for header is ignored | PASS |
+| PROXY-02 | Trusted proxy forwarded-for is honored | PASS |
+| PROXY-03 | Forwarded-proto=https secure when proxy trusted | PASS |
+| PROXY-04 | Forwarded-proto ignored when proxy untrusted | PASS |
+| PROXY-05 | HSTS present under trusted HTTPS proxy in production | PASS |
+| PROXY-06 | Spoofed forwarded-for does not affect rate limit key | PASS |
+| PROXY-07 | trustedproxy config file exists and loadable | PASS |
+| PROXY-08 | trustedproxy proxies is env-driven | PASS |
+
+#### Structured Errors (`tests/Feature/Security/StructuredErrorTest.php`, 10 tests)
+
+| Test | Description | Status |
+|---|---|---|
+| ERR-01 | API 401 safe structured response | PASS |
+| ERR-02 | API 403 safe structured response | PASS |
+| ERR-03 | API 404 safe structured response | PASS |
+| ERR-04 | API 422 validation response unchanged | PASS |
+| ERR-05 | Rate limit 429 safe structured response | PASS |
+| ERR-06 | Valid authenticated request works after U2 | PASS |
+| ERR-07 | Invalid login returns 422 not 500 | PASS |
+| ERR-08 | APP_DEBUG true does not leak internals | PASS |
+| ERR-09 | 404 uses structured format not HTML | PASS |
+| ERR-10 | Web requests return HTML not forced JSON | PASS |

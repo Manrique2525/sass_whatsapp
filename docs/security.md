@@ -762,8 +762,48 @@ Alineado a OWASP Top 10. Cada fase incluye controles de seguridad + tests.
 - Desarrollo local mantiene `SESSION_ENCRYPT=false` para compatibilidad.
 - `SESSION_SECURE_COOKIE` no se setea en `.env` local (HTTP) — production deployment lo configura.
 
-### Pendiente (FASE 27 U2)
+### Pendiente (FASE 27 U3)
 
-- Sanctum token expiry (configurable, nunca expira actualmente).
-- TrustProxies middleware para load balancer.
-- Verificación de error response structure en producción.
+- Documentación final + cierre de FASE 27.
+
+### Sanctum Token Expiration (FASE 27 U2)
+
+- **Config**: `config/sanctum.php` — `'expiration' => (int) env('SANCTUM_TOKEN_EXPIRATION', 1440)`.
+- **Default**: 1440 minutos (24 horas). Configurable vía `SANCTUM_TOKEN_EXPIRATION` en `.env`.
+- **Behavior**: Sanctum valida `expires_at` a nivel de request; tokens sin `expires_at` en la DB
+  se consideran válidos indefinidamente. El valor global se aplica a tokens **nuevos** (creados
+  después de activar la config); tokens existentes sin `expires_at` continúan válidos hasta que
+  se les asigne un valor o se eliminen.
+- **Logout**: `currentAccessToken()->delete()` — revoca solo el token actual. Sin cambios.
+- **Response schema**: Login y Register ahora retornan `token_type`, `expires_at` (ISO 8601 o null),
+  e `expires_in` (segundos restantes o null). El campo `token` se mantiene para compatibilidad.
+- **Backward compatible**: Frontend actual ignora `expires_at`/`expires_in`; si existía, recibe 401
+  y debe re-autenticarse. No se requiere cambio frontend si el usuario cierra sesión manualmente.
+
+### TrustProxies (FASE 27 U2)
+
+- **Config**: `config/trustedproxy.php` — env-driven (`TRUSTED_PROXIES`).
+- **Default**: `null` (no confía en ningún proxy). `X-Forwarded-*` headers ignorados.
+- **Production**: `TRUSTED_PROXIES=10.0.0.1,172.16.0.0/12` (CIDR soportado).
+- **Headers**: `HEADER_X_FORWARDED_FOR | HEADER_X_FORWARDED_HOST | HEADER_X_FORWARDED_PORT |
+  HEADER_X_FORWARDED_PROTO | HEADER_X_FORWARDED_PREFIX` — configurables.
+- **Sin wildcard**: No se usa `'*'` por defecto. Documentado que solo detrás de un LB conocido.
+- **HSTS interaction**: Con proxy confiable + forwarded-proto=https → `$request->secure() === true`
+  → HSTS se aplica correctamente en producción.
+- **Rate limit safety**: X-Forwarded-For spoofing no afecta rate limit key cuando proxy no es
+  confiable (el middleware retorna IP directa del REMOTE_ADDR).
+
+### Structured API Error Responses (FASE 27 U2)
+
+- **401**: `{ message: "Unauthenticated.", code: "UNAUTHENTICATED", errors: {} }` — sin cambios.
+- **403**: `{ message: "No tienes permiso para realizar esta acción.", code: "FORBIDDEN", errors: {} }` — NUEVO.
+- **404**: `{ message: "El recurso solicitado no existe.", code: "NOT_FOUND", errors: {} }` — NUEVO.
+- **419**: `{ message: "La sesión ha expirado.", code: "SESSION_EXPIRED", errors: {} }` — NUEVO.
+- **422**: `{ message: "...", code: "VALIDATION_ERROR", errors: {...} }` — sin cambios.
+- **429**: `{ message: "...", code: "RATE_LIMITED", errors: {} }` — sin cambios.
+- **500**: `{ message: "Ocurrió un error interno del servidor.", code: "SERVER_ERROR", errors: {} }` — NUEVO.
+- **Reporting**: `report($e)` se ejecuta antes de la respuesta 500; logging/monitoring no se desactiva.
+- **APP_DEBUG**: Los responses de error en API NUNCA exponen trace/file/line/exception, sin
+  importar el valor de `APP_DEBUG`.
+- **Web/Inertia**: Las rutas web NO se convierten a JSON. Los handlers solo aplican a `$request->is('api/*')`.
+- **Tenant isolation**: Los 404 cross-tenant se preservan intencionalmente (no se convierten a 403).
