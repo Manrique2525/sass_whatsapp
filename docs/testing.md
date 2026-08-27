@@ -1633,9 +1633,10 @@ Grupos nuevos en U3 (todos verdes):
 suite `phpunit.pgsql.xml`. Movido a post-create (patrón de `create_leads_table`). Suite PG pasó de
 "100% bloqueada" a 162 verdes.
 
-**BUG-ANALYTICS-DST (producción, NO corregido — requiere autorización)**: `AggregationService`
-emite el window en wall-clock local (`toDateTimeString()`) pese a ADR-078 (UTC). Confirmado
-empíricamente en DST. Recomendado: `->utc()->toDateTimeString()`.
+**BUG-ANALYTICS-DST (CORREGIDO)**: `AggregationService` emitía el window en wall-clock local
+(`toDateTimeString()`) pese a ADR-078 (UTC). Confirmado empíricamente en DST y corregido:
+`$start->copy()->utc()->toDateTimeString()` / `$end->copy()->utc()->toDateTimeString()`. El test
+`F29-U3-DST-01` (tenant no-UTC) falla con el bug y pasa con el fix.
 
 **Fallos PG pre-existentes fuera de alcance U3** (21-22, enmascarados antes por el bloqueador de
 `usage_reservations`): `KnowledgeBase` (`filename` vs `original_filename`), `FaqPostgresTest` (FK),

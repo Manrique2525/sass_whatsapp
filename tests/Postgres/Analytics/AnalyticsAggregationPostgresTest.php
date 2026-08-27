@@ -432,14 +432,21 @@ class AnalyticsAggregationPostgresTest extends PgvectorTestCase
         $this->assertEquals(0, $row->total_messages);
     }
 
-    /** @test F29-U3-DST-01: la ventana UTC es estable en fechas de cambio de hora (DST) */
-    public function it_counts_messages_for_utc_tenant_across_dst_dates(): void
+    /** @test F29-U3-DST-01: ventana UTC correcta para tenant no-UTC en DST (BUG-ANALYTICS-DST) */
+    public function it_uses_utc_window_boundaries_for_non_utc_tenant_across_dst(): void
     {
-        $contactId = createPgU2Contact($this->tenantId);
-        $convId = createPgU2Conversation($this->tenantId, $contactId, [
-            'created_at' => '2026-03-08 10:00:00',
+        // Tenant no-UTC: los límites de ventana deben convertirse a UTC (ADR-078).
+        DB::table('tenants')->where('id', $this->tenantId)->update([
+            'timezone' => 'America/New_York',
         ]);
 
+        $contactId = createPgU2Contact($this->tenantId);
+        $convId = createPgU2Conversation($this->tenantId, $contactId, [
+            'created_at' => '2026-03-08 14:00:00',
+        ]);
+
+        // 2026-03-08 03:00 UTC = 2026-03-07 22:00 EST en NY → pertenece al día previo.
+        // Con el bug (wall-clock) se colaría en el agregado del 08/03.
         DB::table('messages')->insert([
             'id' => (string) Str::uuid(),
             'tenant_id' => $this->tenantId,
@@ -447,18 +454,32 @@ class AnalyticsAggregationPostgresTest extends PgvectorTestCase
             'direction' => 'inbound',
             'type' => 'text',
             'status' => 'sent',
-            'body' => 'DST message',
-            'created_at' => '2026-03-08 10:00:00',
-            'updated_at' => '2026-03-08 10:00:00',
+            'body' => 'Mar 7 en NY',
+            'created_at' => '2026-03-08 03:00:00',
+            'updated_at' => '2026-03-08 03:00:00',
         ]);
 
-        // Primavera (spring-forward): se cuenta en su día
+        // 2026-03-08 14:00 UTC = 10:00 EDT en NY → día correcto.
+        DB::table('messages')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenantId,
+            'conversation_id' => $convId,
+            'direction' => 'inbound',
+            'type' => 'text',
+            'status' => 'sent',
+            'body' => 'Mar 8 en NY',
+            'created_at' => '2026-03-08 14:00:00',
+            'updated_at' => '2026-03-08 14:00:00',
+        ]);
+
+        // Ventana NY día 08/03 = [2026-03-08 05:00:00, 2026-03-09 04:00:00) UTC.
+        // Solo el mensaje de las 14:00 UTC debe contarse (no el de las 03:00 UTC = 22:00 EST del 07).
         $spring = $this->service->aggregateForDate($this->getTenant(), '2026-03-08');
         $this->assertEquals(1, $spring->total_messages);
 
-        // Otoño (fall-back): el mismo mensaje NO debe contarse en otra fecha
-        $fall = $this->service->aggregateForDate($this->getTenant(), '2026-11-01');
-        $this->assertEquals(0, $fall->total_messages);
+        // El mensaje de las 03:00 UTC se atribuye al día local correcto (07/03 en NY).
+        $mar7 = $this->service->aggregateForDate($this->getTenant(), '2026-03-07');
+        $this->assertEquals(1, $mar7->total_messages);
     }
 
     /** @test F29-U3-DST-02: timezone inválida del tenant cae a UTC */

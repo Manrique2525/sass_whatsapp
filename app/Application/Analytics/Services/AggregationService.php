@@ -59,9 +59,11 @@ final class AggregationService
         $start = SupportCarbon::parse($date, $timezone)->startOfDay();
         $end = $start->copy()->addDay();
 
+        // ADR-078: window boundaries are computed in tenant timezone, then
+        // converted to UTC for DB queries (created_at is stored as UTC).
         $window = [
-            'start' => $start->toDateTimeString(),
-            'end' => $end->toDateTimeString(),
+            'start' => $start->copy()->utc()->toDateTimeString(),
+            'end' => $end->copy()->utc()->toDateTimeString(),
         ];
 
         $messageMetrics = $this->computeMessageMetrics($tenantId, $window);
