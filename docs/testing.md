@@ -1644,3 +1644,20 @@ suite `phpunit.pgsql.xml`. Movido a post-create (patrón de `create_leads_table`
 (up/down). NO tocados en U3 (dominios KnowledgeBase/FAQ).
 
 **Totales U3**: backend no-PG 2467 passed / 15 skipped / 0 failed. PG 162 passed + pre-existentes.
+
+### FASE 29 U4 — Jobs / Webhooks (COMPLETADA, 1 bug P1 detectado)
+
+Grupos nuevos (13 + 1 reproducer skip):
+
+| Grupo | Archivo | Tests | Cubre |
+|---|---|---|---|
+| Inbound guards | `tests/Feature/Jobs/ProcessIncomingWhatsAppMessageTest.php` | F29-U4-IN-* | Evento inexistente/ya-procesado/tipo-status → no-op; **aislamiento multi-tenant**; `invalid_payload` |
+| Status guards | `tests/Feature/Jobs/ProcessWhatsAppStatusUpdateGuardTest.php` | F29-U4-STAT-* | Inexistente/ya-procesado → no-op; **aislamiento multi-tenant**; data ausente → `processed` |
+| Webhook service | `tests/Feature/WhatsApp/WhatsAppWebhookServiceTest.php` | F29-U4-WS-* | `reprocessEvent()` sweeper; `handle()` robusto vs JSON malformado |
+
+**BUG-WEBHOOK-FOREACH (P1, NO corregido — reproducer skip `U4-WS-INGEST-BUG-01`)**: en
+`WhatsAppWebhookService::handle()` el `foreach ($entry['changes'] ?? [])` lanza `TypeError` si
+`changes` (o `messages`/`statuses`) llega como string → HTTP 500 en el webhook público en vez de
+ignorar. Fix propuesto: guardar `is_array(...)` antes de cada `foreach`. Pendiente de autorización.
+
+**Totales U4**: backend no-PG 2480 passed / 16 skipped / 0 failed (+13).

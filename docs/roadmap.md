@@ -2971,3 +2971,32 @@ DST/timezone `F29-U3-DST-01..02` (PG), AI retry/timeout `F29-U3-AI-01..03`, Lock
   22 FAILED pre-existentes fuera de alcance U3 (KnowledgeBase `filename`, FAQ FK,
   AnalyticsPostgresTest up/down, Embeddings) que estaban enmascaradas por el bloqueador de
   `usage_reservations`.
+
+### U4 — Jobs / Webhooks · **COMPLETADA (test work) — 1 bug de producción detectado (P1, no corregido)**
+
+Tests U4 (13 nuevos + 1 reproducer skip): guard branches de los jobs de webhook y del pipeline de
+servicio. Suite backend no-PG **2480 passed / 16 skipped / 0 failed**.
+
+- `tests/Feature/Jobs/ProcessIncomingWhatsAppMessageTest.php` — `F29-U4-IN-*`: evento inexistente
+  no-op; ya-procesado no-op (idempotencia); tipo status no consumido; **aislamiento multi-tenant**
+  (`U4-IN-ISO-01`: evento de tenant A jamás procesado por job de tenant B); payload sin `data` →
+  `invalid_payload`.
+- `tests/Feature/Jobs/ProcessWhatsAppStatusUpdateGuardTest.php` — `F29-U4-STAT-*`: inexistente no-op;
+  ya-procesado no-op; **aislamiento multi-tenant** (`U4-STAT-ISO-01`); payload sin `data` → `processed`
+  (no-op de acuse, no reintenta).
+- `tests/Feature/WhatsApp/WhatsAppWebhookServiceTest.php` — `F29-U4-WS-*`: `reprocessEvent()` sweeper
+  (solo sobre `received`; phone inexistente → failed; re-encola correctamente con `Queue::fake`);
+  `handle()` robusto frente a payload JSON válido malformado (entry/changes/messages/statuses no-array
+  ignorados).
+
+**BUG-WEBHOOK-FOREACH (producción, P1, detectado en U4 — NO corregido aún).**
+- `WhatsAppWebhookService::handle()` línea 72 hace `foreach ($entry['changes'] ?? [])`. Si
+  `entry[].changes` (o `value[].messages`/`value[].statuses`) llega como **string** (JSON válido pero
+  malformado), lanza `TypeError` "foreach() argument must be of type array|object, string given" NO
+  capturado → el webhook público `/api/webhooks/whatsapp` responde **HTTP 500** en vez de ignorar.
+  Violaría el contrato del pipeline ("responde 200; nunca 500").
+- Reproducido por `U4-WS-INGEST-BUG-01` (reproducer skip).
+- Fix propuesto (1 línea): guardar `is_array(...)` antes de cada `foreach`. NO aplicado (requiere
+  autorización; cambio en código de producción).
+- Las guard branches de tenant (no-op ajeno) prueban que el aislamiento multi-tenant (`ADR-021`) se
+  respeta incluso si un job se ejecutara con el tenant equivocado.
