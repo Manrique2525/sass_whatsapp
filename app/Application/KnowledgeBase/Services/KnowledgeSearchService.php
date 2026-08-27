@@ -227,6 +227,9 @@ final class KnowledgeSearchService implements KnowledgeSearchServiceInterface
     /**
      * Ejecuta la query cosine search con SQL parametrizado.
      *
+     * Devuelve filas normalizadas a arrays asociativos y con tipos numéricos
+     * correctos, independientemente del driver (PostgreSQL devuelve stdClass).
+     *
      * @return list<array{chunk_id: string, document_id: string, content: string, chunk_index: int, similarity: float}>
      */
     private function executeCosineSearch(
@@ -235,7 +238,7 @@ final class KnowledgeSearchService implements KnowledgeSearchServiceInterface
         string $serializedQueryVector,
         int $hardLimit,
     ): array {
-        $results = DB::select(
+        $rows = DB::select(
             '
             SELECT
                 kc.id AS chunk_id,
@@ -261,7 +264,32 @@ final class KnowledgeSearchService implements KnowledgeSearchServiceInterface
             ],
         );
 
-        return $results;
+        return $this->normalizeSearchRows($rows);
+    }
+
+    /**
+     * Normaliza las filas crudas de DB::select() a arrays asociativos.
+     *
+     * PostgreSQL (pdo_pgsql) devuelve filas como stdClass; SQLite las devuelve
+     * como arrays. Esta normalización unifica el contrato interno a arrays y
+     * convierte los tipos numéricos (chunk_index, similarity) a sus tipos reales
+     * para evitar comparaciones lexicográficas o cast implícitos.
+     *
+     * @param  list<object>|list<array<string, mixed>>  $rows
+     * @return list<array{chunk_id: string, document_id: string, content: string, chunk_index: int, similarity: float}>
+     */
+    private function normalizeSearchRows(array $rows): array
+    {
+        return array_map(
+            fn (object|array $row): array => [
+                'chunk_id' => (string) ($row->chunk_id ?? $row['chunk_id']),
+                'document_id' => (string) ($row->document_id ?? $row['document_id']),
+                'content' => (string) ($row->content ?? $row['content']),
+                'chunk_index' => (int) ($row->chunk_index ?? $row['chunk_index']),
+                'similarity' => (float) ($row->similarity ?? $row['similarity']),
+            ],
+            $rows,
+        );
     }
 
     /**

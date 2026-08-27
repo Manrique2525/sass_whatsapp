@@ -1677,3 +1677,29 @@ Regresión: reproducer `U4-WS-INGEST-BUG-01` (verde) + matriz `U4-WS-SHAPE-01..1
 - Comando de cobertura: `docker compose -f docker-compose.yml -f docker-compose.coverage.yml run --rm
   coverage php -d memory_limit=512M vendor/bin/pest --coverage`. No se versionan reportes generados.
 - U5-HOTFIX queda listo para reanudar; FASE 29 continúa **EN PROGRESO**.
+
+### FASE 29 U5-PG-H1 — KnowledgeSearchService PostgreSQL hydration (BUG P1 RESUELTO)
+
+**BUG-KNOWLEDGE-PG-HYDRATION (P1, RESUELTO)**: `KnowledgeSearchService::search()` ejecuta
+`DB::select()` (raw query pgvector). En PostgreSQL (`pdo_pgsql`), `DB::select()` devuelve filas como
+`stdClass`, mientras que `applyThreshold()` y `mapToRetrievedChunks()` esperan arrays
+(`$row['similarity']`, `$row['chunk_id']`, ...). Resultado: `TypeError` ("must be of type array,
+stdClass given") en toda búsqueda RAG con chunks coincidentes sobre PostgreSQL → fallo de
+filtering/mapping en 6 tests PG deterministas.
+
+- **Root cause**: contrato interno de filas asumía arrays pero el driver PG devuelve `stdClass`.
+  SQLite no ejercita esta ruta (devuelve arrays y el servicio short-circuits en no-pgsql).
+- **Fix (mínimo, SOLO representación interna)**: `executeCosineSearch()` ahora normaliza cada fila a
+  array asociativo vía `normalizeSearchRows()` (nuevo método privado), convirtiendo
+  `chunk_index` a `int` y `similarity` a `float` para evitar comparaciones implícitas/lexicográficas.
+  `applyThreshold()` y `mapToRetrievedChunks()` quedan invariantes (ya consumían arrays). Sin
+  cambios de SQL, bindings, tenant filter, similarity math, ordering, top-k, threshold ni API pública.
+- **No se ampliaron dominios**: la revisión de `AggregationService` (Analytics) confirmó que consume
+  `DB::select()` con acceso a propiedades (`$row->conversation_id`), correcto para `stdClass`; sin
+  bug similar. Fuera de alcance H1 (H2/H3/H4 pendientes).
+- **Regresión PG**: las 6 fallas de hidratación pasan (cosine ordering, top-k, threshold, tie
+  ordering, identical cross-tenant isolation, tenant context switching). Quedan 2 fallos del mismo
+  archivo, ambos cluster H4 (P3, test-only, NO tocados): assertion de nombre de índice HNSW y
+  expectation de vector inválido parametrizado.
+- **Regresión no-PG**: 124 tests Knowledge/RAG/AI pasan (304 assertions, 0 failed).
+- PHPStan: 0 errores. Pint: PASS.

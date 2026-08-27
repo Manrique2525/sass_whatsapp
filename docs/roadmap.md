@@ -3017,3 +3017,27 @@ Suite backend no-PG **2492 passed / 15 skipped / 0 failed**.
   El stage `runtime` permanece sin PCOV. Cobertura se ejecuta con `memory_limit=512M` y sin versionar
   artefactos.
 - FASE 29 sigue **EN PROGRESO**; esta unidad no cierra U5 ni inicia FASE 30.
+
+### U5-PG-H1 — KnowledgeSearchService PostgreSQL hydration (BUG P1 RESUELTO) · **COMPLETADA (hotfix H1; H2-H4 pendientes)**
+
+**BUG-KNOWLEDGE-PG-HYDRATION (producción, P1 — RESUELTO).**
+- `KnowledgeSearchService::search()` ejecuta una raw query pgvector vía `DB::select()`. Bajo
+  PostgreSQL (`pdo_pgsql`), `DB::select()` devuelve filas como `stdClass`, pero `applyThreshold()` y
+  `mapToRetrievedChunks()` asumen arrays (`$row['similarity']`, `$row['chunk_id']`, `$row['content']`,
+  `$row['chunk_index']`) → `TypeError` en toda búsqueda RAG con chunks coincidentes sobre PG (fallo del
+  filtering/mapping). `chunk_index`/`similarity` también podían llegar como string (PDO) arriesgando
+  comparaciones implícitas.
+- Fix (mínimo, SOLO representación interna): `executeCosineSearch()` ahora normaliza cada fila a array
+  asociativo vía el nuevo método privado `normalizeSearchRows()`, convirtiendo `chunk_index` a `int` y
+  `similarity` a `float`. `applyThreshold()` y `mapToRetrievedChunks()` invariantes. Sin cambios de SQL,
+  bindings, tenant filter, similarity math, ordering, top-k, threshold ni API pública (interfaz
+  `KnowledgeSearchServiceInterface` intacta, 0 callers modificados).
+- Revisión de patrón similar: `AggregationService` (Analytics) consume `DB::select()` con acceso a
+  propiedades (`$row->conversation_id`), correcto para `stdClass` → sin bug análogo; fuera de alcance H1.
+- Regresión PG: las 6 fallas de hidratación pasan (cosine ordering, top-k, threshold, tie ordering,
+  identical cross-tenant isolation, tenant context switching). Quedan 2 fallos del mismo archivo, ambos
+  cluster H4 (P3, test-only, NO tocados en H1): assertion de nombre de índice HNSW y expectation de
+  vector inválido parametrizado.
+- Regresión no-PG: 124 tests Knowledge/RAG/AI (304 assertions, 0 failed). PHPStan 0, Pint PASS.
+- Commit: `fix(knowledge): normalize postgres search result rows` (local, NO PUSH).
+- H2-H4 (fixtures/assertions PG) siguen **PENDIENTES**; FASE 29 **NOT CLOSED**.
