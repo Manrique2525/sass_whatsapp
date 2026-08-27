@@ -1662,3 +1662,18 @@ webhook público. Fix mínimo: guardar `is_array(...)` antes de cada `foreach`; 
 Regresión: reproducer `U4-WS-INGEST-BUG-01` (verde) + matriz `U4-WS-SHAPE-01..11`.
 
 **Totales U4-HOTFIX**: backend no-PG 2492 passed / 15 skipped / 0 failed (+12, sin skips en webhook).
+
+### FASE 29 U5-HOTFIX — Inbox permission guard + PCOV
+
+- **FRONTEND-INBOX-PERMISSION-LOAD (P2, RESUELTO)**: `Conversations/Index.vue` ejecutaba
+  `loadConversations()` al montar aunque `canView` fuera falso, generando una petición innecesaria.
+  El backend siguió siendo la autoridad y no hubo bypass de autorización. El guard de montaje ahora
+  retorna antes de cargar conversaciones o miembros cuando no existe `conversations.view`.
+- Regresión `F29-U5-INBOX-01..05`: **5 passed**; cubre ausencia de GET no autorizado, estado limitado,
+  carga autorizada y relación `canSeeUsers`.
+- **PCOV**: `docker-php-ext-enable pcov` generaba la extensión y el stage coverage la sobrescribía con
+  sólo `pcov.enabled=1`. El stage `coverage` ahora conserva `extension=pcov.so` + `pcov.enabled=1`;
+  el stage `runtime` no instala PCOV.
+- Comando de cobertura: `docker compose -f docker-compose.yml -f docker-compose.coverage.yml run --rm
+  coverage php -d memory_limit=512M vendor/bin/pest --coverage`. No se versionan reportes generados.
+- U5-HOTFIX queda listo para reanudar; FASE 29 continúa **EN PROGRESO**.

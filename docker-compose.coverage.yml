@@ -16,12 +16,16 @@ services:
     environment:
       APP_ENV: testing
       APP_DEBUG: "true"
-      DB_CONNECTION: pgsql
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      DB_DATABASE: whatsapp_saas
-      DB_USERNAME: saas
-      DB_PASSWORD: saas_secret
+      # The default suite is the non-PG suite; PG coverage runs explicitly
+      # with phpunit.pgsql.xml and its dedicated database configuration.
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ":memory:"
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_BUCKET: whatsapp-saas
+      AWS_ENDPOINT: http://minio:9000
+      AWS_USE_PATH_STYLE_ENDPOINT: "true"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       CACHE_STORE: redis
@@ -33,5 +37,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      init-minio:
+        condition: service_completed_successfully
     networks:
       - saas

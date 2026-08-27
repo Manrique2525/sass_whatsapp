@@ -561,6 +561,10 @@ useInboxChannel(
 );
 
 onMounted(() => {
+    if (!canView.value) {
+        return;
+    }
+
     loadConversations();
 
     if (canSeeUsers.value) {

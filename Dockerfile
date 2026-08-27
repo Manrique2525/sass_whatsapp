@@ -86,4 +86,4 @@ RUN pecl install pcov \
     && docker-php-ext-enable pcov \
     && pecl clear-cache
 
-RUN echo "pcov.enabled=1" > /usr/local/etc/php/conf.d/docker-php-ext-pcov.ini
+RUN printf "extension=pcov.so\npcov.enabled=1\n" > /usr/local/etc/php/conf.d/docker-php-ext-pcov.ini

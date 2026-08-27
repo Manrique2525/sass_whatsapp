@@ -3005,3 +3005,15 @@ Suite backend no-PG **2492 passed / 15 skipped / 0 failed**.
   PHPStan 0; Pint PASS; backend no-PG **2492 passed / 15 skipped / 0 failed**.
 - Las guard branches de tenant (no-op ajeno) prueban que el aislamiento multi-tenant (`ADR-021`) se
   respeta incluso si un job se ejecutara con el tenant equivocado.
+
+### U5-HOTFIX — Inbox permission guard + PCOV · **COMPLETADA (hotfix; U5 closure pendiente)**
+
+- **FRONTEND-INBOX-PERMISSION-LOAD (P2, RESUELTO)**: `Conversations/Index.vue` cargaba conversaciones
+  al montar aun sin `conversations.view`, generando un GET innecesario. Se añadió un retorno temprano
+  en `onMounted`; no hubo cambios backend ni bypass de policies.
+- Regresión `F29-U5-INBOX-01..05`: **5 passed**. `canView=false` no genera GET de conversaciones ni
+  miembros; con permiso carga conversaciones y `users.view` controla la carga de miembros.
+- **PCOV corregido** en el stage Docker `coverage`: conserva `extension=pcov.so` y `pcov.enabled=1`.
+  El stage `runtime` permanece sin PCOV. Cobertura se ejecuta con `memory_limit=512M` y sin versionar
+  artefactos.
+- FASE 29 sigue **EN PROGRESO**; esta unidad no cierra U5 ni inicia FASE 30.
