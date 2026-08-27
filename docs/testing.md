@@ -1614,3 +1614,32 @@ escenario de membresía `pending` (no activa) que también fuerza el deny.
 
 - PHPStan: 0 errores. Pint: PASS. vue-tsc: PASS. Build: PASS. npm audit: 0 vulnerabilidades.
 - composer audit: 0 advisories; 1 paquete abandonado pre-existente (`nunomaduro/larastan` → `larastan/larastan`), fuera de alcance de U2.
+
+### FASE 29 U3 — Billing / Concurrency / PostgreSQL gaps (PARCIAL)
+
+Grupos nuevos en U3 (todos verdes):
+
+| Grupo | Archivo | Tests | Cubre |
+|---|---|---|---|
+| Leads dedup race | `tests/Postgres/Lead/LeadDedupConcurrencyTest.php` | F29-U3-LEAD-01..04 (PG) | Race check-then-insert crea duplicados; no hay UNIQUE en `leads`; mismo phone cross-tenant permitido |
+| Analytics DST/timezone | `tests/Postgres/Analytics/AnalyticsAggregationPostgresTest.php` | F29-U3-DST-01..02 (PG) | Estabilidad UTC spring-forward/fall-back; timezone inválido → fallback UTC |
+| AI retry/timeout | `tests/Unit/AI/OpenAIProviderTest.php` | F29-U3-AI-01..03 | `retry($times)` = intentos TOTALES; recuperación tras ConnectionException; maxRetries=0 |
+| Lock context | `tests/Unit/Flows/ConversationLockContextTest.php` | F29-U3-LOCK-02..07 | Reentrancia, independencia conversación/tenant, `refreshHeld` tras release, leave no-op, no-BaseLock |
+| Sentry scope | `tests/Feature/Security/SentryScopeMiddlewareTest.php` | F29-U3-SENTRY-01..04 | Tags request_id + tenant_id; ausencia si contexto vacío; aislamiento entre peticiones |
+| Flow webhook gaps | `tests/Feature/Flows/FlowWebhookCoverageGapsTest.php` | F29-U3-FLOWWH-01..02 | trigger id no-UUID → 401; trigger activo no-webhook → 401 |
+
+**Bloqueador PG reparado**: `2026_08_25_100001_create_usage_reservations_table.php` ponía el
+`ALTER TABLE ... CHECK` dentro de `Schema::create` → la migración era no ejecutable y rompía TODA la
+suite `phpunit.pgsql.xml`. Movido a post-create (patrón de `create_leads_table`). Suite PG pasó de
+"100% bloqueada" a 162 verdes.
+
+**BUG-ANALYTICS-DST (producción, NO corregido — requiere autorización)**: `AggregationService`
+emite el window en wall-clock local (`toDateTimeString()`) pese a ADR-078 (UTC). Confirmado
+empíricamente en DST. Recomendado: `->utc()->toDateTimeString()`.
+
+**Fallos PG pre-existentes fuera de alcance U3** (21-22, enmascarados antes por el bloqueador de
+`usage_reservations`): `KnowledgeBase` (`filename` vs `original_filename`), `FaqPostgresTest` (FK),
+`EmbeddingMaterializationPostgresTest`, `KnowledgeSearchPostgresTest`, `AnalyticsPostgresTest`
+(up/down). NO tocados en U3 (dominios KnowledgeBase/FAQ).
+
+**Totales U3**: backend no-PG 2467 passed / 15 skipped / 0 failed. PG 162 passed + pre-existentes.

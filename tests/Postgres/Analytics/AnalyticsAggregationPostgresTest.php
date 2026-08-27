@@ -431,4 +431,61 @@ class AnalyticsAggregationPostgresTest extends PgvectorTestCase
         $this->assertIsInt($row->total_ai_tokens);
         $this->assertEquals(0, $row->total_messages);
     }
+
+    /** @test F29-U3-DST-01: la ventana UTC es estable en fechas de cambio de hora (DST) */
+    public function it_counts_messages_for_utc_tenant_across_dst_dates(): void
+    {
+        $contactId = createPgU2Contact($this->tenantId);
+        $convId = createPgU2Conversation($this->tenantId, $contactId, [
+            'created_at' => '2026-03-08 10:00:00',
+        ]);
+
+        DB::table('messages')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenantId,
+            'conversation_id' => $convId,
+            'direction' => 'inbound',
+            'type' => 'text',
+            'status' => 'sent',
+            'body' => 'DST message',
+            'created_at' => '2026-03-08 10:00:00',
+            'updated_at' => '2026-03-08 10:00:00',
+        ]);
+
+        // Primavera (spring-forward): se cuenta en su día
+        $spring = $this->service->aggregateForDate($this->getTenant(), '2026-03-08');
+        $this->assertEquals(1, $spring->total_messages);
+
+        // Otoño (fall-back): el mismo mensaje NO debe contarse en otra fecha
+        $fall = $this->service->aggregateForDate($this->getTenant(), '2026-11-01');
+        $this->assertEquals(0, $fall->total_messages);
+    }
+
+    /** @test F29-U3-DST-02: timezone inválida del tenant cae a UTC */
+    public function it_falls_back_to_utc_for_invalid_timezone(): void
+    {
+        DB::table('tenants')->where('id', $this->tenantId)->update(['timezone' => 'Invalid/Zone']);
+
+        $contactId = createPgU2Contact($this->tenantId);
+        $convId = createPgU2Conversation($this->tenantId, $contactId, [
+            'created_at' => '2026-03-08 10:00:00',
+        ]);
+
+        DB::table('messages')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => $this->tenantId,
+            'conversation_id' => $convId,
+            'direction' => 'inbound',
+            'type' => 'text',
+            'status' => 'sent',
+            'body' => 'Fallback tz',
+            'created_at' => '2026-03-08 10:00:00',
+            'updated_at' => '2026-03-08 10:00:00',
+        ]);
+
+        $result = $this->service->aggregateForDate($this->getTenant(), '2026-03-08');
+
+        $this->assertNotNull($result);
+        $this->assertEquals(1, $result->total_messages);
+    }
 }

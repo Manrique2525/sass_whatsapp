@@ -2939,3 +2939,32 @@ COMPLETADA — pendiente commit. NO PUSH.
   npm audit 0, composer audit 0 advisories (1 paquete abandonado pre-existente, fuera de alcance).
 - Producto: 0 bugs de producción (cambio test-only).
 - Commit: test(tenancy): cover tenant auth and recovery edge cases (local, NO PUSH).
+
+### U3 — Billing / Concurrency / PostgreSQL Gaps · **PARTIAL — BLOCKED** 
+
+Estado: infraestructura de testing U3 añadida y suite PG desbloqueada, pero **NO declarable DONE**:
+se confirmó 1 bug de producción (`BUG-ANALYTICS-DST`) y se expusieron fallos PG pre-existentes
+fuera de alcance. Pendiente de autorización para corregir.
+
+**Bloqueador reparado (este turno): migración `usage_reservations` no ejecutable.**
+- `2026_08_25_100001_create_usage_reservations_table.php` ponía el `ALTER TABLE ... CHECK (quantity > 0)`
+  DENTRO del closure de `Schema::create` → `SQLSTATE[42P01] relation "usage_reservations" does not exist`.
+  Rompía `php artisan migrate` (billing FASE 25 nunca desplegado) y TODA la suite `phpunit.pgsql.xml`
+  (cada test fallaba en `migrate:fresh`).
+- Fix: mover el `CHECK` fuera del closure (patrón ya usado en `create_leads_table`). Suite PG pasa de
+  "100% rota/bloqueada" a 162 verdes.
+
+**Tests U3 añadidos (todos verdes):** Leads dedup race `F29-U3-LEAD-01..04` (PG), Analytics
+DST/timezone `F29-U3-DST-01..02` (PG), AI retry/timeout `F29-U3-AI-01..03`, Lock context
+`F29-U3-LOCK-02..07`, Sentry scope `F29-U3-SENTRY-01..04`, Flow webhook gaps `F29-U3-FLOWWH-01..02`.
+
+**BUG-ANALYTICS-DST (producción, NO corregido aún — fuera de autorización).**
+- `AggregationService::aggregateForDate()` emite el window en wall-clock LOCAL del tenant
+  (`toDateTimeString()`), NO convertido a UTC pese a que ADR-078/docblock lo exige. Como
+  `messages.created_at` se almacena UTC, para tenants con timezone ≠ UTC el rango queda desplazado
+  por el offset del tenant. Confirmado empíricamente: mensaje en `2026-03-08 03:00:00 UTC` (= 22:00 EST
+  del 07/03 en NY) se atribuye erróneamente al agregado del 08/03. Visible en transiciones DST.
+- Recomendación: convertir `start/end` a UTC (`->utc()->toDateTimeString()`) antes de las queries.
+- Suites: backend no-PG 2467 passed / 15 skipped / 0 failed. PG: 162 passed, 22 FAILED pre-existentes
+  fuera de alcance U3 (KnowledgeBase `filename`, FAQ FK, AnalyticsPostgresTest up/down, Embeddings)
+  que estaban enmascaradas por el bloqueador de `usage_reservations`.

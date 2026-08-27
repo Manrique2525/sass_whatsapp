@@ -327,3 +327,78 @@ test('AI-P15: Token usage del provider se mapea correctamente al VO', function (
         ->and($result->outputTokens)->toBe(100)
         ->and($result->totalTokens)->toBe(150);
 });
+
+// ---------------------------------------------------------------------------
+// F29-U3-AI-01..02 — Timeout/retry: reintentos ante ConnectionException
+// (deja claro el número real de intentos; AI-P13 solo comprobaba la propagación)
+// ---------------------------------------------------------------------------
+test('F29-U3-AI-01: ante ConnectionException se intenta exactamente maxRetries veces (retry() = total de intentos) y luego propaga', function (): void {
+    $attempts = 0;
+
+    Http::fake(function (Request $request) use (&$attempts): never {
+        $attempts++;
+        throw new ConnectionException('Connection timed out.');
+    });
+
+    // Nota: Laravel retry($times) = TOTAL de intentos, no reintentos extra.
+    $provider = new OpenAIProvider(
+        apiKey: 'sk-test-key',
+        maxRetries: 2, // 2 intentos totales
+    );
+
+    try {
+        $provider->generateResponse(new AIRequest(prompt: 'Test'));
+        $this->fail('Se esperaba ConnectionException tras agotar los intentos.');
+    } catch (ConnectionException) {
+        // propagada tras agotar intentos
+    }
+
+    expect($attempts)->toBe(2);
+});
+
+test('F29-U3-AI-02: se recupera tras un/fallo de conexión y devuelve AIResponse', function (): void {
+    $attempts = 0;
+
+    Http::fake(function (Request $request) use (&$attempts) {
+        $attempts++;
+
+        if ($attempts < 3) {
+            throw new ConnectionException('Connection timed out.');
+        }
+
+        return Http::response(openai_success_response('Recuperado'), 200);
+    });
+
+    $provider = new OpenAIProvider(
+        apiKey: 'sk-test-key',
+        maxRetries: 4,
+    );
+
+    $result = $provider->generateResponse(new AIRequest(prompt: 'Test'));
+
+    expect($attempts)->toBe(3)
+        ->and($result->content)->toBe('Recuperado');
+});
+
+test('F29-U3-AI-03: maxRetries=0 ante ConnectionException no reintenta (1 único intento)', function (): void {
+    $attempts = 0;
+
+    Http::fake(function (Request $request) use (&$attempts): never {
+        $attempts++;
+        throw new ConnectionException('Connection timed out.');
+    });
+
+    $provider = new OpenAIProvider(
+        apiKey: 'sk-test-key',
+        maxRetries: 0,
+    );
+
+    try {
+        $provider->generateResponse(new AIRequest(prompt: 'Test'));
+        $this->fail('Se esperaba ConnectionException.');
+    } catch (ConnectionException) {
+        // propagada
+    }
+
+    expect($attempts)->toBe(1);
+});

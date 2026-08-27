@@ -11,6 +11,8 @@ return new class extends Migration
 {
     public function up(): void
     {
+        $isPgsql = DB::connection()->getDriverName() === 'pgsql';
+
         Schema::create('usage_reservations', function (Blueprint $table): void {
             $table->uuid('id')->primary();
             $table->uuid('tenant_id');
@@ -41,11 +43,13 @@ return new class extends Migration
                 'usage_reservations_idempotency_active_idx',
             );
             $table->index(['tenant_id', 'category', 'status', 'expires_at'], 'usage_reservations_active_idx');
-
-            if (config('database.default') === 'pgsql') {
-                DB::statement('ALTER TABLE usage_reservations ADD CONSTRAINT usage_reservations_quantity_positive CHECK (quantity > 0)');
-            }
         });
+
+        if ($isPgsql) {
+            DB::statement(
+                'ALTER TABLE usage_reservations ADD CONSTRAINT usage_reservations_quantity_positive CHECK (quantity > 0)'
+            );
+        }
     }
 
     public function down(): void
