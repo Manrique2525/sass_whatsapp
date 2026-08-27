@@ -1655,9 +1655,10 @@ Grupos nuevos (13 + 1 reproducer skip):
 | Status guards | `tests/Feature/Jobs/ProcessWhatsAppStatusUpdateGuardTest.php` | F29-U4-STAT-* | Inexistente/ya-procesado → no-op; **aislamiento multi-tenant**; data ausente → `processed` |
 | Webhook service | `tests/Feature/WhatsApp/WhatsAppWebhookServiceTest.php` | F29-U4-WS-* | `reprocessEvent()` sweeper; `handle()` robusto vs JSON malformado |
 
-**BUG-WEBHOOK-FOREACH (P1, NO corregido — reproducer skip `U4-WS-INGEST-BUG-01`)**: en
-`WhatsAppWebhookService::handle()` el `foreach ($entry['changes'] ?? [])` lanza `TypeError` si
-`changes` (o `messages`/`statuses`) llega como string → HTTP 500 en el webhook público en vez de
-ignorar. Fix propuesto: guardar `is_array(...)` antes de cada `foreach`. Pendiente de autorización.
+**BUG-WEBHOOK-FOREACH (P1, RESUELTO en U4-HOTFIX)**: en `WhatsAppWebhookService::handle()` los
+`foreach` sobre colecciones externas (`$payload['entry']`, `$entry['changes']`, `$value['messages']`,
+`$value['statuses']`) lanzaban `TypeError` con JSON válido pero shape malformado → HTTP 500 en el
+webhook público. Fix mínimo: guardar `is_array(...)` antes de cada `foreach`; malformado → no-op.
+Regresión: reproducer `U4-WS-INGEST-BUG-01` (verde) + matriz `U4-WS-SHAPE-01..11`.
 
-**Totales U4**: backend no-PG 2480 passed / 16 skipped / 0 failed (+13).
+**Totales U4-HOTFIX**: backend no-PG 2492 passed / 15 skipped / 0 failed (+12, sin skips en webhook).

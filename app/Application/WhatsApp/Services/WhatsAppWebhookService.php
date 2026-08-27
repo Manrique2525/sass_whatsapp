@@ -64,12 +64,24 @@ final class WhatsAppWebhookService
             throw new WhatsAppWebhookInvalidException;
         }
 
-        foreach ($payload['entry'] ?? [] as $entry) {
+        $entries = $payload['entry'] ?? [];
+
+        if (! is_array($entries)) {
+            return;
+        }
+
+        foreach ($entries as $entry) {
             if (! is_array($entry)) {
                 continue;
             }
 
-            foreach ($entry['changes'] ?? [] as $change) {
+            $changes = $entry['changes'] ?? [];
+
+            if (! is_array($changes)) {
+                continue;
+            }
+
+            foreach ($changes as $change) {
                 if (! is_array($change) || ($change['field'] ?? null) !== 'messages') {
                     continue;
                 }
@@ -85,15 +97,23 @@ final class WhatsAppWebhookService
                     ? (string) $metadata['phone_number_id']
                     : null;
 
-                foreach ($value['messages'] ?? [] as $message) {
-                    if (is_array($message)) {
-                        $this->ingest(WebhookEventType::Message, $message, $phoneNumberId);
+                $messages = $value['messages'] ?? [];
+
+                if (is_array($messages)) {
+                    foreach ($messages as $message) {
+                        if (is_array($message)) {
+                            $this->ingest(WebhookEventType::Message, $message, $phoneNumberId);
+                        }
                     }
                 }
 
-                foreach ($value['statuses'] ?? [] as $status) {
-                    if (is_array($status)) {
-                        $this->ingest(WebhookEventType::Status, $status, $phoneNumberId);
+                $statuses = $value['statuses'] ?? [];
+
+                if (is_array($statuses)) {
+                    foreach ($statuses as $status) {
+                        if (is_array($status)) {
+                            $this->ingest(WebhookEventType::Status, $status, $phoneNumberId);
+                        }
                     }
                 }
             }

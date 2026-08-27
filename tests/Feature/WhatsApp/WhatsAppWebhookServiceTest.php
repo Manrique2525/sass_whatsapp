@@ -33,6 +33,55 @@ function u4_received_event(array $overrides = []): WebhookEvent
     ], $overrides));
 }
 
+function u4_ingest_malformed(array $entry): void
+{
+    config(['whatsapp.app_secret' => whatsapp_secret()]);
+
+    $body = json_encode([
+        'object' => 'whatsapp_business_account',
+        'entry' => $entry,
+    ], JSON_THROW_ON_ERROR);
+
+    $request = Request::create('/api/webhooks/whatsapp', 'POST', [], [], [], [
+        'CONTENT_TYPE' => 'application/json',
+        'HTTP_X_HUB_SIGNATURE_256' => whatsapp_signature($body),
+    ], $body);
+
+    u4_webhook_service()->handle($request);
+}
+
+function u4_ingest_malformed_entry_scalar(mixed $entry): void
+{
+    config(['whatsapp.app_secret' => whatsapp_secret()]);
+
+    $body = json_encode([
+        'object' => 'whatsapp_business_account',
+        'entry' => $entry,
+    ], JSON_THROW_ON_ERROR);
+
+    $request = Request::create('/api/webhooks/whatsapp', 'POST', [], [], [], [
+        'CONTENT_TYPE' => 'application/json',
+        'HTTP_X_HUB_SIGNATURE_256' => whatsapp_signature($body),
+    ], $body);
+
+    u4_webhook_service()->handle($request);
+}
+
+function u4_messages(mixed $value): array
+{
+    return [['field' => 'messages', 'value' => ['messages' => $value]]];
+}
+
+function u4_statuses(mixed $value): array
+{
+    return [['field' => 'messages', 'value' => ['statuses' => $value]]];
+}
+
+function u4_value(mixed $value): array
+{
+    return [['field' => 'messages', 'value' => $value]];
+}
+
 test('U4-WS-REPRO-01: reprocessEvent solo actúa sobre eventos en received', function (): void {
     $service = u4_webhook_service();
 
@@ -107,29 +156,80 @@ test('U4-WS-INGEST-01: handle ignora silenciosamente payloads malformados pero J
     expect(WebhookEvent::query()->count())->toBe(0);
 });
 
-test('U4-WS-INGEST-BUG-01: REPRODUCER BUG-WEBHOOK-FOREACH — changes string causa 500 (skip)', function (): void {
-    config(['whatsapp.app_secret' => whatsapp_secret()]);
+test('U4-WS-INGEST-BUG-01: BUG-WEBHOOK-FOREACH RESOLVIDO — changes string ya no causa 500', function (): void {
+    // Handler no arroja excepción y NO ingesta ningún evento (no-op).
+    u4_ingest_malformed([['changes' => 'no-es-array']]);
 
-    $service = u4_webhook_service();
+    expect(WebhookEvent::query()->count())->toBe(0);
+});
 
-    // `changes` como string: `foreach ($entry['changes'] ?? [])` en
-    // WhatsAppWebhookService::handle() lanza "foreach() argument must be of
-    // type array|object, string given" → HTTP 500 en el webhook público.
-    // Reproducido: ErrorException/TypeError no capturado en la línea 72.
-    // Fix propuesto (P1): guardar `is_array($entry['changes'])` antes de iterar.
-    $this->markTestSkipped('BUG-WEBHOOK-FOREACH: ver root cause en reporte; requiere fix de producción fuera de alcance.');
+// ---------------------------------------------------------------------------
+// Malformed shape matrix (BUG-WEBHOOK-FOREACH regression, FASE 29 U4-HOTFIX)
+// ---------------------------------------------------------------------------
 
-    $body = json_encode([
-        'object' => 'whatsapp_business_account',
-        'entry' => [
-            ['changes' => 'no-es-array'],
-        ],
-    ], JSON_THROW_ON_ERROR);
+test('U4-WS-SHAPE-01: changes = string se ignora sin 500', function (): void {
+    u4_ingest_malformed([['changes' => 'no-es-array']]);
 
-    $request = Request::create('/api/webhooks/whatsapp', 'POST', [], [], [], [
-        'CONTENT_TYPE' => 'application/json',
-        'HTTP_X_HUB_SIGNATURE_256' => whatsapp_signature($body),
-    ], $body);
+    expect(WebhookEvent::query()->count())->toBe(0);
+});
 
-    $service->handle($request);
+test('U4-WS-SHAPE-02: changes = integer se ignora sin 500', function (): void {
+    u4_ingest_malformed([['changes' => 12345]]);
+
+    expect(WebhookEvent::query()->count())->toBe(0);
+});
+
+test('U4-WS-SHAPE-03: changes = null se ignora sin 500', function (): void {
+    u4_ingest_malformed([['changes' => null]]);
+
+    expect(WebhookEvent::query()->count())->toBe(0);
+});
+
+test('U4-WS-SHAPE-04: messages = string se ignora sin 500', function (): void {
+    u4_ingest_malformed([['changes' => u4_messages('no-es-array')]]);
+
+    expect(WebhookEvent::query()->count())->toBe(0);
+});
+
+test('U4-WS-SHAPE-05: messages = integer se ignora sin 500', function (): void {
+    u4_ingest_malformed([['changes' => u4_messages(98765)]]);
+
+    expect(WebhookEvent::query()->count())->toBe(0);
+});
+
+test('U4-WS-SHAPE-06: statuses = string se ignora sin 500', function (): void {
+    u4_ingest_malformed([['changes' => u4_statuses('no-es-array')]]);
+
+    expect(WebhookEvent::query()->count())->toBe(0);
+});
+
+test('U4-WS-SHAPE-07: statuses = integer se ignora sin 500', function (): void {
+    u4_ingest_malformed([['changes' => u4_statuses(54321)]]);
+
+    expect(WebhookEvent::query()->count())->toBe(0);
+});
+
+test('U4-WS-SHAPE-08: entry elemento malformado (string) se ignora sin 500', function (): void {
+    // Un elemento de `entry` no-array se salta (ya cubierto), pero debe ser no-op.
+    u4_ingest_malformed(['no-es-array', ['changes' => []]]);
+
+    expect(WebhookEvent::query()->count())->toBe(0);
+});
+
+test('U4-WS-SHAPE-09: change elemento malformado se ignora sin 500', function (): void {
+    u4_ingest_malformed([['changes' => [['field' => 'messages', 'value' => ['messages' => []]], 'no-es-array-change']]]);
+
+    expect(WebhookEvent::query()->count())->toBe(0);
+});
+
+test('U4-WS-SHAPE-10: value malformado (string) se ignora sin 500', function (): void {
+    u4_ingest_malformed([['changes' => u4_value('no-es-array')]]);
+
+    expect(WebhookEvent::query()->count())->toBe(0);
+});
+
+test('U4-WS-SHAPE-11: entry top-level scalar (string) se ignora sin 500', function (): void {
+    u4_ingest_malformed_entry_scalar('no-es-array');
+
+    expect(WebhookEvent::query()->count())->toBe(0);
 });

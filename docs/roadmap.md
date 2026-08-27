@@ -2972,10 +2972,10 @@ DST/timezone `F29-U3-DST-01..02` (PG), AI retry/timeout `F29-U3-AI-01..03`, Lock
   AnalyticsPostgresTest up/down, Embeddings) que estaban enmascaradas por el bloqueador de
   `usage_reservations`.
 
-### U4 — Jobs / Webhooks · **COMPLETADA (test work) — 1 bug de producción detectado (P1, no corregido)**
+### U4 — Jobs / Webhooks · **COMPLETA (incl. hotfix BUG-WEBHOOK-FOREACH)**
 
-Tests U4 (13 nuevos + 1 reproducer skip): guard branches de los jobs de webhook y del pipeline de
-servicio. Suite backend no-PG **2480 passed / 16 skipped / 0 failed**.
+Tests U4 (24 nuevos, sin skips): guard branches de los jobs de webhook y del pipeline de servicio.
+Suite backend no-PG **2492 passed / 15 skipped / 0 failed**.
 
 - `tests/Feature/Jobs/ProcessIncomingWhatsAppMessageTest.php` — `F29-U4-IN-*`: evento inexistente
   no-op; ya-procesado no-op (idempotencia); tipo status no consumido; **aislamiento multi-tenant**
@@ -2989,14 +2989,19 @@ servicio. Suite backend no-PG **2480 passed / 16 skipped / 0 failed**.
   `handle()` robusto frente a payload JSON válido malformado (entry/changes/messages/statuses no-array
   ignorados).
 
-**BUG-WEBHOOK-FOREACH (producción, P1, detectado en U4 — NO corregido aún).**
-- `WhatsAppWebhookService::handle()` línea 72 hace `foreach ($entry['changes'] ?? [])`. Si
-  `entry[].changes` (o `value[].messages`/`value[].statuses`) llega como **string** (JSON válido pero
-  malformado), lanza `TypeError` "foreach() argument must be of type array|object, string given" NO
-  capturado → el webhook público `/api/webhooks/whatsapp` responde **HTTP 500** en vez de ignorar.
-  Violaría el contrato del pipeline ("responde 200; nunca 500").
-- Reproducido por `U4-WS-INGEST-BUG-01` (reproducer skip).
-- Fix propuesto (1 línea): guardar `is_array(...)` antes de cada `foreach`. NO aplicado (requiere
-  autorización; cambio en código de producción).
+**BUG-WEBHOOK-FOREACH (producción, P1 — RESOLTO en U4-HOTFIX).**
+- `WhatsAppWebhookService::handle()` iteraba con `foreach` sobre colecciones externas sin validar que
+  fueran arrays: `$payload['entry']`, `$entry['changes']`, `$value['messages']`, `$value['statuses']`.
+  Con JSON válido pero shape incorrecto (colección como string/integer/null), lanzaba `TypeError`
+  "foreach() argument must be of type array|object" NO capturado → el webhook público
+  `/api/webhooks/whatsapp` respondía **HTTP 500** en vez de ignorar (violaba el contrato "nunca 500").
+- Fix (mínimo, sin `catch Throwable` ni logging): guardar `is_array(...)` antes de cada `foreach`;
+  las colecciones malformadas se ignoran (no-op) sin ingestión de eventos. Las 4 colecciones
+  vulnerables quedan endurecidas.
+- Regresión cubierta por el reproducer convertido en verde (`U4-WS-INGEST-BUG-01`) y la matriz
+  `U4-WS-SHAPE-01..11` (`changes`/`messages`/`statuses` como string/integer; change/value malformados;
+  entry scalar).
+- Validado: WhatsAppWebhookTest (payload válido, firma, idempotencia) 14 PASS; guard tenants U4 PASS;
+  PHPStan 0; Pint PASS; backend no-PG **2492 passed / 15 skipped / 0 failed**.
 - Las guard branches de tenant (no-op ajeno) prueban que el aislamiento multi-tenant (`ADR-021`) se
   respeta incluso si un job se ejecutara con el tenant equivocado.
