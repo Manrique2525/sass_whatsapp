@@ -83,6 +83,7 @@ class FaqPostgresTest extends PgvectorTestCase
     public function it_inserts_with_valid_tenant_fk(): void
     {
         $this->artisan('migrate:fresh');
+        $this->tenantId = createTestFaqTenant();
 
         $id = (string) Str::uuid();
 
@@ -107,6 +108,7 @@ class FaqPostgresTest extends PgvectorTestCase
     public function it_rejects_duplicate_normalized_question_same_tenant(): void
     {
         $this->artisan('migrate:fresh');
+        $this->tenantId = createTestFaqTenant();
 
         DB::table('faqs')->insert([
             'id' => (string) Str::uuid(),
@@ -139,7 +141,7 @@ class FaqPostgresTest extends PgvectorTestCase
     public function it_allows_same_normalized_question_different_tenant(): void
     {
         $this->artisan('migrate:fresh');
-
+        $this->tenantId = createTestFaqTenant();
         $tenantB = createTestFaqTenant('Tenant B');
 
         DB::table('faqs')->insert([
@@ -174,6 +176,7 @@ class FaqPostgresTest extends PgvectorTestCase
     public function it_allows_recreate_after_soft_delete(): void
     {
         $this->artisan('migrate:fresh');
+        $this->tenantId = createTestFaqTenant();
 
         $id = (string) Str::uuid();
 
@@ -208,6 +211,7 @@ class FaqPostgresTest extends PgvectorTestCase
         $count = DB::table('faqs')
             ->where('tenant_id', $this->tenantId)
             ->where('normalized_question', 'cuál es tu horario')
+            ->whereNull('deleted_at')
             ->count();
 
         $this->assertEquals(1, $count);
@@ -232,7 +236,14 @@ class FaqPostgresTest extends PgvectorTestCase
         );
 
         $this->assertNotNull($index);
-        $this->assertStringContainsString('WHERE deleted_at IS NULL', $index->indexdef);
+
+        // Semantic assertion: the partial predicate must reference deleted_at IS NULL.
+        // PostgreSQL deparse wraps the predicate in parentheses ("WHERE (deleted_at IS NULL)"),
+        // so compare normalizing insignificant whitespace and parentheses instead of the
+        // exact formatting.
+        $normalized = strtolower(preg_replace('/[\s()]/', '', $index->indexdef));
+
+        $this->assertStringContainsString('deleted_atisnull', $normalized);
     }
 
     /** @test FAQ-PG-09: migration down */
@@ -250,11 +261,14 @@ class FaqPostgresTest extends PgvectorTestCase
         $this->artisan('migrate:fresh');
         $this->assertTrue(Schema::hasTable('faqs'));
 
-        $this->artisan('migrate:rollback');
+        $this->artisan('migrate:rollback', ['--path' => 'database/migrations/2026_08_19_180000_create_faqs_table.php']);
         $this->assertFalse(Schema::hasTable('faqs'));
 
-        $this->artisan('migrate');
+        $this->artisan('migrate', ['--path' => 'database/migrations/2026_08_19_180000_create_faqs_table.php']);
         $this->assertTrue(Schema::hasTable('faqs'));
+
+        // Recreate the tenant after the schema reset; the one from setUp no longer exists.
+        $this->tenantId = createTestFaqTenant();
 
         // Verify we can still insert after re-migration
         DB::table('faqs')->insert([

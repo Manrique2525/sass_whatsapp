@@ -1703,3 +1703,27 @@ filtering/mapping en 6 tests PG deterministas.
   expectation de vector inválido parametrizado.
 - **Regresión no-PG**: 124 tests Knowledge/RAG/AI pasan (304 assertions, 0 failed).
 - PHPStan: 0 errores. Pint: PASS.
+
+
+### FASE 29 U5-PG-H2 � Analytics + FAQ test harness fixes (TEST-ONLY)
+
+Harness fixes for 7 deterministic PostgreSQL failures. **Production code y migrations intactas.**
+
+- **Analytics up/down/up (AN-PG-12)**: el test usaba `migrate:rollback --step=2`, que hace rollback
+  de las �ltimas migraciones GLOBALES (orden-dependent), NO de la pareja analytics. Fix test-only:
+  targetear las 2 migraciones analytics v�a `--path` (`2026_08_20_010000_create_analytics_daily_table` y
+  `2026_08_20_010100_create_conversation_metrics_table`). Verifica UP ? objetos existen, DOWN ? se
+  eliminan, UP ? se recrean e inserta OK. Sin reliance en el orden global de migraciones.
+- **FAQ fixtures (FAQ-PG-03..06, 10)**: `setUp()` creaba el tenant ANTES de que el test ejecutara
+  `migrate:fresh`, que borra la tabla `tenants` ? el tenant quedaba obsoleto ? FK `23503`. Fix
+  test-only: recrear el fixture de tenant DESPU�S del reset de esquema (`createTestFaqTenant()`).
+  Para FAQ-PG-06 (soft-delete recreate), adem�s el count final filtra `deleted_at IS NULL` (el
+  contract del partial unique index excluye filas soft-deleted; la recreaci�n NO lanza violaci�n).
+- **FAQ partial index predicate (FAQ-PG-08)**: la assertion buscaba el string exacto
+  `WHERE deleted_at IS NULL`, pero PostgreSQL deparse como `WHERE (deleted_at IS NULL)`. Fix test-only:
+  assertion SEM�NTICA normalizando espacios/parentesis insignificantes y comprobando `deleted_at IS NULL`.
+- **FAQ up/down/up (FAQ-PG-10)**: targetear la migraci�n de faqs v�a `--path` (patr�n ya usado por
+  `EmbeddingNullableMigrationTest`) y recrear el tenant tras el ciclo.
+- **Regresi�n PG**: 7/7 H2 tests PASS. Suite PG completa: 175 passed / 9 failed (solo clusters
+  H3=7 + H4=2 pendientes). Sin dependencia de orden (FAQ?Analytics y Analytics?FAQ id�nticos).
+- PHPStan: 0 errores. Pint: PASS.

@@ -3041,3 +3041,23 @@ Suite backend no-PG **2492 passed / 15 skipped / 0 failed**.
 - Regresión no-PG: 124 tests Knowledge/RAG/AI (304 assertions, 0 failed). PHPStan 0, Pint PASS.
 - Commit: `fix(knowledge): normalize postgres search result rows` (local, NO PUSH).
 - H2-H4 (fixtures/assertions PG) siguen **PENDIENTES**; FASE 29 **NOT CLOSED**.
+
+### U5-PG-H2 — Analytics + FAQ test harness fixes (TEST-ONLY) · **COMPLETADA (hotfix H2; H3-H4 pendientes)**
+
+Harness fixes for 7 deterministic PostgreSQL failures. **Production code y migrations intactas.**
+- **Analytics up/down/up (AN-PG-12)**: reemplazado `migrate:rollback --step=2` (global, order-dependent)
+  por targeteo vía `--path` de las 2 migraciones analytics; verifica UP→DOWN→UP determinista sin tocar
+  otras migraciones. Confirmado el down() de analytics es válido (sin leftovers, recreación OK).
+- **FAQ fixture lifecycle (FAQ-PG-03..06, 10)**: `setUp()` creaba tenant antes de `migrate:fresh` (que
+  borra `tenants`) → FK `23503`. Fix: recrear fixture de tenant DESPUÉS del reset de esquema. FAQ-PG-06
+  además cuenta solo filas activas (`WHERE deleted_at IS NULL`) — la recreación post soft-delete NO
+  viola el partial unique index (contract).
+- **FAQ partial index predicate (FAQ-PG-08)**: assertion ahora SEMÁNTICA (normaliza espacios/parentesis,
+  verifica `deleted_at IS NULL`) en vez del string exacto `WHERE deleted_at IS NULL` frente al deparse
+  real `WHERE (deleted_at IS NULL)`.
+- **FAQ up/down/up (FAQ-PG-10)**: targeteo de la migración de faqs vía `--path` + recrear tenant.
+- **Regresión PG**: 7/7 H2 PASS. Suite PG completa: **175 passed / 9 failed** (solo H3=7 + H4=2).
+  Analytics agregación (DST) 12 PASS. Sin dependencia de orden (FAQ→Analytics y Analytics→FAQ idénticos).
+- PHPStan: 0 errores. Pint: PASS. Commit: `test(postgres): isolate migration fixtures correctly` (local,
+  NO PUSH).
+- H3-H4 (fixtures/assertions embedding/pgvector) siguen **PENDIENTES**; FASE 29 **NOT CLOSED**.

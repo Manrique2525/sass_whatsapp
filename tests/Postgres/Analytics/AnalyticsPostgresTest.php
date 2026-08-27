@@ -336,16 +336,24 @@ class AnalyticsPostgresTest extends PgvectorTestCase
     public function it_handles_up_down_up_cycle(): void
     {
         $this->artisan('migrate:fresh');
+
+        // Recreate the tenant after the schema reset; the one from setUp no longer exists.
         $this->tenantId = createTestAnalyticsTenant();
         $this->assertTrue(Schema::hasTable('analytics_daily'));
         $this->assertTrue(Schema::hasTable('conversation_metrics'));
 
-        $this->artisan('migrate:rollback', ['--step' => 2]);
+        // Target ONLY the analytics migrations instead of a global --step rollback,
+        // which is order-dependent and could roll back unrelated migrations.
+        $paths = [
+            'database/migrations/2026_08_20_010000_create_analytics_daily_table.php',
+            'database/migrations/2026_08_20_010100_create_conversation_metrics_table.php',
+        ];
+
+        $this->artisan('migrate:rollback', ['--path' => $paths]);
         $this->assertFalse(Schema::hasTable('conversation_metrics'));
         $this->assertFalse(Schema::hasTable('analytics_daily'));
 
-        $this->artisan('migrate');
-        $this->tenantId = createTestAnalyticsTenant();
+        $this->artisan('migrate', ['--path' => $paths]);
         $this->assertTrue(Schema::hasTable('analytics_daily'));
         $this->assertTrue(Schema::hasTable('conversation_metrics'));
 
