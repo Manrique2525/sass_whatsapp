@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Application\Audit\Services\AuditLogger;
 use App\Application\KnowledgeBase\Services\EmbeddingMaterializationService;
 use App\Domain\AI\Contracts\EmbeddingProviderInterface;
+use App\Domain\AI\Exceptions\EmbeddingDimensionMismatchException;
 use App\Domain\KnowledgeBase\Models\KnowledgeDocument;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -186,9 +187,18 @@ class EmbeddingMaterializationPostgresTest extends PgvectorTestCase
         $service = $this->getService();
         $document = $this->getDocument();
 
-        $result = $service->materialize($document);
+        // Contract: the dimension mismatch is validated by VectorSerializer inside the
+        // DB transaction and the EmbeddingDimensionMismatchException must propagate
+        // (fail closed, NOT silently ignored). The transaction rolls back, so no chunk
+        // receives a partial embedding.
+        $caught = null;
+        try {
+            $service->materialize($document);
+        } catch (EmbeddingDimensionMismatchException $e) {
+            $caught = $e;
+        }
 
-        $this->assertEquals(0, $result['chunks_processed']);
+        $this->assertNotNull($caught, 'Expected EmbeddingDimensionMismatchException to propagate');
 
         $nullCount = DB::table('knowledge_chunks')
             ->where('document_id', $this->docId)
@@ -196,6 +206,18 @@ class EmbeddingMaterializationPostgresTest extends PgvectorTestCase
             ->count();
 
         $this->assertEquals(2, $nullCount);
+
+        // No partial embedding persistence and no unrelated rows modified.
+        $nonNullCount = DB::table('knowledge_chunks')
+            ->where('document_id', $this->docId)
+            ->whereNotNull('embedding')
+            ->count();
+
+        $this->assertEquals(0, $nonNullCount);
+
+        $totalChunks = DB::table('knowledge_chunks')->count();
+
+        $this->assertEquals(2, $totalChunks);
     }
 
     public function test_emb_pg_03_embedding_null_selected(): void
@@ -244,14 +266,31 @@ class EmbeddingMaterializationPostgresTest extends PgvectorTestCase
         $service = $this->getService();
         $document = $this->getDocument();
 
-        $result = $service->materialize($document);
+        // Contract: the materialization failure propagates (NOT swallowed), and the
+        // DB transaction rolls back — no partial materialization, no false success.
+        $caught = null;
+        try {
+            $service->materialize($document);
+        } catch (RuntimeException $e) {
+            $caught = $e;
+        }
 
+        $this->assertNotNull($caught, 'Expected the simulated DB failure to propagate');
+
+        // (B) transaction rollback occurred: no partial materialization persisted.
         $nullCount = DB::table('knowledge_chunks')
             ->where('document_id', $this->docId)
             ->whereNull('embedding')
             ->count();
 
         $this->assertEquals(3, $nullCount);
+
+        $nonNullCount = DB::table('knowledge_chunks')
+            ->where('document_id', $this->docId)
+            ->whereNotNull('embedding')
+            ->count();
+
+        $this->assertEquals(0, $nonNullCount);
     }
 
     public function test_emb_pg_06_multi_batch_persist(): void
@@ -376,7 +415,18 @@ class EmbeddingMaterializationPostgresTest extends PgvectorTestCase
             ->update(['deleted_at' => now()]);
 
         $service = $this->getService();
-        $document = $this->getDocument();
+
+        // The service type-hints a non-nullable KnowledgeDocument. The supported
+        // boundary is the guard in isDocumentDeleted() (also enforced by the job before
+        // calling the service): a soft-deleted document is never materialized and never
+        // reaches the provider. Fetch with trashed so we pass a valid model instance.
+        $document = KnowledgeDocument::query()
+            ->withTrashed()
+            ->withoutTenantScope()
+            ->where('id', $this->docId)
+            ->first();
+
+        $this->assertNotNull($document);
 
         $result = $service->materialize($document);
 

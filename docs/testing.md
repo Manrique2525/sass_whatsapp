@@ -1727,3 +1727,30 @@ Harness fixes for 7 deterministic PostgreSQL failures. **Production code y migra
 - **Regresi�n PG**: 7/7 H2 tests PASS. Suite PG completa: 175 passed / 9 failed (solo clusters
   H3=7 + H4=2 pendientes). Sin dependencia de orden (FAQ?Analytics y Analytics?FAQ id�nticos).
 - PHPStan: 0 errores. Pint: PASS.
+
+### FASE 29 U5-PG-H3 - Knowledge embedding + nullable fixture contracts (TEST-ONLY)
+
+Contract alignment for 7 deterministic PostgreSQL failures. **Production code, migrations y DDL intactos.**
+
+- **Wrong dimension (EMB-PG-02)**: fail-closed productivo real: `VectorSerializer::validate()` lanza
+  `EmbeddingDimensionMismatchException` dentro de la DB transaction. Fix test-only: el test ahora verifica
+  que la excepcion PROPAGA (no se silencia) y que no hay persistencia parcial (2 chunks NULL, 0 non-null,
+  sin filas extra). Sin cambios de servicio.
+- **Transaction rollback (EMB-PG-05)**: el fallo del provider se PROPAGA (`processBatch` libera reserva y
+  re-lanza; no se traga). Fix test-only: assert excepcion propagada + rollback de transaction (3 chunks
+  NULL, 0 non-null, sin estado success falso).
+- **Deleted document (EMB-PG-10)**: boundary soportado = guard `isDocumentDeleted()` (tambien en el job
+  antes de llamar al servicio). El servicio type-hints `KnowledgeDocument` NO-nullable. Fix test-only: se
+  obtiene el documento con `withTrashed()` (instancia valida) y se verifica que NO se materializa ni se
+  llama al provider. Ya NO se llama `materialize(null)`.
+- **Stale column (EMB-NULL-PG-02/03/06/07)**: fixture usaba `filename`; schema real es `original_filename`
+  (2026_08_18_020100_create_knowledge_documents_table.php). Fix test-only: `filename` -> `original_filename`
+  + `storage_disk` explicito. Sin columna de compatibilidad.
+- **Rollback with NULL (EMB-NULL-PG-07)**: confirmado el contract de la migracion nullable: `down()` LANZA
+  `RuntimeException('Cannot revert embedding to NOT NULL...')` si existen NULLs. Asertado via
+  `->throws(RuntimeException::class, 'Cannot revert embedding to NOT NULL')`.
+- **Regresion PG**: 7/7 H3 PASS (17 tests embedding+nullable, 44 assertions, 0 failed). KnowledgeBase PG:
+  **43 passed / 2 failed** (solo H4=2: HNSW index assertion + parameterized invalid-vector, NO tocados).
+  Sin dependencia de orden (nullable<->materialization idAgnosticos).
+- **Regresion no-PG**: 331 tests Knowledge/RAG/Embedding/AI/document processing (910 assertions, 13 skip
+  por columna embedding en SQLite, 0 failed). PHPStan 0, Pint PASS.
