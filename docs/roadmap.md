@@ -2917,3 +2917,25 @@ COMPLETADA — pendiente commit. NO PUSH.
 - docs/incident-response.md: severity model + runbooks + postmortem.
 - ADR-108 written.
 - 12 tests: AUTH-01..06 (failed login audit), RET-01..06 (retention commands).
+
+## FASE 29 — Testing global + cobertura (EN PROGRESO)
+
+### U1 — Coverage Infrastructure + Critical Gap Baseline · COMPLETADA
+
+- Coverage tooling backend (PCOV, Docker `coverage` target, `docker-compose.coverage.yml`) y frontend
+  (`@vitest/coverage-v8`).
+- 48 tests nuevos: Policies (POL-01..26), SubscriptionService (SUB-01..14), BillingCustomerService
+  (CUST-01..08).
+- Suite total: 2392 backend / 544 frontend. PHPStan 0, Pint PASS, build PASS.
+- ADR-109 written.
+- Commit: a3a799b (local).
+
+### U2 — Tenancy + Auth Hardening Gaps · COMPLETADA
+
+- 60 tests nuevos en 5 unidades sin cobertura: TenantMiddleware (TEN-01..12),
+  AuthorizationService (AUTHZ-01..16), MemberService (MEM-01..16),
+  RecoverPendingWhatsAppMessage (REC-01..07), MessageOriginClassifier (ORIGIN-01..09).
+- Suite total: 2452 backend / 544 frontend (+60). PHPStan 0, Pint PASS, vue-tsc PASS, build PASS,
+  npm audit 0, composer audit 0 advisories (1 paquete abandonado pre-existente, fuera de alcance).
+- Producto: 0 bugs de producción (cambio test-only).
+- Commit: test(tenancy): cover tenant auth and recovery edge cases (local, NO PUSH).

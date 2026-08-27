@@ -1582,3 +1582,35 @@ npx vitest run --coverage
 | Backend (Pest) | 2344 | 2392 | +48 |
 | Frontend (Vitest) | 544 | 544 | 0 |
 | Total | 2888 | 2936 | +48 |
+
+### FASE 29 U2 — Tenancy + Auth Hardening Gaps
+
+Cubre 5 unidades sin tests dedicados: `TenantMiddleware`, `AuthorizationService`, `MemberService`,
+`RecoverPendingWhatsAppMessage` y `MessageOriginClassifier`. 60 tests nuevos.
+
+| File | Tests | Coverage |
+|---|---|---|
+| `TenantMiddlewareTest.php` | TEN-01..12 | resolution + deny (403 JSON `NO_TENANT` / web abort 403) + TenantContext set/clear/leak prevention + membership/status edge cases |
+| `AuthorizationServiceTest.php` | AUTHZ-01..16 | can/authorize/permissionsForTenant, owner/admin/agent permission matrix, inactive tenant, cross-tenant |
+| `MemberServiceTest.php` | MEM-01..16 | list/changeRole/remove, last-owner safeguard, IDOR safety, current_tenant_id cleanup |
+| `RecoverPendingWhatsAppMessageTest.php` | REC-01..07 | constructor, tries, status transition + TenantContext restore, failed() handling |
+| `MessageOriginClassifierTest.php` | ORIGIN-01..09 | automation/human/handoff/unknown branch classification |
+
+**Nota de implementación (REC)**: `RecoverPendingWhatsAppMessage::handle()` instancia
+`SendWhatsAppMessage` y lo ejecuta directamente (`->handle()`), por lo que `Queue::fake()` no lo
+captura; la recuperación es síncrona en el worker. Documentado, NO un bug.
+
+**Nota de tenancy (TEN-05)**: el `current_tenant_id` apunta por FK a un tenant existente; el caso
+"id inexistente" no es representable bajo integridad referencial, por lo que TEN-05 cubre el
+escenario de membresía `pending` (no activa) que también fuerza el deny.
+
+#### Test Totals After FASE 29 U2
+
+| Layer | After U1 | After U2 | Delta |
+|---|---|---|---|
+| Backend (Pest) | 2392 | 2452 | +60 |
+| Frontend (Vitest) | 544 | 544 | 0 |
+| Total | 2936 | 2996 | +60 |
+
+- PHPStan: 0 errores. Pint: PASS. vue-tsc: PASS. Build: PASS. npm audit: 0 vulnerabilidades.
+- composer audit: 0 advisories; 1 paquete abandonado pre-existente (`nunomaduro/larastan` → `larastan/larastan`), fuera de alcance de U2.
