@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 EN PROGRESO**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA**.
 
 ## Fases
 
@@ -2918,7 +2918,7 @@ COMPLETADA — pendiente commit. NO PUSH.
 - ADR-108 written.
 - 12 tests: AUTH-01..06 (failed login audit), RET-01..06 (retention commands).
 
-## FASE 29 — Testing global + cobertura (EN PROGRESO)
+## FASE 29 — Testing global + cobertura (COMPLETADA)
 
 ### U1 — Coverage Infrastructure + Critical Gap Baseline · COMPLETADA
 
@@ -3016,7 +3016,7 @@ Suite backend no-PG **2492 passed / 15 skipped / 0 failed**.
 - **PCOV corregido** en el stage Docker `coverage`: conserva `extension=pcov.so` y `pcov.enabled=1`.
   El stage `runtime` permanece sin PCOV. Cobertura se ejecuta con `memory_limit=512M` y sin versionar
   artefactos.
-- FASE 29 sigue **EN PROGRESO**; esta unidad no cierra U5 ni inicia FASE 30.
+- FASE 29 cerrada en U5 (ver seccion de cierre al final).
 
 ### U5-PG-H1 — KnowledgeSearchService PostgreSQL hydration (BUG P1 RESUELTO) · **COMPLETADA (hotfix H1; H2-H4 pendientes)**
 
@@ -3040,7 +3040,7 @@ Suite backend no-PG **2492 passed / 15 skipped / 0 failed**.
   vector inválido parametrizado.
 - Regresión no-PG: 124 tests Knowledge/RAG/AI (304 assertions, 0 failed). PHPStan 0, Pint PASS.
 - Commit: `fix(knowledge): normalize postgres search result rows` (local, NO PUSH).
-- H2-H4 (fixtures/assertions PG) siguen **PENDIENTES**; FASE 29 **NOT CLOSED**.
+- Continuado por H2-H4 (seccion de cierre U5 al final) y cerrado en U5.
 
 ### U5-PG-H2 — Analytics + FAQ test harness fixes (TEST-ONLY) · **COMPLETADA (hotfix H2; H3-H4 pendientes)**
 
@@ -3060,7 +3060,7 @@ Harness fixes for 7 deterministic PostgreSQL failures. **Production code y migra
   Analytics agregación (DST) 12 PASS. Sin dependencia de orden (FAQ→Analytics y Analytics→FAQ idénticos).
 - PHPStan: 0 errores. Pint: PASS. Commit: `test(postgres): isolate migration fixtures correctly` (local,
   NO PUSH).
-- H3-H4 (fixtures/assertions embedding/pgvector) siguen **PENDIENTES**; FASE 29 **NOT CLOSED**.
+- Continuado por H3-H4 y cerrado en U5 (seccion de cierre al final).
 
 ### U5-PG-H3 - Knowledge embedding + nullable fixture contracts (TEST-ONLY) - **COMPLETADA (hotfix H3; H4 pendiente)**
 
@@ -3114,4 +3114,33 @@ ningun indice; la columna y el indice HNSW reales se mantienen.
 - **Seguridad**: SQL injection demostrada NO; input invalido enlazado como parametro SI; rechazado por PG
   SI; objetos de BD preservados SI. Commit: `test(pgvector): align assertions with postgres behavior`
   (local, NO PUSH).
-- U5 closure (FINAL CLOSURE RESUME) sigue **PENDIENTE**; FASE 29 **NOT CLOSED**.
+
+### U5 — Final Closure (FASE 29 COMPLETADA)
+
+Cierre global de FASE 29. **FASE 29 = COMPLETADA.**
+
+- **Backend no-PG**: 2492 passed / 15 skipped / 0 failed (7114 assertions, 874.78s). Igual al baseline
+  validado U4; sin regresiones.
+- **PostgreSQL suite (puerta obligatoria)**: 184 passed / 0 failed / 0 skipped (489 assertions, 566.69s).
+  SQLite NO puede validar pgvector, locking, advisory locks, migraciones/indices PG, concurrencia ni
+  hydration de tipos; por eso la suite PG es MANDATORIA antes de merge.
+- **Frontend**: 36 files / 555 passed / 0 failed (8.46s). Incluye Login.test.ts (4) y Dashboard.test.ts (2)
+  de U5, revisados y validos (render, submit, errores, estado vacio; sin E2E/red/snapshot/secrets).
+- **Coverage backend**: 85.0% (baseline validado, PCOV en stage Docker `coverage`; tooling intacto).
+- **Coverage frontend**: Statements 49.51 / Branches 85.30 / Functions 72.86 / Lines 49.51 (sin delta por
+  incluir los tests de pagina U5).
+- **Calidad**: PHPStan 0 errores (proyecto, level 6 en phpstan.neon); Pint PASS (825 files); vue-tsc PASS;
+  vite build PASS; npm audit 0 vulns; composer audit 0 advisories (1 paquete abandonado no-seguridad:
+  `nunomaduro/larastan`); config cache PASS.
+- **Skips**: non-PG 15 (todos legitimios/environment PG-only: 13 columna embedding en SQLite + partial
+  unique index + LeadSecurity is_active; cubiertos por suite PG). PG 0 skips. unknown 0, flaky critical 0.
+- **Bugs productivos resueltos en FASE29**: Analytics DST/window (f31d606), WhatsApp malformed collection
+  (1977f09), Inbox unauthorized load (3199951), KnowledgeSearch PG hydration (6f01c2a).
+- **Correcciones PG (test-only)**: H2 (771bf48), H3 (0914991), H4 (4a40c9f).
+- **P0=0, P1=0, P2 bloqueante=0**.
+- Cobertura de coverage infra PASS; gitignore cubre coverage.xml y coverage-html. Frontend generar `coverage/`
+  (v8 html) que NO se versiona.
+- Migracion pendiente de produccion `2026_08_25_100001_create_usage_reservations_table` NO ejecutada
+  (solo registrada en suite PG via RefreshDatabase). H1-H4 sin nuevas migraciones.
+- **FASE30 (E2E Playwright)** NO INICIADA y NO autorizada: login, inbox, handoff, flow builder, billing,
+  knowledge upload pertenecen a FASE30.

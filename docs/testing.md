@@ -1786,4 +1786,31 @@ vector_cosine_ops, sobre embedding) se preserva.
 - **Seguridad**: SQL injection demostrada NO; input invalido enlazado como parametro SI; rechazado por PG
   (22P02) SI; objetos de BD preservados SI.
 - Commit: `test(pgvector): align assertions with postgres behavior (local, NO PUSH).
-- FASE 29 **NOT CLOSED** - U5 final closure sigue pendiente.
+
+### FASE 29 U5 - Final Closure (COMPLETADA)
+
+Cierre global de FASE 29. **FASE 29 = COMPLETADA.**
+
+- **Backend no-PG**: 2492 passed / 15 skipped / 0 failed (7114 assertions, 874.78s). Igual al baseline
+  validado U4; sin regresiones.
+- **PostgreSQL suite (puerta obligatoria)**: 184 passed / 0 failed / 0 skipped (489 assertions, 566.69s).
+  SQLite no valida pgvector, locking, advisory locks, migraciones/indices PG, concurrencia ni hydration;
+  por eso la suite PG es MANDATORIA antes de merge.
+- **Frontend**: 36 files / 555 passed / 0 failed (8.46s). Incluye Login.test.ts (4) y Dashboard.test.ts (2)
+  de U5, revisados y validos (render, submit, errores, estado vacio; sin E2E/red/snapshot/secrets).
+- **Coverage backend**: 85.0% (baseline validado, PCOV en stage Docker `coverage`; tooling intacto;
+  runner con `php -d memory_limit=512M`).
+- **Coverage frontend**: Statements 49.51 / Branches 85.30 / Functions 72.86 / Lines 49.51 (sin delta por
+  incluir los tests de pagina U5).
+- **Calidad**: PHPStan 0 errores (proyecto, level 6 en phpstan.neon); Pint PASS (825 files); vue-tsc PASS;
+  vite build PASS; npm audit 0 vulns; composer audit 0 advisories (1 abandonado no-seguridad:
+  `nunomaduro/larastan`); config cache PASS.
+- **Skips**: non-PG 15 legitimos (13 columna embedding en SQLite + partial unique index + LeadSecurity
+  is_active; cubiertos por suite PG). PG 0 skips. unknown 0, flaky critical 0.
+- **Bugs productivos resueltos en FASE29**: Analytics DST/window (f31d606), WhatsApp malformed collection
+  (1977f09), Inbox unauthorized load (3199951), KnowledgeSearch PG hydration (6f01c2a).
+- **Correcciones PG (test-only)**: H2 (771bf48), H3 (0914991), H4 (4a40c9f).
+- **P0=0, P1=0, P2 bloqueante=0**.
+- Migracion pendiente de produccion `2026_08_25_100001_create_usage_reservations_table` NO ejecutada en
+  produccion (solo registrada en suite PG via RefreshDatabase). H1-H4 sin nuevas migraciones.
+- **FASE30 (E2E Playwright)** NO INICIADA: login, inbox, handoff, flow builder, billing, knowledge upload.

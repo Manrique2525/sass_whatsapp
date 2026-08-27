@@ -3363,3 +3363,13 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - Total suite: 2392 passed (BE), 544 passed (FE), 0 failures.
   - Baseline medible para futuras unidades de FASE 29 (U2-U5).
   - `.gitignore` actualizado para exclude coverage artifacts del repo.
+- **Estado / revalidación al cierre de FASE 29 (U5)**: los totales anteriores eran el snapshot U1;
+  al cierre FASE 29: backend no-PG 2492 passed / 15 skipped / 0 failed; frontend 36 files / 555 passed /
+  0 failed; suite PostgreSQL 184 passed / 0 failed / 0 skipped como **puerta obligatoria** antes de merge
+  (SQLite no valida pgvector, locking, advisory locks, migraciones/indices PG, concurrencia ni type
+  hydration). Runner de tests/coverage con `php -d memory_limit=512M` (PCOV en stage Docker `coverage`;
+  sin versionar artefactos: `coverage.xml` y `coverage-html` en `.gitignore`; el reporte html v8 de
+  frontend `coverage/` tampoco se versiona). Backend coverage = 85.0% validado. Frontend coverage final =
+  Statements 49.51 / Branches 85.30 / Functions 72.86 / Lines 49.51. Sin percent-chasing; gates son rojos
+  solo ante regresiones o bugs. **FASE30 (Playwright) es la dueña de E2E** (login, inbox, handoff, flow
+  builder, billing, knowledge upload): no implementado en FASE29.
