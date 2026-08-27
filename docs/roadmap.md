@@ -3088,4 +3088,30 @@ Contract alignment for 7 deterministic PostgreSQL failures. **Production code, m
 - **Regresion no-PG**: 331 tests Knowledge/RAG/Embedding/AI/document processing (910 assertions, 13 skip
   por columna embedding en SQLite, 0 failed). PHPStan 0, Pint PASS. Commit:
   `test(postgres): align knowledge fixtures with current contracts` (local, NO PUSH).
-- H4 (assertions pgvector: HNSW + invalid-vector parametrizado) sigue **PENDIENTE**; FASE 29 **NOT CLOSED**.
+### FASE 29 U5-PG-H4 - Pgvector assertion alignment (TEST-ONLY)
+
+Ultima unidad U5-PG. **Production code, migrations e indexes intactos.** No se renombro ni recreo
+ningun indice; la columna y el indice HNSW reales se mantienen.
+
+- **HNSW index assertion (semantica)**: el test ya NO asume naming estetico (`indexname LIKE '%hnsw%'`).
+  Valida comportamiento/esquema via catalogo PostgreSQL: indice real `knowledge_chunks_embedding_idx` sobre
+  columna `embedding`, access method `hnsw`, operator class `vector_cosine_ops`, `is_valid = true`. Se
+  mantiene la assertion de compatibilidad de query cosine (`<=>`) con esquema index-compatible. No se exige
+  que el planner use HNSW en datasets diminutos (seleccion de planner depende de datos/estadisticas).
+- **Parameterized vector (seguridad)**: la propiedad probada es que el valor de vector controlado por el
+  usuario se ENLAZA como dato (`?::vector` -> unnamed portal parameter), NO se interpola en SQL. El string
+  invalido (`1.0,2.0,3.0]::vector; DROP TABLE knowledge_chunks; --`) se rechaza como tipo por PostgreSQL
+  con SQLSTATE **22P02** (invalid input syntax for type vector); el `DROP` NUNCA se ejecuta. El test aserta
+  22P02 (no mensaje completo fragil), via savepoint interno para no abortar la transaccion del test, y
+  verifica post-condicion de seguridad: tabla `knowledge_chunks` sigue existiendo, mismo numero de filas,
+  sin mutacion de esquema. Control: un vector VALIDO por la misma ruta de binding se ejecuta con exito
+  (prueba que el rechazo es validacion de tipo, no query construction rota).
+- **Regresion PG**: full KnowledgeSearchPostgresTest 14/14 PASS (32 assertions). KnowledgeBase PG: **45/45
+  PASS (96 assertions), 0 failed**. Suite PostgreSQL COMPLETA (phpunit.pgsql.xml, tests/Postgres): **184
+  passed, 0 failed, 489 assertions**. Sin recuento skipped ni flakiness (H4 repetido 2/2 PASS).
+- **Regresion no-PG**: 338 tests Knowledge/RAG/Embedding/AI/document processing (926 assertions, 13 skip
+  por columna embedding en SQLite, 0 failed). PHPStan 0, Pint PASS.
+- **Seguridad**: SQL injection demostrada NO; input invalido enlazado como parametro SI; rechazado por PG
+  SI; objetos de BD preservados SI. Commit: `test(pgvector): align assertions with postgres behavior`
+  (local, NO PUSH).
+- U5 closure (FINAL CLOSURE RESUME) sigue **PENDIENTE**; FASE 29 **NOT CLOSED**.

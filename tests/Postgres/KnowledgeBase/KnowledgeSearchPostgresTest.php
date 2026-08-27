@@ -6,6 +6,7 @@ use App\Application\KnowledgeBase\Services\KnowledgeSearchService;
 use App\Domain\AI\Contracts\EmbeddingProviderInterface;
 use App\Domain\AI\ValueObjects\EmbeddingRequest;
 use App\Domain\KnowledgeBase\ValueObjects\VectorSerializer;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Fakes\FakeEmbeddingProvider;
@@ -348,13 +349,30 @@ class KnowledgeSearchPostgresTest extends PgvectorTestCase
 
     public function test_hnsw_index_exists_and_cosine_query_compatible(): void
     {
-        $indexes = DB::select("
-            SELECT indexname FROM pg_indexes
-            WHERE tablename = 'knowledge_chunks'
-              AND indexname LIKE '%hnsw%'
+        $hnswIndex = DB::select("
+            SELECT
+                i.relname        AS index_name,
+                am.amname        AS access_method,
+                ix.indisvalid    AS is_valid,
+                oc.opcname       AS operator_class,
+                a.attname        AS column_name
+            FROM pg_index ix
+            JOIN pg_class i     ON i.oid = ix.indexrelid
+            JOIN pg_class t     ON t.oid = ix.indrelid
+            JOIN pg_am am       ON am.oid = i.relam
+            JOIN pg_attribute a ON a.attrelid = ix.indrelid
+                              AND a.attnum = ANY(ix.indkey)
+            JOIN pg_opclass oc  ON oc.oid = ix.indclass[0]
+            WHERE t.relname = 'knowledge_chunks'
+              AND a.attname = 'embedding'
+              AND am.amname = 'hnsw'
         ");
 
-        $this->assertNotEmpty($indexes);
+        $this->assertNotEmpty($hnswIndex, 'knowledge_chunks debe tener un índice HNSW sobre la columna embedding.');
+        $this->assertSame('hnsw', $hnswIndex[0]->access_method);
+        $this->assertSame('vector_cosine_ops', $hnswIndex[0]->operator_class);
+        $this->assertSame('embedding', $hnswIndex[0]->column_name);
+        $this->assertTrue((bool) $hnswIndex[0]->is_valid);
 
         $queryVector = $this->searchQueryFor('index test');
         $this->insertChunkRaw($this->docId, 0, 'Indexed chunk', VectorSerializer::serialize($queryVector));
@@ -463,17 +481,40 @@ class KnowledgeSearchPostgresTest extends PgvectorTestCase
 
     public function test_vector_passed_via_parameterized_binding(): void
     {
+        $validVector = $this->searchQueryFor('valid binding control');
+        $this->insertChunkRaw($this->docId, 0, 'Bound vector control', VectorSerializer::serialize($validVector));
+
+        $rowCountBefore = (int) DB::table('knowledge_chunks')->count();
+
         $maliciousVector = '1.0,2.0,3.0]::vector; DROP TABLE knowledge_chunks; --';
 
-        $results = DB::select(
-            'SELECT 1 AS safe FROM knowledge_chunks WHERE embedding IS NOT NULL ORDER BY embedding <=> ?::vector LIMIT 1',
-            [$maliciousVector],
-        );
+        $caught = null;
+        DB::statement('SAVEPOINT reject_invalid_vector');
+        try {
+            DB::select(
+                'SELECT 1 AS safe FROM knowledge_chunks WHERE embedding IS NOT NULL ORDER BY embedding <=> ?::vector LIMIT 1',
+                [$maliciousVector],
+            );
+        } catch (QueryException $e) {
+            $caught = $e;
+            DB::statement('ROLLBACK TO SAVEPOINT reject_invalid_vector');
+        }
+        DB::statement('RELEASE SAVEPOINT reject_invalid_vector');
+
+        $this->assertNotNull($caught, 'El vector inválido debe rechazarse como tipo por PostgreSQL.');
+        $this->assertStringContainsString('22P02', (string) $caught->getCode());
 
         $tableExists = DB::select("SELECT 1 AS exists FROM information_schema.tables WHERE table_name = 'knowledge_chunks'");
-
-        $this->assertEmpty($results);
         $this->assertNotEmpty($tableExists);
+
+        $rowCountAfter = (int) DB::table('knowledge_chunks')->count();
+        $this->assertSame($rowCountBefore, $rowCountAfter);
+
+        $control = DB::select(
+            'SELECT 1 AS safe FROM knowledge_chunks WHERE embedding IS NOT NULL ORDER BY embedding <=> ?::vector LIMIT 1',
+            [VectorSerializer::serialize($validVector)],
+        );
+        $this->assertNotEmpty($control);
     }
 
     // ============================================================

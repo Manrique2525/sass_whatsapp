@@ -1754,3 +1754,36 @@ Contract alignment for 7 deterministic PostgreSQL failures. **Production code, m
   Sin dependencia de orden (nullable<->materialization idAgnosticos).
 - **Regresion no-PG**: 331 tests Knowledge/RAG/Embedding/AI/document processing (910 assertions, 13 skip
   por columna embedding en SQLite, 0 failed). PHPStan 0, Pint PASS.
+
+### FASE 29 U5-PG-H4 - Pgvector assertion alignment (TEST-ONLY)
+
+Ultima unidad U5-PG. Production intacto; sin cambios de migraciones, indices, schema ni SQL productivo.
+No se renombra ni recrea ningun indice: el indice real knowledge_chunks_embedding_idx (hnsw,
+vector_cosine_ops, sobre embedding) se preserva.
+
+- **KnowledgeSearchPostgresTest::test_hnsw_index_exists_and_cosine_query_compatible**:
+  - Antes: indexname LIKE '%hnsw%' (naming fragil); el indice real se llama knowledge_chunks_embedding_idx
+    y no contiene "hnsw", por lo que ssertNotEmpty fallaba.
+  - Ahora: assertion SEMANTICA via catalogo PostgreSQL (pg_index/pg_class/pg_am/pg_attribute/
+    pg_opclass): indice existe sobre columna embedding, access method = hnsw, operator class =
+    ector_cosine_ops, is_valid = true. Independiente del nombre del indice. Se conserva la assertion
+    de compatibilidad coseno (<=> con ?::vector).
+- **KnowledgeSearchPostgresTest::test_vector_passed_via_parameterized_binding**:
+  - Antes: esperaba ssertEmpty() tras lanzar la query con el string malicioso; el DB::select
+    lanzaba QueryException 22P02 sin capturar -> fallo.
+  - Ahora: aserta que el string invalido 1.0,2.0,3.0]::vector; DROP TABLE knowledge_chunks; -- se enlaza
+    como parametro (?::vector), PostgreSQL lo rechaza por tipo con SQLSTATE **22P02**, y no se interpola
+    en SQL (sin injection; el DROP nunca se ejecuta). Post-condiciones de seguridad: tabla knowledge_chunks
+    existe, mismo conteo de filas, sin mutacion de esquema. Control: vector VALIDO por la misma ruta de
+    binding se ejecuta con exito (rechazo = validacion de tipo, no query construction rota).
+  - Uso de SAVEPOINT/ROLLBACK TO para aislar el error esperado dentro de la transaccion del test
+    (RefreshDatabase) y permitir las assertions posteriores sin abortar.
+- **Regresion PG**: KnowledgeSearchPostgresTest 14/14 PASS (32 assertions). KnowledgeBase PG: **45/45 PASS
+  (96 assertions)**. Suite PostgreSQL COMPLETA: **184 passed, 0 failed, 489 assertions, 0 skipped**.
+  H4 repetido 2/2 PASS (sin flakiness).
+- **Regresion no-PG**: 338 tests (926 assertions, 13 skip por columna embedding en SQLite, 0 failed).
+  PHPStan 0, Pint PASS.
+- **Seguridad**: SQL injection demostrada NO; input invalido enlazado como parametro SI; rechazado por PG
+  (22P02) SI; objetos de BD preservados SI.
+- Commit: `test(pgvector): align assertions with postgres behavior (local, NO PUSH).
+- FASE 29 **NOT CLOSED** - U5 final closure sigue pendiente.
