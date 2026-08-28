@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Carbon;
 
 /**
@@ -141,6 +142,24 @@ final class Conversation extends Model
      */
     public function lastMessage(): HasOne
     {
-        return $this->hasOne(Message::class)->latestOfMany();
+        // Con el PK uuid de `messages`, `latestOfMany()`/`ofMany()` generan
+        // `MAX(messages.id)` en el subselect, que PostgreSQL rechaza
+        // (`function max(uuid) does not exist`). En su lugar determinamos el
+        // último mensaje agregando SÓLO `created_at` (timestamp válido en
+        // Postgres y SQLite) vía una tabla derivada, y desempatamos por el
+        // propio `id` en el ORDER BY (ordenar uuid es válido; solo agregarlo no).
+        return $this->hasOne(Message::class)
+            ->orderByDesc('id')
+            ->joinSub(
+                Message::query()
+                    ->withoutGlobalScopes()
+                    ->selectRaw('conversation_id, MAX(created_at) as last_created_at')
+                    ->groupBy('conversation_id'),
+                'last_message_sorted',
+                function (JoinClause $join): void {
+                    $join->on('last_message_sorted.conversation_id', '=', 'messages.conversation_id')
+                        ->on('last_message_sorted.last_created_at', '=', 'messages.created_at');
+                },
+            );
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Application\Conversations\Services\ConversationService;
 use App\Domain\Conversations\Enums\ConversationStatus;
 use App\Domain\Conversations\Models\Conversation;
+use App\Domain\Messages\Models\Message;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Enums\TenantPermission;
 use App\Domain\Users\Enums\UserRole;
@@ -27,6 +28,28 @@ function conversation_url(Tenant $tenant, ?string $conversationId = null): strin
     $base = '/api/v1/tenants/'.$tenant->id.'/conversations';
 
     return $conversationId === null ? $base : $base.'/'.$conversationId;
+}
+
+/**
+ * Helper LOCAL (nombre único para no chocar con `make_message` de
+ * MessageApiTest) que crea un mensaje del tenant con el TenantContext activo.
+ */
+function make_inbox_message(Tenant $tenant, Conversation $conversation, array $attributes = []): Message
+{
+    TenantContext::setId($tenant->id);
+
+    try {
+        return Message::query()->create(array_merge([
+            'conversation_id' => $conversation->id,
+            'direction' => 'inbound',
+            'type' => 'text',
+            'status' => 'delivered',
+            'body' => 'Hola',
+            'delivered_at' => now(),
+        ], $attributes));
+    } finally {
+        TenantContext::clear();
+    }
 }
 
 test('CONV-1: crear una conversación para un contacto del tenant devuelve 201', function (): void {
@@ -608,4 +631,71 @@ test('CONV-24: el soft delete oculta la conversación y findOrCreateActiveForCon
 
     $this->assertDatabaseCount('conversations', 2);
     expect(TenantContext::id())->toBeNull();
+});
+
+test('HOTFIX CONV-25: last_message usa created_at y el index devuelve 200 con ids uuid en PostgreSQL (max(uuid))', function (): void {
+    $tenant = Tenant::factory()->create();
+    $owner = User::factory()->create();
+    make_tenant_member($owner, $tenant, 'owner');
+
+    $contact = make_contact($tenant);
+    $conversation = make_conversation($tenant, $contact);
+
+    $first = make_inbox_message($tenant, $conversation, ['body' => 'Primero']);
+    $last = make_inbox_message($tenant, $conversation, ['body' => 'Último']);
+
+    // Fechas distintas para un orden determinístico (independiente de la precisión del timestamp).
+    $first->forceFill(['created_at' => now()->subMinutes(5)])->save();
+    $last->forceFill(['created_at' => now()->subMinutes(1)])->save();
+
+    $this->actingAs($owner)
+        ->getJson(conversation_url($tenant))
+        ->assertOk()
+        ->assertJsonPath('meta.total', 1)
+        ->assertJsonPath('conversations.0.last_message.id', $last->id)
+        ->assertJsonPath('conversations.0.last_message.body', 'Último')
+        ->assertJsonPath('conversations.0.last_message.conversation_id', $conversation->id)
+        ->assertJsonPath('conversations.0.last_message.id', function ($id) use ($first): bool {
+            return $id !== $first->id;
+        });
+});
+
+test('HOTFIX CONV-26: last_message respeta el aislamiento tenant A/B en el index', function (): void {
+    $tenantA = Tenant::factory()->create();
+    $tenantB = Tenant::factory()->create();
+    $ownerA = User::factory()->create();
+    $ownerB = User::factory()->create();
+    make_tenant_member($ownerA, $tenantA, 'owner');
+    make_tenant_member($ownerB, $tenantB, 'owner');
+
+    $contactA = make_contact($tenantA);
+    $contactB = make_contact($tenantB);
+    $conversationA = make_conversation($tenantA, $contactA);
+    $conversationB = make_conversation($tenantB, $contactB);
+
+    $lastA = make_inbox_message($tenantA, $conversationA, ['body' => 'A último']);
+    $lastB = make_inbox_message($tenantB, $conversationB, ['body' => 'B único']);
+    $lastA->forceFill(['created_at' => now()->subMinutes(1)])->save();
+    $lastB->forceFill(['created_at' => now()->subMinutes(1)])->save();
+
+    // A ve solo su conversación con su último mensaje.
+    $this->actingAs($ownerA)
+        ->getJson(conversation_url($tenantA))
+        ->assertOk()
+        ->assertJsonPath('meta.total', 1)
+        ->assertJsonPath('conversations.0.contact.id', $contactA->id)
+        ->assertJsonPath('conversations.0.last_message.body', 'A último');
+
+    // A jamás ve el listado de B (404).
+    $this->actingAs($ownerA)
+        ->getJson(conversation_url($tenantB))
+        ->assertStatus(404);
+
+    // B ve únicamente su propia conversación y su último mensaje.
+    $this->actingAs($ownerB)
+        ->getJson(conversation_url($tenantB))
+        ->assertOk()
+        ->assertJsonPath('meta.total', 1)
+        ->assertJsonPath('conversations.0.contact.id', $contactB->id)
+        ->assertJsonPath('conversations.0.last_message.body', 'B único');
 });
