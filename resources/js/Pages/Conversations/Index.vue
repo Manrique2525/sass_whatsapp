@@ -431,8 +431,9 @@ const onAction = async (action: 'close' | 'reopen' | 'pause_bot' | 'resume_bot')
     success.value = null;
 
     try {
+        const endpoint = action === 'resume_bot' ? 'resume-bot' : action;
         const res = await window.axios.post(
-            `/api/v1/tenants/${tenantId}/conversations/${conversation.id}/${action}`,
+            `/api/v1/tenants/${tenantId}/conversations/${conversation.id}/${endpoint}`,
         );
 
         const messagesMap: Record<string, string> = {
