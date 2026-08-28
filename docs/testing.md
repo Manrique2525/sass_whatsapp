@@ -1814,3 +1814,91 @@ Cierre global de FASE 29. **FASE 29 = COMPLETADA.**
 - Migracion pendiente de produccion `2026_08_25_100001_create_usage_reservations_table` NO ejecutada en
   produccion (solo registrada en suite PG via RefreshDatabase). H1-H4 sin nuevas migraciones.
 - **FASE30 (E2E Playwright)** NO INICIADA: login, inbox, handoff, flow builder, billing, knowledge upload.
+
+### FASE 30 U1 — Playwright Infrastructure + Auth + Multi-Tenancy Base
+
+Primera unidad de E2E de **FASE 30 (Playwright)**. Establece la infraestructura E2E (config, guard de
+entorno, DB de aislamiento, seeds deterministas, provider fakes) y cubre los flujos de autenticación y el
+aislamiento multi-tenant básico (P0).
+
+#### Herramienta y alcance (MVP)
+
+| Aspecto | Decisión |
+|---|---|
+| Runner | `@playwright/test ^1.62.1` (solo devDependency) |
+| Navegador | Chromium únicamente (proyecto `chromium`; sin firefox/webkit) |
+| Scripts | `test:e2e`, `test:e2e:headed`, `test:e2e:ui`, `test:e2e:report` |
+| Concurrencia | `workers=1` (compartir DB/Redis), `retries=0` (no ocultar flakiness) |
+| Base | `baseURL` 8082 |
+| Timeouts | `navigationTimeout` 60s (bottleneck es navegación bajo server `php -S` lento); `expect.timeout` 15s |
+
+**Carpeta**: `tests/e2e/` (separada de unit/feature). Auth por `storageState` (login una sola vez en
+`global-setup.ts` y reutilizado entre specs — política de seguridad: nunca se versiona `tests/e2e/.auth/`,
+ignored).
+
+#### Infraestructura
+
+- **`playwright.config.ts`**: projects, webServer (compose E2E), config de timeouts, reporters, output dirs.
+- **`global-setup.ts`**: arranca entorno, hace login único y guarda `storageState`, sondea salud (`pollHealth`).
+- **`helpers/auth.ts` / `helpers/constants.ts`**: logins por rol, `apiGet`/`apiPost` (header `Origin` correcto
+  para CSRF), constantes deterministas de tenants/contactos/conversaciones/usuarios.
+- **`app/Infrastructure/Testing/E2EEnvironmentGuard.php`**: **guard de seguridad**. E2E SOLO corre si
+  `APP_ENV=e2e` (literal) Y la DB termina en `_e2e_test` Y usa índice Redis dedicado (db 15) + prefijo.
+  Aborta (`e2e:setup`, restore database) ante condiciones no seguras. Testeado por
+  `tests/Unit/Infrastructure/E2EEnvironmentGuardTest.php` (E2E-ENV-01..03, cubre las condiciones negativas).
+- **`app/Providers/E2EOnlyServiceProvider.php`**: re-bindea fakes (`FakeAIProvider`, `FakeEmbeddingProvider`,
+  `FakeCapacityGuard`, `FakeUsageGuard`, `FakeFaqMatcherService`, `FakeKnowledgeSearchService`) SOLO si
+  `APP_ENV=e2e`. WhatsApp/Stripe/Sentry reales pero latentes (no invocados en U1). DSNs vacíos en
+  `.env.e2e.example`; **ningún proveedor externo real** en E2E.
+- **`app/Console/Commands/SetupE2EEnvironment.php`**: configura el entorno E2E (migrate:fresh + seed) con
+  el guard. **`database/seeders/E2ETenantSeeder.php`**: seeds deterministas con UUIDs fijos (tenant A/B,
+  contactos, conversación, usuarios owner/admin/agent) para assert estables.
+
+#### Aislamiento E2E (DB / Redis / storage)
+
+- **DB**: `whatsapp_saas_e2e_test` (dedicada; no toca la suite unit/feature ni PG canónica).
+- **Redis**: índice dedicado **db 15** + prefijo; la DB dev (db 0) y la de tests PG (db 14) quedan
+  intactas (NO `FLUSHALL`).
+- **Storage**: mount `./storage/e2e-app:/var/www/html/storage/app`; `storage/e2e-app/` ignored.
+
+#### Autenticación (specs)
+
+- **`login.spec.ts`**: login válido owner/admin/agent (storageState), logout, "credenciales inválidas"
+  (timeout targeted 30s en el mensaje de error: espera un POST HTTP real de ~10–20s bajo carga del server lento).
+- **`logout.spec.ts`**: logout desde sesión activa (test 90s + `toHaveURL` 45s justificados por el server lento).
+- No se usa `waitForTimeout` en ningún spec.
+
+#### Multi-tenancy P0 (specs)
+
+- Tenant A ve **su** conversación (200) y **no** ve/reacciona sobre la conversación de Tenant B (404).
+- Switch de tenant inválido → 404. Sin fuga de datos entre tenants (Tenant A nunca lee datos de Tenant B).
+
+#### Timeouts (justificados, no blanket)
+
+`navigationTimeout` 60s porque el server `php artisan serve` (SAPI CLI, opcache no compartido entre
+workers) es el bottleneck determinista (login completo warm ~22s; fases HTTP POST/redirect de ~8–10s).
+`expect.timeout` se mantiene en 15s; el único timeout targeted extra es el mensaje de error de login inválido.
+Esto NO es un wait-condition flaky ni carga de assets (assets ~0.1–0.5ms).
+
+#### Resultados U1
+
+- **E2E Run #1**: 13/13 PASS. **Run #2**: 13/13 PASS. **Run #3 (auth)**: 9/9 PASS. **logout** 3/3 (repetido).
+- **Multi-tenancy P0**: own 200, foreign 404, switch 404, leakage NO.
+- **Guard unit tests**: E2E-ENV-01/01b/02/02b/03 (condiciones negativas ambas).
+- **Regresiones FASE30 U1**:
+  - Backend no-PG (SQLite): **2499 passed / 15 skipped / 0 failed** (~15.3 min).
+  - PostgreSQL canónica (`phpunit.pgsql.xml`, `tests/Postgres`): **184 passed / 0 failed** (~14.6 min).
+  - Frontend Vitest: **555 passed / 0 failed**; typecheck PASS; build PASS.
+  - PHPStan `[OK] No errors`; Pint PASS (2 files: `SetupE2EEnvironment.php`, `E2EEnvironmentGuardTest.php`).
+  - `npm audit` 0 vulns; `composer audit` 0 advisories (1 abandonado no-seguridad conocido: `larastan`).
+  - Docker compose E2E config PASS.
+- **CONV-4/CONV-10 clasificados TEST ASSERTION PORTABILITY GAP, P3 (sin fix)**: ambos en suite SQLite
+  (`tests/Feature/Conversations`), no en la PG canónica. Producción NO afectada.
+- **Login timing (root-cause de 29–31s)**: server `php artisan serve` lentísimo (warm: `/up`=3.5–6.3s,
+  `/login`=2.3s, login completo=22s; POST login=9.98s, redirect→/dashboard=7.53s). PHP built-in server con
+  `opcache.enable_cli=1` pero la OPcache NO persiste entre workers (`cached_scripts=1, hits=0`): cada request
+  recompila/bootstrap Laravel (~2–10s). Clasificación: **STACK STARTUP / SERVER PERFORMANCE / FIRST REQUEST
+  WARMUP**, no wait-condition flaky.
+- **Hotfix productivo previo (commit separado)**: `d85751ad53b10eb2da64efc8b84ff5596b5d2195`
+  `fix(inbox): lastMessage() with PK uuid in PostgreSQL (max uuid)` — solo `Conversation.php` +
+  `ConversationTest.php`. Aislado de U1 (no amend/push).

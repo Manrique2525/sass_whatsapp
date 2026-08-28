@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 EN PROGRESO (U1 COMPLETADA)**.
 
 ## Fases
 
@@ -35,8 +35,8 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA
 | 26 | Auditoría + Seguridad (U1: Deployment Gate + Rate Limiting, U2: Billing atomicity + UsageGuard hardening, U3: Job timeout + error handling, U4: LIKE escaping + provider error sanitization + global exception renderers) | COMPLETADA |
 | 27 | Seguridad (refuerzo OWASP) — U1: Security Headers + CORS + Session Hardening · U2: Sanctum Token Expiry + TrustProxies + Structured Error Responses · U3: Token Rollout Verification + Documentation Closure | COMPLETADA |
 | 28 | Observabilidad (U1: Structured Logging + Correlation IDs · U2: Backend Sentry · U3: Frontend Sentry · U4: Health Checks + Queue · U5: Alerting + Ops Docs) | COMPLETADA |
-| 29 | Testing global + cobertura (U1: Coverage Infra + Critical Gap Baseline ✅ · U2: Tenancy + Auth · U3: Billing/Concurrency/PG · U4: Jobs/Webhooks · U5: Frontend + Closure) | EN PROGRESO |
-| 30 | E2E (Playwright) | PENDIENTE |
+| 29 | Testing global + cobertura (U1: Coverage Infra + Critical Gap Baseline ✅ · U2: Tenancy + Auth · U3: Billing/Concurrency/PG · U4: Jobs/Webhooks · U5: Frontend + Closure) | COMPLETADA |
+| 30 | E2E Playwright (U1: Infra + Auth + Multi-Tenancy Base ✅ · U2: Inbox · U3: Handoff · U4: Flow Builder · U5: Billing · U6: Knowledge) | EN PROGRESO |
 | 31 | Testing de webhooks (mocks Meta) | PENDIENTE |
 | 32 | Testing de fallbacks | PENDIENTE |
 | 33 | Performance | PENDIENTE |
@@ -3144,3 +3144,56 @@ Cierre global de FASE 29. **FASE 29 = COMPLETADA.**
   (solo registrada en suite PG via RefreshDatabase). H1-H4 sin nuevas migraciones.
 - **FASE30 (E2E Playwright)** NO INICIADA y NO autorizada: login, inbox, handoff, flow builder, billing,
   knowledge upload pertenecen a FASE30.
+
+## FASE 30 — E2E Playwright (EN PROGRESO)
+
+### U1 — Playwright Infrastructure + Auth + Multi-Tenancy Base · COMPLETADA
+
+Primera unidad de **FASE 30 (E2E Playwright)**. Establece la infraestructura E2E y cubre autenticación +
+aislamiento multi-tenant básico. Referencia completa: `docs/testing.md` (FASE 30 U1) y `docs/decisions.md`
+(ADR-110).
+
+**Infraestructura**:
+- `@playwright/test ^1.62.1` (devDependency only), Chromium-only (proyecto `chromium`).
+- Scripts: `test:e2e`, `test:e2e:headed`, `test:e2e:ui`, `test:e2e:report`.
+- `playwright.config.ts`, `global-setup.ts`, `tests/e2e/helpers/{auth,constants}.ts` (storageState logins,
+  pollHealth, apiGet/apiPost con header `Origin`).
+- **Guard de seguridad** `app/Infrastructure/Testing/E2EEnvironmentGuard.php`: exige `APP_ENV=e2e` + DB
+  terminada en `_e2e_test` + Redis dedicado (db 15 + prefijo). Aborta ante condiciones no seguras.
+  `E2EOnlyServiceProvider` re-bindea fakes SOLO si `APP_ENV=e2e`. WhatsApp/Stripe/Sentry reales pero
+  latentes (no invocados en U1). Sin providers externos reales (DSNs vacíos en `.env.e2e.example`).
+- `SetupE2EEnvironment` command + `E2ETenantSeeder` (UUIDs deterministas).
+- **Aislamiento**: DB `whatsapp_saas_e2e_test` dedicada; Redis db15 (dev db0 y PG db14 intactos, NO
+  FLUSHALL); storage mount `./storage/e2e-app`; `storage/e2e-app/`, `tests/e2e/.auth/`, `test-results/`,
+  `playwright-report/` ignorados.
+
+**Specs U1**:
+- Auth: login válido (owner/admin/agent), logout, credenciales inválidas. Logout 3/3.
+- Multi-tenancy P0: own 200, foreign 404, switch 404, sin leakage.
+- E2E runs: Run #1 13/13, Run #2 13/13, Run #3 (auth) 9/9.
+- Guard unit tests E2E-ENV-01/01b/02/02b/03 (condiciones negativas).
+
+**Login timing (29–31s, root-cause)**: server `php artisan serve` lentísimo (warm `/up`=3.5–6.3s, login
+completo warm=22s; POST login=9.98s, redirect→/dashboard=7.53s). PHP built-in server (SAPI CLI) con
+`opcache.enable_cli=1` pero OPcache NO persiste entre workers de `php -S` (`cached_scripts=1, hits=0`):
+cada request recompila/bootstrap Laravel (~2–10s). Clasificación: **STACK STARTUP / SERVER PERFORMANCE /
+FIRST REQUEST WARMUP** — no wait-condition flaky ni assets. Timeouts justificados, no blanket:
+`navigationTimeout` 60s, `expect.timeout` 15s, login error-targeted 30s. Sin `waitForTimeout`.
+
+**CONV-4/CONV-10 clasificados TEST ASSERTION PORTABILITY GAP, P3 (sin fix)**: ambos en suite SQLite
+(`tests/Feature/Conversations`), no en PG canónica. Producción NO afectada.
+
+**Regresiones**:
+- Backend no-PG (SQLite): **2499 passed / 15 skipped / 0 failed** (~15.3 min).
+- PostgreSQL canónica (`phpunit.pgsql.xml`, `tests/Postgres`): **184 passed / 0 failed** (~14.6 min).
+- Frontend Vitest: **555 passed / 0 failed**; vue-tsc PASS; vite build PASS.
+- PHPStan `[OK] No errors`; Pint PASS; npm audit 0 vulns; composer audit 0 advisories.
+- Docker compose E2E config PASS.
+
+**Hotfix productivo aislado (commit separado, NO amend/push)**: `d85751a`
+`fix(inbox): lastMessage() with PK uuid in PostgreSQL (max uuid)` — solo `Conversation.php` +
+`ConversationTest.php`.
+
+**Estado**: proyecto ahead=2 (hotfix `d85751a` + U1), behind=0, master local. FASE30 EN PROGRESO:
+U1 COMPLETADA; U2 (Inbox), U3 (Handoff), U4 (Flow Builder), U5 (Billing), U6 (Knowledge) PENDIENTES.
+NO PUSH. NO iniciar U2 salvo nuevo objetivo de usuario.

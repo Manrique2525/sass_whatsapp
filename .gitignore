@@ -23,3 +23,14 @@ yarn-error.log
 /.zed
 /coverage.xml
 /coverage-html
+
+# ------------------------------------------------------------
+# E2E (Playwright) — FASE 30 / ADR-110
+# ------------------------------------------------------------
+.env.e2e
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/tests/e2e/.auth/
+/storage/e2e-app/

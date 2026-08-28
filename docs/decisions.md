@@ -3373,3 +3373,46 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   Statements 49.51 / Branches 85.30 / Functions 72.86 / Lines 49.51. Sin percent-chasing; gates son rojos
   solo ante regresiones o bugs. **FASE30 (Playwright) es la dueña de E2E** (login, inbox, handoff, flow
   builder, billing, knowledge upload): no implementado en FASE29.
+
+## ADR-110 · E2E Architecture with Playwright (FASE 30 U1)
+
+- **Estado**: Aceptado · FASE 30 U1
+- **Contexto**: FASE 30 introduce el nivel E2E con Playwright. Los niveles unit/feature/integration ya
+  están cubiertos. La capa E2E debe probar flujos de usuario completos (login, inbox, handoff, flow
+  builder, billing, knowledge upload) y necesita una infraestructura segura que **nunca** toque la DB de
+  desarrollo ni la suite canónica de tests, y que no dependa de providers externos.
+- **Decisión**:
+  1. **Runner**: `@playwright/test ^1.62.1` (solo devDependency). Navegador **Chromium únicamente**
+     (proyecto `chromium`, sin firefox/webkit) como MVP. `workers=1` (compartir DB/Redis), `retries=0`
+     (no ocultar flakiness). Scripts `test:e2e`, `test:e2e:headed`, `test:e2e:ui`, `test:e2e:report`.
+  2. **Carpeta** separada `tests/e2e/`. Logueo único en `global-setup.ts` con `storageState` bajo
+     `tests/e2e/.auth/` (ignored, nunca se versiona). Helpers `auth.ts`/`constants.ts` con constantes
+     deterministas y `apiGet`/`apiPost` con header `Origin` correcto (CSRF).
+  3. **Guard de seguridad** `E2EEnvironmentGuard`: E2E SOLO corre si `APP_ENV=e2e` (literal) Y la DB
+     termina en `_e2e_test` Y usa Redis dedicado (índice 15 + prefijo). Aborta ante condiciones no
+     seguras (en `e2e:setup` y restore). Testeado con condiciones negativas (unit E2E-ENV-01..03).
+  4. **DB/Redis/storage aislados**: DB `whatsapp_saas_e2e_test` dedicada; Redis db 15 (dev db0 y PG db14
+     intactos, NO `FLUSHALL`); storage mount `./storage/e2e-app` (ignored).
+  5. **Sin providers externos reales**: DSNs vacíos (`.env.e2e.example`); `E2EOnlyServiceProvider`
+     re-bindea fakes (`FakeAIProvider`, `FakeEmbeddingProvider`, `FakeCapacityGuard`, `FakeUsageGuard`,
+     `FakeFaqMatcherService`, `FakeKnowledgeSearchService`) SOLO si `APP_ENV=e2e`. WhatsApp/Stripe/Sentry
+     reales pero latentes (no invocados en U1).
+  6. **Seeds deterministas**: `E2ETenantSeeder` con UUIDs fijos (tenant A/B, contactos, conversación,
+     usuarios owner/admin/agent) para asserts estables.
+  7. **Timeouts justificados, no blanket**: `navigationTimeout` 60s porque el server `php artisan serve`
+     (SAPI CLI, opcache no compartido entre workers) es el bottleneck determinista (login completo warm
+     ~22s; POST login y redirect de ~8–10s). `expect.timeout` 15s; el único timeout targeted es el
+     mensaje de error de login inválido (30s). Prohibido `waitForTimeout`.
+  8. **Catálogo U1**: auth (login owner/admin/agent, logout, credenciales inválidas) + multi-tenancy P0
+     (own 200, foreign 404, switch 404, sin leakage).
+- **Consecuencias**:
+  - E2E Run #1 13/13, Run #2 13/13, Run #3 (auth) 9/9, logout 3/3.
+  - Multi-tenancy P0 validado a nivel E2E; aislamiento DB/Redis/storage verificado.
+  - Regresiones FASE30 U1: backend SQLite 2499/15/0; PostgreSQL canónica 184/0; Vitest 555/0; typecheck y
+    build PASS; PHPStan 0; Pint PASS; audits 0 vulns.
+  - **Login timing**: diagnóstico clasificado STACK STARTUP / SERVER PERFORMANCE / FIRST REQUEST WARMUP
+    (server `php -S` lento determinista), no un bug aleatorio ni wait-condition flaky.
+  - **CONV-4/CONV-10** clasificados TEST ASSERTION PORTABILITY GAP, P3 (sin fix; suite SQLite, no PG).
+  - .gitignore cubre `test-results/`, `playwright-report/`, `tests/e2e/.auth/`, `storage/e2e-app/`.
+  - FASE30 EN PROGRESO: U1 COMPLETADA; U2 (Inbox), U3 (Handoff), U4 (Flow Builder), U5 (Billing),
+    U6 (Knowledge) pendientes y requerirán nuevo objetivo de usuario. NO PUSH.

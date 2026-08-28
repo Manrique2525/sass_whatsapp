@@ -1,0 +1,88 @@
+name: whatsapp-saas-e2e
+
+# Entorno E2E (Playwright) — FASE 30 / ADR-110.
+#
+# Levanta UN contenedor de app dedicado que se conecta a la misma red que el
+# stack de desarrollo para REUTILIZAR postgres/redis/minio ya en ejecución,
+# pero con:
+#   - BD dedicada  whatsapp_saas_e2e_test  (guard: debe terminar en _e2e_test)
+#   - Redis índice lógico 15 (solo sus llaves)
+#   - almacenamiento local aislado (nunca minio comppartido)
+#   - APP_ENV=e2e  (activa guard + fakes deterministas)
+#   - servidor HTTP php artisan serve en el puerto 8082 (sin nginx)
+#
+# Uso:
+#   docker compose -f docker-compose.e2e.yml up -d
+#   docker compose -f docker-compose.e2e.yml exec e2e-app php artisan e2e:setup
+#   npm run test:e2e
+#
+# El guard E2E aborta cualquier operación destructiva sobre una BD/index que
+# no sea la dedicada. NO toca el stack de desarrollo.
+
+services:
+  e2e-app:
+    image: whatsapp-saas-app
+    pull_policy: build
+    restart: unless-stopped
+    working_dir: /var/www/html
+    # El entrypoint `exec "$@"` lanza el comando indicado (php artisan serve).
+    # `--no-reload` es OBLIGATORIO: evita que ServeCommand recorte las variables
+    # de entorno (excepto un whitelist) que no provengan de .env, haciendo que
+    # DB_HOST/REDIS_HOST del compose lleguen al proceso del servidor PHP.
+    command: ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8082", "--no-reload"]
+    ports:
+      - "8082:8082"
+    volumes:
+      - .:/var/www/html
+      # Storage E2E aislado: sustituye el storage/app del repositorio por una
+      # carpeta dedicada en el host, para no escribir en la compartida con dev.
+      - ./storage/e2e-app:/var/www/html/storage/app
+      # Activa OPcache para el PHP built-in server (SAPI CLI) y acelera las
+      # requests del entorno E2E. Carga después de opcache.ini (prefijo zz-).
+      - ./docker/php/e2e-opcache.ini:/usr/local/etc/php/conf.d/zz-e2e-opcache.ini:ro
+    environment:
+      APP_ENV: e2e
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8082
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_DATABASE: whatsapp_saas_e2e_test
+      DB_USERNAME: saas
+      DB_PASSWORD: saas_secret
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_CLIENT: phpredis
+      REDIS_DB: "15"
+      REDIS_CACHE_DB: "15"
+      CACHE_STORE: redis
+      CACHE_PREFIX: e2e_
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: redis
+      SESSION_SECURE_COOKIE: "false"
+      BROADCAST_CONNECTION: log
+      FILESYSTEM_DISK: local
+      MAIL_MAILER: array
+      AWS_ACCESS_KEY_ID: ""
+      AWS_SECRET_ACCESS_KEY: ""
+      AWS_BUCKET: ""
+      WHATSAPP_APP_SECRET: ""
+      WHATSAPP_VERIFY_TOKEN: ""
+      OPENAI_API_KEY: ""
+      STRIPE_SECRET_KEY: ""
+      STRIPE_WEBHOOK_SECRET: ""
+      SENTRY_LARAVEL_DSN: ""
+      E2E_TEST_PASSWORD: e2e-password
+    healthcheck:
+      test: ["CMD", "php", "artisan", "about", "--only=environment"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - saas-existing
+
+networks:
+  saas-existing:
+    name: whatsapp-saas_saas
+    external: true
