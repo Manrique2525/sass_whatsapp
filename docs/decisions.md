@@ -3393,26 +3393,35 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
      seguras (en `e2e:setup` y restore). Testeado con condiciones negativas (unit E2E-ENV-01..03).
   4. **DB/Redis/storage aislados**: DB `whatsapp_saas_e2e_test` dedicada; Redis db 15 (dev db0 y PG db14
      intactos, NO `FLUSHALL`); storage mount `./storage/e2e-app` (ignored).
-  5. **Sin providers externos reales**: DSNs vacíos (`.env.e2e.example`); `E2EOnlyServiceProvider`
-     re-bindea fakes (`FakeAIProvider`, `FakeEmbeddingProvider`, `FakeCapacityGuard`, `FakeUsageGuard`,
-     `FakeFaqMatcherService`, `FakeKnowledgeSearchService`) SOLO si `APP_ENV=e2e`. WhatsApp/Stripe/Sentry
-     reales pero latentes (no invocados en U1).
+   5. **Sin providers externos reales**: DSNs vacíos (`.env.e2e.example`); `E2EOnlyServiceProvider`
+      re-bindea fakes (`FakeAIProvider`, `FakeEmbeddingProvider`, `FakeCapacityGuard`, `FakeUsageGuard`,
+      `FakeFaqMatcherService`, `FakeKnowledgeSearchService` y `FakeWhatsAppProvider`) SOLO si
+      `APP_ENV=e2e`. WhatsApp, Stripe y Sentry no alcanzan servicios externos durante E2E.
   6. **Seeds deterministas**: `E2ETenantSeeder` con UUIDs fijos (tenant A/B, contactos, conversación,
      usuarios owner/admin/agent) para asserts estables.
   7. **Timeouts justificados, no blanket**: `navigationTimeout` 60s porque el server `php artisan serve`
      (SAPI CLI, opcache no compartido entre workers) es el bottleneck determinista (login completo warm
      ~22s; POST login y redirect de ~8–10s). `expect.timeout` 15s; el único timeout targeted es el
      mensaje de error de login inválido (30s). Prohibido `waitForTimeout`.
-  8. **Catálogo U1**: auth (login owner/admin/agent, logout, credenciales inválidas) + multi-tenancy P0
-     (own 200, foreign 404, switch 404, sin leakage).
+   8. **Catálogo U1**: auth (login owner/admin/agent, logout, credenciales inválidas) + multi-tenancy P0
+      (own 200, foreign 404, switch 404, sin leakage).
+   9. **U2 Inbox + Human Handoff**: `QUEUE_CONNECTION=sync` conserva el pipeline real
+      `MessageService -> SendWhatsAppMessage -> WhatsAppProviderInterface`, con cuenta/teléfono
+      conectados sintéticos de Tenant A y `FakeWhatsAppProvider` fail-closed. La entrada a handoff
+      no se fuerza: `SetupE2EEnvironment` crea un grafo publicado Start -> Human y ejecuta
+      `FlowEngine -> HumanHandoffService`; Playwright valida visibilidad, claim, reply y resume.
+      Reverb/WebSocket queda diferido a U3 y webhooks Meta a FASE31.
 - **Consecuencias**:
   - E2E Run #1 13/13, Run #2 13/13, Run #3 (auth) 9/9, logout 3/3.
   - Multi-tenancy P0 validado a nivel E2E; aislamiento DB/Redis/storage verificado.
-  - Regresiones FASE30 U1: backend SQLite 2499/15/0; PostgreSQL canónica 184/0; Vitest 555/0; typecheck y
-    build PASS; PHPStan 0; Pint PASS; audits 0 vulns.
+   - Regresiones validadas al cierre de FASE30 U2: backend SQLite 2499/15/0; PostgreSQL canónica
+     184/0; Vitest 555/0; typecheck y build PASS; PHPStan 0; Pint PASS; npm/composer audit sin
+     vulnerabilidades (1 paquete abandonado preexistente: `nunomaduro/larastan`).
   - **Login timing**: diagnóstico clasificado STACK STARTUP / SERVER PERFORMANCE / FIRST REQUEST WARMUP
     (server `php -S` lento determinista), no un bug aleatorio ni wait-condition flaky.
   - **CONV-4/CONV-10** clasificados TEST ASSERTION PORTABILITY GAP, P3 (sin fix; suite SQLite, no PG).
   - .gitignore cubre `test-results/`, `playwright-report/`, `tests/e2e/.auth/`, `storage/e2e-app/`.
-  - FASE30 EN PROGRESO: U1 COMPLETADA; U2 (Inbox), U3 (Handoff), U4 (Flow Builder), U5 (Billing),
-    U6 (Knowledge) pendientes y requerirán nuevo objetivo de usuario. NO PUSH.
+   - Hotfix de contrato previo: `db17bb7`, UI `resume_bot` alineada con la ruta canónica
+     `resume-bot`; commit separado, sin alias duplicado.
+   - FASE30 EN PROGRESO: U1 COMPLETADA/PUBLICADA; U2 Inbox + Human Handoff COMPLETADA;
+     U3 (Realtime/Reverb), U4 (Flow Builder), U5 (Billing) PENDIENTES. FASE31 PENDIENTE. NO PUSH.

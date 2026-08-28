@@ -18,9 +18,12 @@ use App\Domain\Tenants\Enums\TenantStatus;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Enums\UserRole;
 use App\Domain\Users\Models\User;
+use App\Domain\WhatsApp\Enums\PhoneNumberStatus;
+use App\Domain\WhatsApp\Enums\WhatsAppAccountStatus;
 use App\Infrastructure\Tenancy\TenantContext;
 use App\Infrastructure\Testing\E2EEnvironmentGuard;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -57,6 +60,15 @@ final class E2ETenantSeeder extends Seeder
 
     public const CONVERSATION_A_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee5';
 
+    public const CONTACT_A2_ID = 'cccccccc-cccc-4ccc-8ccc-ccccccccccd2';
+
+    public const CONVERSATION_A2_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeed2';
+
+    /** Contacto/conversación limpia para el journey de handoff humano (FASE 30 U2). */
+    public const CONTACT_HANDOFF_ID = 'cccccccc-cccc-4ccc-8ccc-ccccccccccd3';
+
+    public const CONVERSATION_HANDOFF_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeed3';
+
     public function run(): void
     {
         E2EEnvironmentGuard::assertAppEnvironment();
@@ -81,14 +93,50 @@ final class E2ETenantSeeder extends Seeder
 
         $this->makeMember($tenant, 'owner@e2e.local', 'E2E Owner A', UserRole::Owner);
         $this->makeMember($tenant, 'admin@e2e.local', 'E2E Admin A', UserRole::Admin);
-        $this->makeMember($tenant, 'agent@e2e.local', 'E2E Agent A', UserRole::Agent);
+        $agent = $this->makeMember($tenant, 'agent@e2e.local', 'E2E Agent A', UserRole::Agent);
         $this->makeMember($tenant, 'switch@e2e.local', 'E2E Switch', UserRole::Owner);
 
         $this->createEntitlement($tenant, $plan);
+        $this->createConnectedWhatsAppSetup($tenant);
 
         $contact = $this->createContact($tenant, self::CONTACT_A_ID, '+15550001001', 'María A', 'maria.a@example.com');
         $conversation = $this->createConversation($tenant, self::CONVERSATION_A_ID, $contact);
-        $this->createMessage($tenant, $conversation, 'Hola, ¿me ayudan?');
+        $this->createMessage($tenant, $conversation, 'Hola, ¿me ayudan?', [
+            'created_at' => now()->subMinutes(30),
+            'sent_at' => now()->subMinutes(30),
+        ]);
+        $this->createMessage($tenant, $conversation, '¿Tienen el plan pro?', [
+            'created_at' => now()->subMinutes(20),
+            'sent_at' => now()->subMinutes(20),
+        ]);
+        $this->createMessage($tenant, $conversation, 'Perfecto, muchas gracias.', [
+            'created_at' => now()->subMinutes(10),
+            'sent_at' => now()->subMinutes(10),
+        ]);
+        $conversation->forceFill([
+            'last_message_at' => now()->subMinutes(10),
+            'last_interaction_at' => now()->subMinutes(10),
+        ])->save();
+
+        // Conversación asignada al agente (escenario de reply del agente).
+        $contactA2 = $this->createContact($tenant, self::CONTACT_A2_ID, '+15550001002', 'Juan A2', 'juan.a2@example.com');
+        $conversationA2 = $this->createConversation($tenant, self::CONVERSATION_A2_ID, $contactA2);
+        $conversationA2->forceFill([
+            'agent_id' => $agent->id,
+            'auto_assigned' => false,
+            'last_message_at' => now()->subMinutes(5),
+            'last_interaction_at' => now()->subMinutes(5),
+        ])->save();
+        $this->createMessage($tenant, $conversationA2, 'Hola, ¿me ayudan con mi pedido?', [
+            'created_at' => now()->subMinutes(5),
+            'sent_at' => now()->subMinutes(5),
+        ]);
+
+        // Conversación limpia para el handoff humano: el setup (SetupE2EEnvironment)
+        // crea el chatbot+flujo y dispara el FlowEngine real (Start -> Human ->
+        // HumanHandoffService). Estado inicial: bot activo, sin mensajes.
+        $contactHandoff = $this->createContact($tenant, self::CONTACT_HANDOFF_ID, '+15550001003', 'Rosa Handoff', 'rosa.handoff@example.com');
+        $this->createConversation($tenant, self::CONVERSATION_HANDOFF_ID, $contactHandoff);
     }
 
     private function createTenantB(Plan $plan): void
@@ -102,7 +150,15 @@ final class E2ETenantSeeder extends Seeder
         $this->createEntitlement($tenant, $plan);
 
         $contact = $this->createContact($tenant, self::CONTACT_B_ID, '+15550002001', 'Carlos B', 'carlos.b@example.com');
-        $this->createConversation($tenant, $this->uuid('representative-b'), $contact);
+        $conversationB = $this->createConversation($tenant, $this->uuid('representative-b'), $contact);
+        $this->createMessage($tenant, $conversationB, 'Hola, ¿hay stock disponible?', [
+            'created_at' => now()->subMinutes(40),
+            'sent_at' => now()->subMinutes(40),
+        ]);
+        $conversationB->forceFill([
+            'last_message_at' => now()->subMinutes(40),
+            'last_interaction_at' => now()->subMinutes(40),
+        ])->save();
     }
 
     private function createTenant(string $id, string $name, string $slug, Plan $plan): Tenant
@@ -260,18 +316,60 @@ final class E2ETenantSeeder extends Seeder
         }
     }
 
-    private function createMessage(Tenant $tenant, Conversation $conversation, string $body): void
+    /**
+     * @param  array{created_at?: Carbon|null, sent_at?: Carbon|null, direction?: string|MessageDirection, status?: string|MessageStatus, metadata?: array<string, mixed>}  $options
+     */
+    private function createMessage(Tenant $tenant, Conversation $conversation, string $body, array $options = []): Message
     {
         TenantContext::setId($tenant->id);
 
         try {
-            Message::query()->create([
+            $message = new Message([
                 'conversation_id' => $conversation->id,
-                'direction' => MessageDirection::Inbound,
+                'direction' => $options['direction'] ?? MessageDirection::Inbound,
                 'type' => MessageType::Text,
-                'status' => MessageStatus::Pending,
+                'status' => $options['status'] ?? MessageStatus::Sent,
                 'body' => $body,
-                'sent_at' => now(),
+                'sent_at' => $options['sent_at'] ?? now(),
+                'metadata' => $options['metadata'] ?? null,
+            ]);
+
+            $message->created_at = $options['created_at'] ?? now();
+            $message->updated_at = $options['created_at'] ?? now();
+            $message->save();
+
+            return $message;
+        } finally {
+            TenantContext::clear();
+        }
+    }
+
+    /**
+     * Cuenta WhatsApp del tenant A CONECTADA (datos sintéticos E2E, nunca reales):
+     * registros mínimos válidos que exige el pipeline real de envío
+     * (SendWhatsAppMessage: account connected + phone connected + token no vacío).
+     * Tenant B NO obtiene cuenta conectada (aislamiento: whatsapp_not_connected).
+     */
+    private function createConnectedWhatsAppSetup(Tenant $tenant): void
+    {
+        TenantContext::setId($tenant->id);
+
+        try {
+            $account = $tenant->whatsappAccount()->create([
+                'whatsapp_business_account_id' => 'waba-e2e-'.$tenant->slug,
+                'display_name' => 'E2E Negocio A',
+                'access_token' => env('E2E_WHATSAPP_TOKEN', 'e2e-'.str_repeat('a', 24)),
+                'status' => WhatsAppAccountStatus::Connected,
+            ]);
+
+            $tenant->whatsappPhoneNumbers()->create([
+                'whatsapp_account_id' => $account->id,
+                'phone_id' => 'phone-e2e-'.$tenant->slug,
+                'display_phone_number' => '+15550009999',
+                'verified_name' => 'E2E Negocio A',
+                'quality_rating' => 'GREEN',
+                'status' => PhoneNumberStatus::Connected,
+                'is_default' => true,
             ]);
         } finally {
             TenantContext::clear();

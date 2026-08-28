@@ -3190,10 +3190,27 @@ FIRST REQUEST WARMUP** — no wait-condition flaky ni assets. Timeouts justifica
 - PHPStan `[OK] No errors`; Pint PASS; npm audit 0 vulns; composer audit 0 advisories.
 - Docker compose E2E config PASS.
 
-**Hotfix productivo aislado (commit separado, NO amend/push)**: `d85751a`
-`fix(inbox): lastMessage() with PK uuid in PostgreSQL (max uuid)` — solo `Conversation.php` +
-`ConversationTest.php`.
+**Hotfixes productivos aislados**:
+- `d85751a` — `fix(inbox): lastMessage() with PK uuid in PostgreSQL (max uuid)`.
+- `db17bb7` — `fix(handoff): align resume bot frontend route`; la UI usa la ruta canónica
+  `resume-bot`, sin alias duplicado.
 
-**Estado**: proyecto ahead=2 (hotfix `d85751a` + U1), behind=0, master local. FASE30 EN PROGRESO:
-U1 COMPLETADA; U2 (Inbox), U3 (Handoff), U4 (Flow Builder), U5 (Billing), U6 (Knowledge) PENDIENTES.
-NO PUSH. NO iniciar U2 salvo nuevo objetivo de usuario.
+### U2 — Inbox + Human Handoff E2E · COMPLETADA
+
+- Fixtures deterministas para Tenant A/B: conversaciones con historial UUID, conversación asignada,
+  handoff inicial limpio y cuenta/teléfono WhatsApp conectados sólo en Tenant A con credenciales sintéticas.
+- `FakeWhatsAppProvider` implementa el contrato real, no hace HTTP y se enlaza exclusivamente bajo
+  `APP_ENV=e2e`. `QUEUE_CONNECTION=sync` ejecuta `SendWhatsAppMessage` real hasta el boundary fake.
+- `SetupE2EEnvironment` ejecuta el flujo real publicado Start -> Human mediante
+  `FlowEngine -> HumanHandoffService`; no fuerza el estado final de handoff en la base de datos.
+- Journeys Playwright: carga/apertura/historial/lastMessage UUID, filtros Todas/Mias/Sin asignar,
+  aislamiento Tenant A/B, claim, reply enviado como `sent` con `provider_message_id` sintético,
+  handoff, pausa, resume y persistencia tras reload.
+- Validado: focused U2 5/5; handoff repetido 3/3; full E2E U1+U2 18/18 en dos ejecuciones;
+  backend SQLite 2499/15/0; PostgreSQL canónica 184/0; Vitest 555/0; PHPStan 0; Pint PASS;
+  typecheck/build PASS; npm/composer audit sin vulnerabilidades.
+- Meta Graph HTTP real: 0. Reverb/two-browser realtime pertenece a U3. Webhooks Meta pertenecen a FASE31.
+
+**Estado**: proyecto ahead=2, behind=0, master local. FASE30 EN PROGRESO:
+U1 COMPLETADA/PUBLICADA; U2 COMPLETADA; U3 (Realtime/Reverb), U4 (Flow Builder), U5 (Billing)
+PENDIENTES. FASE31 PENDIENTE. NO PUSH. NO iniciar U3 automáticamente.

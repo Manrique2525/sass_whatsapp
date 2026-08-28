@@ -10,6 +10,7 @@ use App\Domain\AI\Contracts\AIProviderInterface;
 use App\Domain\AI\Contracts\EmbeddingProviderInterface;
 use App\Domain\Billing\Contracts\CapacityGuardInterface;
 use App\Domain\Billing\Contracts\UsageGuardInterface;
+use App\Domain\WhatsApp\Contracts\WhatsAppProviderInterface;
 use Illuminate\Support\ServiceProvider;
 use Tests\Fakes\FakeAIProvider;
 use Tests\Fakes\FakeCapacityGuard;
@@ -17,21 +18,25 @@ use Tests\Fakes\FakeEmbeddingProvider;
 use Tests\Fakes\FakeFaqMatcherService;
 use Tests\Fakes\FakeKnowledgeSearchService;
 use Tests\Fakes\FakeUsageGuard;
+use Tests\Fakes\FakeWhatsAppProvider;
 
 /**
  * ServiceProvider del ENTORNO E2E (Playwright, FASE 30 / ADR-110).
  *
  * Solo se registra cuando `APP_ENV === 'e2e'`. Re-enlaza los contratos de
- * proveedores externos (IA, embeddings, billing, knowledge, faq) a los fakes
- * deterministas de `tests/Fakes` para que las pruebas NUNCA hagan llamadas
- * reales (Meta/OpenAI/Stripe/S3). No afecta a local/production/testing.
+ * proveedores externos (IA, embeddings, billing, knowledge, faq y el proveedor
+ * de WhatsApp) a los fakes deterministas de `tests/Fakes` para que las pruebas
+ * NUNCA hagan llamadas reales (Meta/OpenAI/Stripe/S3). No afecta a
+ * local/production/testing.
  *
  * Se registra DESPUÉS de AppServiceProvider para sobreescribir sus bindings.
  *
- * WhatsApp y Billing (Stripe) se dejan con sus implementaciones reales pero
- * latentes (config vacía en el entorno E2E): las pruebas de esta fase
- * (auth + multi-tenancy base) no las invocan. Si una fase futura las ejercita,
- * se añadirán fakes dedicados aquí.
+ * WhatsApp: en U2 se re-enlaza a `FakeWhatsAppProvider` (fail-closed: nunca
+ * alcanza la Graph API de Meta). Fase más tardía podrá reintroducir pruebas del
+ * proveedor Meta real en un entorno acotado con credenciales de staging.
+ *
+ * Billing (Stripe) se deja con su implementación real pero latente (config
+ * vacía en el entorno E2E): las pruebas de esta fase no la invocan.
  */
 final class E2EOnlyServiceProvider extends ServiceProvider
 {
@@ -47,5 +52,6 @@ final class E2EOnlyServiceProvider extends ServiceProvider
         $this->app->singleton(UsageGuardInterface::class, FakeUsageGuard::class);
         $this->app->singleton(FaqMatcherServiceInterface::class, FakeFaqMatcherService::class);
         $this->app->singleton(KnowledgeSearchServiceInterface::class, FakeKnowledgeSearchService::class);
+        $this->app->singleton(WhatsAppProviderInterface::class, FakeWhatsAppProvider::class);
     }
 }
