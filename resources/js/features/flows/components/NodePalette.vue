@@ -3,7 +3,6 @@ import { ref } from 'vue';
 import type { FlowEditorController } from '../useFlowEditor';
 import type { FlowNodeType } from '../flowTypes';
 import { nodeTypeLabel } from '../flowUtils';
-import { canNodeBeStart } from '../flowAdapter';
 
 const props = defineProps<{ editor: FlowEditorController }>();
 
@@ -71,7 +70,6 @@ function add(type: FlowNodeType): void {
         >
             <div v-for="type in NODE_TYPES" :key="type">
                 <button
-                    v-if="canNodeBeStart(type)"
                     type="button"
                     class="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-zinc-50"
                     @click="add(type)"

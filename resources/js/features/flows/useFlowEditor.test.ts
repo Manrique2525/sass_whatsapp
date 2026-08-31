@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useFlowEditor } from './useFlowEditor';
-import { CONDITION_FALSE, CONDITION_TRUE } from './flowAdapter';
+import { CONDITION_FALSE, CONDITION_TRUE, graphToDraft } from './flowAdapter';
 import type { Flow } from './flowTypes';
 
 function makeFlow(overrides: Partial<Flow> = {}): Flow {
@@ -289,6 +289,28 @@ describe('useFlowEditor', () => {
             field: 'nombre',
         });
         expect(editor.dirty.value).toBe(true);
+    });
+
+    it('updateEdgeLabel actualiza la arista y la serializa al draft', async () => {
+        installAxios(() => Promise.resolve({ data: { flow: makeFlow() } }));
+        const editor = useFlowEditor(context);
+        await editor.load();
+
+        editor.addNode('message', { x: 0, y: 0 });
+        editor.addNode('message', { x: 100, y: 0 });
+        const source = editor.nodes.value[0].id;
+        const target = editor.nodes.value[1].id;
+        editor.onConnect({ source, target, sourceHandle: null, targetHandle: null });
+        const oldId = editor.edges.value[0].id;
+
+        editor.updateEdgeLabel(oldId, 'respuesta');
+
+        expect(editor.edges.value[0]).toMatchObject({
+            id: `e-${source}-${target}-respuesta`,
+            label: 'respuesta',
+        });
+        expect(editor.edges.value[0].id).not.toBe(oldId);
+        expect(graphToDraft(editor.nodes.value, editor.edges.value, null).connections[0].label).toBe('respuesta');
     });
 
     it('updateNodeConfig no muta en modo solo lectura (VAR-34)', async () => {

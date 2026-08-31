@@ -328,6 +328,34 @@ export function useFlowEditor(context: FlowEditorContext) {
         }
     }
 
+    function updateEdgeLabel(id: string, value: string): void {
+        if (readOnly.value) {
+            return;
+        }
+
+        const label = value.trim() || undefined;
+        const edge = edges.value.find((item) => item.id === id);
+        if (!edge) {
+            return;
+        }
+
+        const source = nodes.value.find((node) => node.id === edge.source);
+        const sourceHandle = source?.data.type === 'condition' ? label ?? null : edge.sourceHandle;
+        const updatedId = edgeIdFor(edge.source, edge.target, label);
+
+        mutate(() => {
+            edges.value = edges.value.map((item) =>
+                item.id === id
+                    ? { ...item, id: updatedId, label, sourceHandle }
+                    : item,
+            );
+        });
+
+        if (selected.value?.kind === 'edge' && selected.value.id === id) {
+            selected.value = { kind: 'edge', id: updatedId };
+        }
+    }
+
     function updateNodeConfig(id: string, config: Record<string, unknown>): void {
         mutate(() => {
             const node = nodes.value.find((node) => node.id === id);
@@ -616,6 +644,7 @@ export function useFlowEditor(context: FlowEditorContext) {
         removeNodes,
         duplicateNode,
         removeEdge,
+        updateEdgeLabel,
         updateNodeConfig,
         updateNodeName,
         updateNodePosition,

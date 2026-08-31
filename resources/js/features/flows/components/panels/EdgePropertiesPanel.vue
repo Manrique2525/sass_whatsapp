@@ -24,6 +24,12 @@ const targetNode = computed(() =>
 
 const label = computed(() => edge.value?.label ?? '');
 
+function updateLabel(value: string): void {
+    if (edgeId.value) {
+        props.editor.updateEdgeLabel(edgeId.value, value);
+    }
+}
+
 function remove(): void {
     if (edgeId.value) {
         props.editor.removeEdge(edgeId.value);
@@ -48,6 +54,7 @@ function remove(): void {
                 class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 :disabled="editor.readOnly.value"
                 placeholder="true / false / otra etiqueta"
+                @input="updateLabel(($event.target as HTMLInputElement).value)"
             />
         </label>
 
