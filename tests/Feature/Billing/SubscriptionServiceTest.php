@@ -14,6 +14,7 @@ use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Models\User;
 use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 
 uses(RefreshDatabase::class);
 
@@ -138,6 +139,71 @@ it('F29-U1-SUB-08: changePlan updates existing subscription', function (): void 
     $this->tenant->refresh();
     expect($this->tenant->plan_id)->toBe($this->otherPlan->id);
 })->group('F29-U1-SUB');
+
+it('BILL-R2-SUB-01: changePlan audit preserves the previous plan id', function (): void {
+    Subscription::factory()->create([
+        'tenant_id' => $this->tenant->id,
+        'plan_id' => $this->plan->id,
+        'status' => SubscriptionStatus::Active,
+    ]);
+
+    $this->service->changePlan($this->owner, $this->tenant, $this->otherPlan->id);
+
+    $audit = DB::table('audit_logs')
+        ->where('action', 'billing.subscription.plan_changed')
+        ->latest('id')
+        ->first();
+
+    expect(json_decode((string) $audit->data, true))->toMatchArray([
+        'old_plan_id' => $this->plan->id,
+        'new_plan_id' => $this->otherPlan->id,
+    ]);
+})->group('BILL-R2-SUB');
+
+it('BILL-R2-SUB-02: changePlan records each transition with the current previous plan', function (): void {
+    $subscription = Subscription::factory()->create([
+        'tenant_id' => $this->tenant->id,
+        'plan_id' => $this->plan->id,
+        'status' => SubscriptionStatus::Active,
+    ]);
+    $thirdPlan = Plan::factory()->create(['is_active' => true]);
+
+    $this->service->changePlan($this->owner, $this->tenant, $this->otherPlan->id);
+    $this->service->changePlan($this->owner, $this->tenant, $thirdPlan->id);
+
+    $audits = DB::table('audit_logs')
+        ->where('action', 'billing.subscription.plan_changed')
+        ->orderBy('id')
+        ->get();
+
+    expect($audits)->toHaveCount(2)
+        ->and(json_decode((string) $audits[0]->data, true))->toMatchArray([
+            'old_plan_id' => $this->plan->id,
+            'new_plan_id' => $this->otherPlan->id,
+        ])
+        ->and(json_decode((string) $audits[1]->data, true))->toMatchArray([
+            'old_plan_id' => $this->otherPlan->id,
+            'new_plan_id' => $thirdPlan->id,
+        ])
+        ->and($subscription->fresh()->plan_id)->toBe($thirdPlan->id);
+})->group('BILL-R2-SUB');
+
+it('BILL-R2-SUB-03: assignPlan rejects inactive plans without side effects', function (): void {
+    $inactivePlan = Plan::factory()->inactive()->create();
+    $existing = Subscription::factory()->create([
+        'tenant_id' => $this->tenant->id,
+        'plan_id' => $this->plan->id,
+        'status' => SubscriptionStatus::Active,
+    ]);
+    $auditCount = DB::table('audit_logs')->count();
+
+    expect(fn () => $this->service->assignPlan($this->owner, $this->tenant, $inactivePlan->id))
+        ->toThrow(PlanNotFoundException::class);
+
+    expect($existing->fresh()->deleted_at)->toBeNull()
+        ->and($existing->fresh()->plan_id)->toBe($this->plan->id)
+        ->and(DB::table('audit_logs')->count())->toBe($auditCount);
+})->group('BILL-R2-SUB');
 
 it('F29-U1-SUB-09: changePlan same plan is no-op', function (): void {
     $existing = Subscription::factory()->create([

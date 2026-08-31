@@ -40,6 +40,8 @@ final class StripeProvider implements BillingProviderInterface
     ) {
         $this->secretKey = $secretKey;
         $this->webhookSecret = $webhookSecret;
+
+        Stripe::setApiKey($secretKey !== '' ? $secretKey : null);
     }
 
     public function createCustomer(array $params): BillingCustomerData

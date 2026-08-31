@@ -6,8 +6,13 @@ use App\Domain\Billing\Contracts\BillingProviderInterface;
 use App\Domain\Billing\Exceptions\BillingProviderException;
 use App\Infrastructure\Billing\StripeProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Stripe\Stripe;
 
 uses(RefreshDatabase::class);
+
+afterEach(function (): void {
+    Stripe::setApiKey(null);
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -31,6 +36,12 @@ it('BILL-U1-PROV-02: providerName returns stripe', function (): void {
 
     expect($provider->providerName())->toBe('stripe');
 })->group('BILL-U1-PROV-02');
+
+it('BILL-U1-PROV-09: configures the Stripe SDK with the supplied secret key', function (): void {
+    new StripeProvider(secretKey: 'sk_test_configured');
+
+    expect(Stripe::getApiKey())->toBe('sk_test_configured');
+})->group('BILL-U1-PROV-09');
 
 it('BILL-U1-PROV-03: createCustomer throws when secret key empty', function (): void {
     $provider = new StripeProvider(secretKey: '');

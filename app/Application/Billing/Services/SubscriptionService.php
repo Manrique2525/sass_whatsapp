@@ -98,6 +98,10 @@ final class SubscriptionService
             throw new PlanNotFoundException;
         }
 
+        if (! $plan->is_active) {
+            throw new PlanNotFoundException;
+        }
+
         return DB::transaction(function () use ($tenant, $plan): Subscription {
             // Cancel any existing active subscription
             $existing = Subscription::query()
@@ -173,7 +177,9 @@ final class SubscriptionService
             return $subscription->fresh('plan');
         }
 
-        return DB::transaction(function () use ($subscription, $plan, $tenant): Subscription {
+        $oldPlanId = $subscription->plan_id;
+
+        return DB::transaction(function () use ($subscription, $plan, $tenant, $oldPlanId): Subscription {
             $subscription->update(['plan_id' => $plan->id]);
 
             // Sync denormalized cache
@@ -183,7 +189,7 @@ final class SubscriptionService
                 action: 'billing.subscription.plan_changed',
                 data: [
                     'tenant_id' => $tenant->id,
-                    'old_plan_id' => $subscription->plan_id,
+                    'old_plan_id' => $oldPlanId,
                     'new_plan_id' => $plan->id,
                     'new_plan_slug' => $plan->slug,
                 ],
