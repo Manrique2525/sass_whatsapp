@@ -7,6 +7,7 @@ namespace App\Events;
 use App\Domain\Conversations\Enums\InboxConversationChangeKind;
 use App\Domain\Conversations\Models\Conversation;
 use App\Http\Resources\ConversationResource;
+use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -62,10 +63,16 @@ final class InboxConversationChanged implements ShouldBroadcast
      */
     public function broadcastWith(): array
     {
+        $conversation = TenantContext::withId(
+            $this->conversation->tenant_id,
+            fn (): Conversation => $this->conversation->load(['agent', 'contact']),
+        );
+        $conversationPayload = (new ConversationResource($conversation))->resolve();
+
         return [
             'event_id' => $this->eventId,
             'kind' => $this->kind->value,
-            'conversation' => (new ConversationResource($this->conversation))->resolve(),
+            'conversation' => $conversationPayload,
         ];
     }
 }
