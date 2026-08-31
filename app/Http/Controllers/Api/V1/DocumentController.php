@@ -157,6 +157,11 @@ final class DocumentController extends Controller
                 'message' => $e->getMessage(),
                 'code' => DocumentProcessingException::ERROR_CODE,
             ], 409);
+        } catch (DocumentStorageFailedException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'code' => DocumentStorageFailedException::ERROR_CODE,
+            ], DocumentStorageFailedException::HTTP_STATUS);
         }
 
         return response()->json([

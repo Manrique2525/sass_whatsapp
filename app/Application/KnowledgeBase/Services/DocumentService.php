@@ -27,6 +27,7 @@ use App\Jobs\ProcessKnowledgeDocument;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use PDOException;
@@ -80,7 +81,7 @@ final class DocumentService
 
         $this->findKnowledgeBaseForTenant($tenant, $knowledgeBaseId);
 
-        return $this->findDocumentForTenant($tenant, $documentId);
+        return $this->findDocumentForTenant($tenant, $knowledgeBaseId, $documentId);
     }
 
     public function upload(User $user, Tenant $tenant, string $knowledgeBaseId, UploadedFile $file): KnowledgeDocument
@@ -170,13 +171,28 @@ final class DocumentService
 
         $this->findKnowledgeBaseForTenant($tenant, $knowledgeBaseId);
 
-        $document = $this->findDocumentForTenant($tenant, $documentId);
+        $document = $this->findDocumentForTenant($tenant, $knowledgeBaseId, $documentId);
 
         if ($document->status === KnowledgeDocumentStatus::Processing) {
             throw new DocumentProcessingException;
         }
 
-        $document->delete();
+        DB::transaction(function () use ($document): void {
+            $document->chunks()->delete();
+            $document->delete();
+        });
+
+        if ($document->storage_disk !== null && $document->storage_path !== null) {
+            try {
+                $deleted = Storage::disk($document->storage_disk)->delete($document->storage_path);
+            } catch (Throwable) {
+                throw new DocumentStorageFailedException('No se pudo eliminar el archivo fuente.');
+            }
+
+            if (! $deleted) {
+                throw new DocumentStorageFailedException('No se pudo eliminar el archivo fuente.');
+            }
+        }
 
         $this->auditLogger->record(
             action: 'knowledge_document.deleted',
@@ -295,11 +311,12 @@ final class DocumentService
         return $knowledgeBase;
     }
 
-    private function findDocumentForTenant(Tenant $tenant, string $documentId): KnowledgeDocument
+    private function findDocumentForTenant(Tenant $tenant, string $knowledgeBaseId, string $documentId): KnowledgeDocument
     {
         $document = KnowledgeDocument::query()
             ->withoutTenantScope()
             ->where('tenant_id', $tenant->id)
+            ->where('knowledge_base_id', $knowledgeBaseId)
             ->whereKey($documentId)
             ->first();
 
