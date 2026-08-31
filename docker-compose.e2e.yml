@@ -57,10 +57,22 @@ services:
       REDIS_CACHE_DB: "15"
       CACHE_STORE: redis
       CACHE_PREFIX: e2e_
-      QUEUE_CONNECTION: sync
+      QUEUE_CONNECTION: redis
       SESSION_DRIVER: redis
       SESSION_SECURE_COOKIE: "false"
-      BROADCAST_CONNECTION: log
+      BROADCAST_CONNECTION: reverb
+      REVERB_SERVER_HOST: 0.0.0.0
+      REVERB_SERVER_PORT: "8080"
+      REVERB_APP_ID: whatsapp-saas-e2e
+      REVERB_APP_KEY: whatsapp-saas-e2e-key
+      REVERB_APP_SECRET: whatsapp-saas-e2e-secret
+      REVERB_HOST: reverb-e2e
+      REVERB_PORT: "8080"
+      REVERB_SCHEME: http
+      VITE_REVERB_HOST: localhost
+      VITE_REVERB_PORT: "8083"
+      VITE_REVERB_SCHEME: http
+      VITE_REVERB_APP_KEY: whatsapp-saas-e2e-key
       FILESYSTEM_DISK: local
       MAIL_MAILER: array
       AWS_ACCESS_KEY_ID: ""
@@ -73,16 +85,126 @@ services:
       STRIPE_WEBHOOK_SECRET: ""
       SENTRY_LARAVEL_DSN: ""
       E2E_TEST_PASSWORD: e2e-password
+    depends_on:
+      reverb:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "php", "artisan", "about", "--only=environment"]
       interval: 15s
-      timeout: 10s
+      timeout: 30s
       retries: 5
       start_period: 20s
     networks:
       - saas-existing
+      - e2e-realtime
+
+  reverb:
+    image: whatsapp-saas-app
+    pull_policy: build
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
+    ports:
+      - "8083:8080"
+    volumes:
+      - .:/var/www/html
+      - ./docker/php/reverb-e2e-healthcheck.php:/usr/local/bin/reverb-e2e-healthcheck.php:ro
+    environment:
+      APP_ENV: e2e
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8082
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_DATABASE: whatsapp_saas_e2e_test
+      DB_USERNAME: saas
+      DB_PASSWORD: saas_secret
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_CLIENT: phpredis
+      REDIS_DB: "15"
+      REDIS_CACHE_DB: "15"
+      CACHE_STORE: redis
+      CACHE_PREFIX: e2e_
+      QUEUE_CONNECTION: redis
+      BROADCAST_CONNECTION: reverb
+      REVERB_SERVER_HOST: 0.0.0.0
+      REVERB_SERVER_PORT: "8080"
+      REVERB_APP_ID: whatsapp-saas-e2e
+      REVERB_APP_KEY: whatsapp-saas-e2e-key
+      REVERB_APP_SECRET: whatsapp-saas-e2e-secret
+      REVERB_HOST: reverb-e2e
+      REVERB_PORT: "8080"
+      REVERB_SCHEME: http
+      FILESYSTEM_DISK: local
+      MAIL_MAILER: array
+      SENTRY_LARAVEL_DSN: ""
+    healthcheck:
+      test: ["CMD", "php", "/usr/local/bin/reverb-e2e-healthcheck.php"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      e2e-realtime:
+        aliases:
+          - reverb-e2e
+      saas-existing: {}
+
+  e2e-worker:
+    image: whatsapp-saas-app
+    pull_policy: build
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: ["php", "artisan", "queue:work", "--queue=default", "--sleep=1", "--tries=1", "--max-time=3600"]
+    volumes:
+      - .:/var/www/html
+    environment:
+      APP_ENV: e2e
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8082
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_DATABASE: whatsapp_saas_e2e_test
+      DB_USERNAME: saas
+      DB_PASSWORD: saas_secret
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_CLIENT: phpredis
+      REDIS_DB: "15"
+      REDIS_CACHE_DB: "15"
+      CACHE_STORE: redis
+      CACHE_PREFIX: e2e_
+      QUEUE_CONNECTION: redis
+      BROADCAST_CONNECTION: reverb
+      REVERB_APP_ID: whatsapp-saas-e2e
+      REVERB_APP_KEY: whatsapp-saas-e2e-key
+      REVERB_APP_SECRET: whatsapp-saas-e2e-secret
+      REVERB_HOST: reverb-e2e
+      REVERB_PORT: "8080"
+      REVERB_SCHEME: http
+      FILESYSTEM_DISK: local
+      MAIL_MAILER: array
+      SENTRY_LARAVEL_DSN: ""
+    depends_on:
+      e2e-app:
+        condition: service_healthy
+      reverb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "php", "artisan", "about", "--only=environment"]
+      interval: 15s
+      timeout: 30s
+      retries: 5
+      start_period: 20s
+    networks:
+      - saas-existing
+      - e2e-realtime
 
 networks:
   saas-existing:
     name: whatsapp-saas_saas
     external: true
+  e2e-realtime:
+    name: whatsapp-saas-e2e-realtime

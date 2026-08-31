@@ -3423,5 +3423,27 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - .gitignore cubre `test-results/`, `playwright-report/`, `tests/e2e/.auth/`, `storage/e2e-app/`.
    - Hotfix de contrato previo: `db17bb7`, UI `resume_bot` alineada con la ruta canónica
      `resume-bot`; commit separado, sin alias duplicado.
-   - FASE30 EN PROGRESO: U1 COMPLETADA/PUBLICADA; U2 Inbox + Human Handoff COMPLETADA;
-     U3 (Realtime/Reverb), U4 (Flow Builder), U5 (Billing) PENDIENTES. FASE31 PENDIENTE. NO PUSH.
+    - FASE30 EN PROGRESO: U1 COMPLETADA/PUBLICADA; U2 Inbox + Human Handoff COMPLETADA; U3 Realtime/Reverb
+      COMPLETADA; U4 (Flow Builder), U5 (Billing) PENDIENTES. FASE31 PENDIENTE. NO PUSH.
+
+## ADR-111 · Reverb E2E aislado y contratos async de FASE 30 U3
+
+- **Estado**: Aceptado · FASE 30 U3
+- **Contexto**: U3 añade Reverb real y un worker Redis al entorno Playwright. El alias `reverb` compartía
+  la red externa del stack dev y podía resolver dos servidores, causando `No matching application`.
+  Además, U2 contenía asserts síncronos y asumía que el detalle permanecía visible en `Sin asignar` después
+  de reclamar.
+- **Decisión**:
+  1. Reverb E2E vive en la red interna `whatsapp-saas-e2e-realtime` y se publica bajo el hostname único
+     `reverb-e2e`; app, worker y Reverb usan el mismo app ID `whatsapp-saas-e2e`.
+  2. La readiness de Reverb valida el endpoint Pusher del app ID y exige la respuesta `401` de firma inválida,
+     diferenciándola de un app no registrado (`404`).
+  3. Con `QUEUE_CONNECTION=redis`, reply espera el recurso persistido hasta `status=sent` y
+     `provider_message_id` no nulo mediante API real, sin contadores process-local ni sleeps.
+  4. Después de claim, U2 valida que la conversación deja `Sin asignar` y la reabre desde `Mias` para validar
+     la asignación y el handoff persistidos.
+- **Consecuencias**:
+  - No se cambia lógica productiva, semántica de canales ni providers reales.
+  - U2 focused pasó 5/5, U3 focused pasó 5/5 y full E2E pasó 20/20 en dos ejecuciones.
+  - PostgreSQL canónica pasó 184/184; Vitest 555/555; PHPStan 0; Pint, typecheck y build PASS.
+  - No hubo nuevos `No matching application`, failed jobs ni bugs productivos confirmados.

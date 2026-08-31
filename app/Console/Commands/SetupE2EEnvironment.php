@@ -94,7 +94,6 @@ final class SetupE2EEnvironment extends Command
             return;
         }
 
-        $phone = '+15550001003';
         $nodeMessageId = 'e2e00000-0000-4000-8000-000000000001';
         $nodeHumanId = 'e2e00000-0000-4000-8000-000000000002';
 
@@ -152,41 +151,46 @@ final class SetupE2EEnvironment extends Command
                 'active' => true,
             ]);
 
-            $result = app(MessageService::class)->handleInboundMessage($tenant, [
-                'id' => 'wamid-e2e-handoff-'.(string) Str::uuid(),
-                'from' => $phone,
-                'timestamp' => (string) now()->timestamp,
-                'type' => 'text',
-                'text' => ['body' => 'Hola, necesito hablar con un humano.'],
-            ]);
+            foreach ([
+                ['phone' => '+15550001003', 'id' => 'wamid-e2e-handoff-'.(string) Str::uuid()],
+                ['phone' => '+15550001004', 'id' => 'wamid-e2e-realtime-'.(string) Str::uuid()],
+            ] as $inbound) {
+                $result = app(MessageService::class)->handleInboundMessage($tenant, [
+                    'id' => $inbound['id'],
+                    'from' => $inbound['phone'],
+                    'timestamp' => (string) now()->timestamp,
+                    'type' => 'text',
+                    'text' => ['body' => 'Hola, necesito hablar con un humano.'],
+                ]);
 
-            if ($result->message === null) {
-                throw new \RuntimeException('No se pudo crear el inbound sintético del handoff.');
+                if ($result->message === null) {
+                    throw new \RuntimeException('No se pudo crear el inbound sintético del handoff.');
+                }
+
+                $conversation = Conversation::query()
+                    ->withoutTenantScope()
+                    ->where('tenant_id', $tenant->id)
+                    ->whereKey($result->message->conversation_id)
+                    ->first();
+
+                if ($conversation === null) {
+                    throw new \RuntimeException('No se resolvió la conversación del handoff.');
+                }
+
+                app(FlowEngine::class)->handleMessage($tenant, $result->message, $conversation);
+
+                $conversation->refresh();
+
+                if (! $conversation->bot_paused || $conversation->handoff_requested_at === null) {
+                    throw new \RuntimeException('El FlowEngine no dejó la conversación en estado de handoff (bot_paused/handoff_requested_at).');
+                }
+
+                if ($conversation->status !== ConversationStatus::Open) {
+                    throw new \RuntimeException('La conversación handoff no quedó en estado Open tras el engine.');
+                }
             }
 
-            $conversation = Conversation::query()
-                ->withoutTenantScope()
-                ->where('tenant_id', $tenant->id)
-                ->whereKey($result->message->conversation_id)
-                ->first();
-
-            if ($conversation === null) {
-                throw new \RuntimeException('No se resolvió la conversación del handoff.');
-            }
-
-            app(FlowEngine::class)->handleMessage($tenant, $result->message, $conversation);
-
-            $conversation->refresh();
-
-            if (! $conversation->bot_paused || $conversation->handoff_requested_at === null) {
-                throw new \RuntimeException('El FlowEngine no dejó la conversación en estado de handoff (bot_paused/handoff_requested_at).');
-            }
-
-            if ($conversation->status !== ConversationStatus::Open) {
-                throw new \RuntimeException('La conversación handoff no quedó en estado Open tras el engine.');
-            }
-
-            $this->info('Handoff humano listo: bot_paused, handoff_requested_at y conversación Open.');
+            $this->info('Handoff humano listo para U2/U3: FlowEngine -> HumanHandoffService en dos conversaciones.');
         } finally {
             TenantContext::clear();
         }

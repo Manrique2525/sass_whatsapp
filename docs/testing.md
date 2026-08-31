@@ -2,8 +2,8 @@
 
 ## FASE 30 U2 — Inbox + Human Handoff E2E
 
-La suite U2 usa el entorno aislado `APP_ENV=e2e`, base `whatsapp_saas_e2e_test`, Redis lógico 15,
-Chromium, `workers=1`, `retries=0` y `QUEUE_CONNECTION=sync`. El reset seguro se ejecuta con
+La suite U2/U3 usa el entorno aislado `APP_ENV=e2e`, base `whatsapp_saas_e2e_test`, Redis lógico 15,
+Chromium, `workers=1`, `retries=0` y `QUEUE_CONNECTION=redis` con un worker real. El reset seguro se ejecuta con
 `docker compose -f docker-compose.e2e.yml exec e2e-app php artisan e2e:setup`.
 
 ### Boundary de handoff
@@ -15,7 +15,7 @@ trigger Start. El setup inyecta el primer inbound y ejecuta el código real:
 
 No se fuerza directamente `bot_paused` ni `handoff_requested_at` para simular la transición. Después,
 Playwright valida el comportamiento agent-facing: visibilidad en Sin asignar, claim, respuesta y resume.
-Reverb/WebSocket queda diferido a U3; webhooks Meta quedan diferidos a FASE31.
+U3 valida Reverb/WebSocket real; webhooks Meta quedan diferidos a FASE31.
 
 ### Provider y estados
 
@@ -30,17 +30,34 @@ Tenant B no tiene cuenta conectada ni puede leer recursos de Tenant A.
 - Inbox: carga el listado, abre una conversación, muestra historial y valida el último mensaje en una conversación con múltiples UUID.
 - Filtros: búsqueda y scopes `Todas`, `Mias` y `Sin asignar` con visibilidad acorde al agente/asignación/handoff.
 - Claim: agente reclama una conversación handoff no asignada; la asignación persiste tras reload.
-- Reply: agente responde desde el composer; endpoint, servicio, job sync, persistencia y provider fake completan el pipeline.
+- Reply: agente responde desde el composer; endpoint, servicio, job Redis, persistencia y provider fake completan el pipeline.
 - Handoff: el estado inicial es bot activo; Human node produce handoff real, `bot_paused=true` y `handoff_requested_at`.
 - Resume: admin usa la ruta canónica `resume-bot`; `bot_paused=false` persiste tras reload.
 - Multi-tenancy: conversación propia accesible; conversación de Tenant B responde 404 y no hay leakage de mensajes/provider.
 
 ### Repetibilidad y resultados
 
-No se usa `waitForTimeout`; los helpers esperan requests/estados visibles y el servidor E2E tiene timeouts
-dirigidos por su latencia conocida. U2 focused pasó 5/5, el handoff pasó en tres ejecuciones consecutivas,
-y U1+U2 pasó en dos ejecuciones completas sin flaky tests. El hotfix `db17bb7` corrigió la discrepancia
-`resume_bot`/`resume-bot` y permanece separado del commit U2.
+No se usa `waitForTimeout`; los helpers esperan requests, estados persistidos y estados visibles. El
+pipeline de reply es eventual bajo Redis/worker y el claim respeta la eliminación realtime del filtro
+`Sin asignar`. U2 focused pasó 5/5 y U1+U2+U3 pasó 20/20 en dos ejecuciones completas. El hotfix
+`db17bb7` corrigió la discrepancia `resume_bot`/`resume-bot` y permanece separado del commit U2.
+
+## FASE 30 U3 — Realtime/Reverb E2E
+
+U3 ejecuta U2 y realtime contra el worker Redis real y Reverb real. El stack E2E usa la red interna
+`whatsapp-saas-e2e-realtime` y el hostname único `reverb-e2e`; no comparte el alias `reverb` con el stack
+de desarrollo. El healthcheck consulta el endpoint Pusher del app ID sintético y acepta únicamente la
+respuesta `401` de firma inválida, demostrando que la aplicación está registrada.
+
+El fallo inicial `No matching application for ID [whatsapp-saas-e2e]` era un defecto de infraestructura:
+la red externa compartida publicaba simultáneamente Reverb dev y Reverb E2E bajo `reverb`, produciendo
+resolución DNS alternada. No era un bug productivo ni un problema de config cache.
+
+Los tests esperan el estado persistido eventual (`sent` y `provider_message_id`) y, tras un claim, reabren
+la conversación desde `Mias` porque correctamente deja `Sin asignar`.
+
+U3 focused pasó 5/5 (10/10 tests), U2 focused pasó 5/5 (10/10 tests), U2 completo pasó 5/5 y la suite
+completa pasó 20/20 en dos ejecuciones consecutivas.
 
 ## 1. Estrategia
 

@@ -69,6 +69,10 @@ final class E2ETenantSeeder extends Seeder
 
     public const CONVERSATION_HANDOFF_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeed3';
 
+    public const CONTACT_REALTIME_ID = 'cccccccc-cccc-4ccc-8ccc-ccccccccccd4';
+
+    public const CONVERSATION_REALTIME_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeed4';
+
     public function run(): void
     {
         E2EEnvironmentGuard::assertAppEnvironment();
@@ -137,6 +141,9 @@ final class E2ETenantSeeder extends Seeder
         // HumanHandoffService). Estado inicial: bot activo, sin mensajes.
         $contactHandoff = $this->createContact($tenant, self::CONTACT_HANDOFF_ID, '+15550001003', 'Rosa Handoff', 'rosa.handoff@example.com');
         $this->createConversation($tenant, self::CONVERSATION_HANDOFF_ID, $contactHandoff);
+
+        $contactRealtime = $this->createContact($tenant, self::CONTACT_REALTIME_ID, '+15550001004', 'Luna Realtime', 'luna.realtime@example.com');
+        $this->createConversation($tenant, self::CONVERSATION_REALTIME_ID, $contactRealtime);
     }
 
     private function createTenantB(Plan $plan): void

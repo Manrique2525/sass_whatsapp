@@ -8,8 +8,10 @@ export async function openInbox(page: Page): Promise<void> {
 }
 
 export async function openConversation(page: Page, contactName: string): Promise<void> {
+    const conversationButton = page.getByRole('button', { name: new RegExp(contactName) });
+    await expect(conversationButton).toBeVisible({ timeout: 60_000 });
     const messagesResponse = waitForConversationMessagesResponse(page);
-    await page.getByRole('button', { name: new RegExp(contactName) }).click();
+    await conversationButton.click();
     expect((await messagesResponse).status()).toBe(200);
     await expect(page.getByText(contactName, { exact: true }).last()).toBeVisible();
     await expect(page.getByText('Cargando mensajes...', { exact: true })).toBeHidden({ timeout: 30_000 });
@@ -36,6 +38,7 @@ export function waitForConversationMessagesResponse(page: Page): Promise<Respons
             response.url().includes('/conversations/') &&
             response.url().includes('/messages') &&
             response.request().method() === 'GET',
+        { timeout: 60_000 },
     );
 }
 
@@ -45,16 +48,18 @@ export async function claimConversation(page: Page): Promise<void> {
     );
     await page.getByRole('button', { name: 'Reclamar', exact: true }).click();
     expect((await responsePromise).status()).toBe(200);
-    await expect(page.getByText('Atencion humana (vos)', { exact: true })).toBeVisible();
 }
 
-export async function sendReply(page: Page, body: string): Promise<void> {
+export async function sendReply(page: Page, body: string): Promise<{ id: string }> {
     await page.getByPlaceholder('Escribi un mensaje...').fill(body);
     const responsePromise = page.waitForResponse((response) =>
         response.url().includes('/messages') && response.request().method() === 'POST',
     );
     await page.getByRole('button', { name: 'Enviar mensaje', exact: true }).click();
     const response = await responsePromise;
-    expect(response.status(), await response.text()).toBe(201);
+    const payload = await response.json();
+    expect(response.status(), JSON.stringify(payload)).toBe(201);
     await expect(page.getByText(body, { exact: true })).toBeVisible();
+
+    return payload.created_message;
 }

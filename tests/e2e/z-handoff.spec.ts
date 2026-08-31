@@ -15,6 +15,9 @@ test.describe('Human Handoff E2E-U2', () => {
         await expect(page.getByRole('button', { name: 'Reclamar', exact: true })).toBeVisible();
 
         await claimConversation(page);
+        await expect(page.getByRole('button', { name: /Rosa Handoff/ })).toHaveCount(0, { timeout: 30_000 });
+        await page.getByRole('tab', { name: /Mias/ }).click();
+        await openConversation(page, 'Rosa Handoff');
         await expect(page.getByText('Atencion humana (vos)', { exact: true })).toBeVisible();
         const detail = await apiGet(page, `/api/v1/tenants/${TENANT_A_ID}/conversations/${CONVERSATION_HANDOFF_ID}`);
         expect(detail.status()).toBe(200);

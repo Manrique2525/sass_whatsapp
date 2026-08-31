@@ -20,6 +20,8 @@ export const CONTACT_A2_ID = 'cccccccc-cccc-4ccc-8ccc-ccccccccccd2';
 export const CONVERSATION_A2_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeed2';
 export const CONTACT_HANDOFF_ID = 'cccccccc-cccc-4ccc-8ccc-ccccccccccd3';
 export const CONVERSATION_HANDOFF_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeed3';
+export const CONTACT_REALTIME_ID = 'cccccccc-cccc-4ccc-8ccc-ccccccccccd4';
+export const CONVERSATION_REALTIME_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeed4';
 
 export interface E2EUser {
     email: string;

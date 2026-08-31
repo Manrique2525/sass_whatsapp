@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 EN PROGRESO (U1 COMPLETADA)**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 EN PROGRESO (U1/U2/U3 COMPLETADAS)**.
 
 ## Fases
 
@@ -3200,17 +3200,32 @@ FIRST REQUEST WARMUP** — no wait-condition flaky ni assets. Timeouts justifica
 - Fixtures deterministas para Tenant A/B: conversaciones con historial UUID, conversación asignada,
   handoff inicial limpio y cuenta/teléfono WhatsApp conectados sólo en Tenant A con credenciales sintéticas.
 - `FakeWhatsAppProvider` implementa el contrato real, no hace HTTP y se enlaza exclusivamente bajo
-  `APP_ENV=e2e`. `QUEUE_CONNECTION=sync` ejecuta `SendWhatsAppMessage` real hasta el boundary fake.
+  `APP_ENV=e2e`. Bajo U3, `QUEUE_CONNECTION=redis` ejecuta `SendWhatsAppMessage` real mediante un worker
+  hasta el boundary fake; los asserts esperan el estado persistido eventual.
 - `SetupE2EEnvironment` ejecuta el flujo real publicado Start -> Human mediante
   `FlowEngine -> HumanHandoffService`; no fuerza el estado final de handoff en la base de datos.
 - Journeys Playwright: carga/apertura/historial/lastMessage UUID, filtros Todas/Mias/Sin asignar,
   aislamiento Tenant A/B, claim, reply enviado como `sent` con `provider_message_id` sintético,
   handoff, pausa, resume y persistencia tras reload.
-- Validado: focused U2 5/5; handoff repetido 3/3; full E2E U1+U2 18/18 en dos ejecuciones;
+- Validado inicialmente: focused U2 5/5; handoff repetido 3/3; full E2E U1+U2 18/18 en dos ejecuciones;
   backend SQLite 2499/15/0; PostgreSQL canónica 184/0; Vitest 555/0; PHPStan 0; Pint PASS;
   typecheck/build PASS; npm/composer audit sin vulnerabilidades.
 - Meta Graph HTTP real: 0. Reverb/two-browser realtime pertenece a U3. Webhooks Meta pertenecen a FASE31.
 
+### U3 — Realtime/Reverb + async U2 contracts · COMPLETADA
+
+- Reverb E2E real, worker Redis real y dos contextos Playwright para Inbox, claim, reply, resume y tenant
+  isolation. App/worker/Reverb usan `APP_ENV=e2e`, app ID `whatsapp-saas-e2e`, Redis DB 15 y broadcaster
+  Reverb; el frontend conecta a `localhost:8083`.
+- Root cause corregido: la red externa compartida resolvía `reverb` hacia Reverb dev y E2E. La red dedicada
+  `whatsapp-saas-e2e-realtime` y hostname `reverb-e2e` eliminan la colisión; el healthcheck valida el
+  registro real del app ID mediante el endpoint Pusher.
+- Reply espera el mensaje creado y consulta la API hasta `sent` con `provider_message_id`; handoff verifica
+  la salida realtime de `Sin asignar` y reabre desde `Mias`.
+- Validado: U2 focused 5/5; U3 focused 5/5; U2 completo 5/5; full E2E 20/20 en dos ejecuciones.
+- Gates: PostgreSQL canónica 184/184, Vitest 555/555, PHPStan 0, Pint PASS, typecheck/build PASS y audits
+  sin vulnerabilidades.
+
 **Estado**: proyecto ahead=2, behind=0, master local. FASE30 EN PROGRESO:
-U1 COMPLETADA/PUBLICADA; U2 COMPLETADA; U3 (Realtime/Reverb), U4 (Flow Builder), U5 (Billing)
-PENDIENTES. FASE31 PENDIENTE. NO PUSH. NO iniciar U3 automáticamente.
+U1 COMPLETADA/PUBLICADA; U2 COMPLETADA; U3 COMPLETADA; U4 (Flow Builder), U5 (Billing)
+PENDIENTES. FASE31 PENDIENTE. NO PUSH. NO iniciar U4 automáticamente.
