@@ -1,4 +1,5 @@
 import { chromium } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +19,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
  * Nunca se loguean ni persisten credenciales/secretos reales.
  */
 export default async function globalSetup(): Promise<void> {
+    execFileSync(process.execPath, ['scripts/build-e2e.mjs'], { stdio: 'inherit' });
     await pollHealth();
 
     const authDir = path.resolve(here, '.auth');
