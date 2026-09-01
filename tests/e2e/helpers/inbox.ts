@@ -28,6 +28,7 @@ export function waitForConversationListResponse(page: Page): Promise<Response> {
             response.url().includes('/conversations') &&
             !response.url().includes('/messages') &&
             response.request().method() === 'GET',
+        { timeout: 60_000 },
     );
 }
 

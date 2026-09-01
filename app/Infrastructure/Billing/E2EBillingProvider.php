@@ -45,7 +45,7 @@ final class E2EBillingProvider implements BillingProviderInterface
     {
         return CheckoutSessionData::fromProvider([
             'id' => 'e2e-checkout-'.sha1((string) ($params['idempotency_key'] ?? $params['price'])),
-            'url' => 'http://stripe-e2e.local/checkout/'.rawurlencode((string) $params['price']),
+            'url' => 'https://stripe-e2e.local/checkout/'.rawurlencode((string) $params['price']),
         ]);
     }
 
@@ -53,7 +53,7 @@ final class E2EBillingProvider implements BillingProviderInterface
     {
         return PortalSessionData::fromProvider([
             'id' => 'e2e-portal-'.sha1($params['customer']),
-            'url' => 'http://stripe-e2e.local/portal/'.rawurlencode($params['customer']),
+            'url' => 'https://stripe-e2e.local/portal/'.rawurlencode($params['customer']),
         ]);
     }
 

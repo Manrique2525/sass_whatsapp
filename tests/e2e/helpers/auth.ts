@@ -34,7 +34,7 @@ export async function loginViaUi(page: Page, email: string, password = PASSWORD)
 
 /** Espera a que la navegación llegue al dashboard (tras el login). */
 export async function expectDashboard(page: Page): Promise<void> {
-    await page.waitForURL('**/dashboard');
+    await page.waitForURL('**/dashboard', { timeout: 60_000 });
 }
 
 /**

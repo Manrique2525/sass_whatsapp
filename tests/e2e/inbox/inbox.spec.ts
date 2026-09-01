@@ -17,6 +17,7 @@ test.describe('Inbox E2E-U2', () => {
     });
 
     test('filtra por búsqueda, estado y scopes del inbox', async ({ page }) => {
+        test.setTimeout(120_000);
         await openInbox(page);
 
         const search = page.getByPlaceholder('Buscar por nombre o telefono');

@@ -1,5 +1,23 @@
 # Testing
 
+## FASE 30 U4 — E2E closure
+
+U4 queda completada con journeys Playwright de Flow Builder y Billing, y con integracion de sistema para Knowledge.
+Knowledge no tiene UI de upload/search, por lo que no se presenta como browser E2E.
+
+- Flow Builder: `3/3` repetido, incluyendo edicion de nodos, persistencia de mensaje y contrato de etiquetas.
+  La arista normal permanece sin etiqueta; no se usan sleeps ni retries.
+- Billing: `4/4` en dos browser runs, cubriendo checkout, portal y permisos owner/admin/agent con `E2EBillingProvider`
+  HTTPS. Stripe real: `0`.
+- Knowledge: tres ciclos completos por corrida en tres corridas frescas. Cada ciclo valida upload por API, estado
+  `ready`, storage compartido, worker Redis `knowledge`, extraccion, chunks, embeddings fake de dimension 1536,
+  busqueda pgvector, wrong-KB 404, aislamiento cross-tenant y delete cleanup.
+- U4 focused: `7/7` PASS. Regresion U1-U3: `20/20` PASS.
+- Full browser E2E: `27/27` PASS en ambas corridas, con `workers=1` y `retries=0`; duraciones `12.6m` y `11.8m`.
+- Worker final: queues `default,knowledge`; failed jobs `0`; pending/reserved/delayed `0`.
+- Llamadas externas reales: Meta `0`, OpenAI `0`, Stripe `0`, Sentry `0`.
+- Billing fixture remediation: commit `dd31589` (`test(billing): make usage period fixtures deterministic`).
+
 ## FASE 30 U4-R4 — E2E infrastructure readiness
 
 R4 prepara la infraestructura para los journeys de Flow Builder, Billing y Knowledge, pero no implementa
@@ -18,7 +36,7 @@ E2E no dejó jobs fallidos ni pendientes.
 - Embeddings usan el `FakeEmbeddingProvider` existente, determinístico y compatible con `vector(1536)`.
   AI usa el fake existente. Bajo `APP_ENV` distinto de `e2e` permanecen los bindings reales.
 - Billing usa `E2EBillingProvider` únicamente bajo `APP_ENV=e2e`; checkout y portal devuelven URLs sintéticas
-  `http://stripe-e2e.local/...` y no realizan HTTP a Stripe.
+  `https://stripe-e2e.local/...` y no realizan HTTP a Stripe.
 - `E2ETenantSeeder` conserva Tenant B en `free`, Tenant A en el plan sintético `e2e-paid`, crea el customer
   sintético y deja disponible también un plan inactivo. Los roles owner/admin/agent permanecen sujetos a
   las policies reales.

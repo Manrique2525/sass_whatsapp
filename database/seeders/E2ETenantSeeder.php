@@ -86,6 +86,7 @@ final class E2ETenantSeeder extends Seeder
 
         $freePlan = Plan::query()->where('slug', 'free')->firstOrFail();
         $paidPlan = $this->createE2EPaidPlan();
+        $this->createE2ECheckoutPlan();
         $this->createE2EInactivePlan();
 
         DB::transaction(function () use ($freePlan, $paidPlan): void {
@@ -109,6 +110,25 @@ final class E2ETenantSeeder extends Seeder
                 'limits' => ['messages' => 10000, 'ai_tokens' => 100000, 'contacts' => 1000, 'flow_executions' => 1000, 'users' => 20, 'knowledge_documents' => 100],
                 'features' => ['ai_enabled' => true],
                 'sort_order' => 1,
+            ],
+        );
+    }
+
+    private function createE2ECheckoutPlan(): Plan
+    {
+        return Plan::updateOrCreate(
+            ['slug' => 'e2e-checkout'],
+            [
+                'name' => 'E2E Checkout',
+                'description' => 'Synthetic alternate paid plan for E2E checkout coverage',
+                'is_active' => true,
+                'price_monthly' => 39,
+                'price_yearly' => 390,
+                'stripe_price_id_monthly' => 'price_e2e_checkout_monthly',
+                'stripe_price_id_yearly' => 'price_e2e_checkout_yearly',
+                'limits' => ['messages' => 15000, 'ai_tokens' => 150000, 'contacts' => 1500, 'flow_executions' => 1500, 'users' => 25, 'knowledge_documents' => 150],
+                'features' => ['ai_enabled' => true],
+                'sort_order' => 3,
             ],
         );
     }

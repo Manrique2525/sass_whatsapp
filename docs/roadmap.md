@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 EN PROGRESO (U1/U2/U3 COMPLETADAS · U4-R4 READY)**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 EN PROGRESO (U1/U2/U3 COMPLETADAS · U4 COMPLETADA)**.
 
 ## Fases
 
@@ -36,7 +36,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA
 | 27 | Seguridad (refuerzo OWASP) — U1: Security Headers + CORS + Session Hardening · U2: Sanctum Token Expiry + TrustProxies + Structured Error Responses · U3: Token Rollout Verification + Documentation Closure | COMPLETADA |
 | 28 | Observabilidad (U1: Structured Logging + Correlation IDs · U2: Backend Sentry · U3: Frontend Sentry · U4: Health Checks + Queue · U5: Alerting + Ops Docs) | COMPLETADA |
 | 29 | Testing global + cobertura (U1: Coverage Infra + Critical Gap Baseline ✅ · U2: Tenancy + Auth · U3: Billing/Concurrency/PG · U4: Jobs/Webhooks · U5: Frontend + Closure) | COMPLETADA |
-| 30 | E2E Playwright (U1: Infra + Auth + Multi-Tenancy Base ✅ · U2: Inbox · U3: Handoff · U4: Flow Builder · U5: Billing · U6: Knowledge) | EN PROGRESO |
+| 30 | E2E Playwright (U1: Infra + Auth + Multi-Tenancy Base · U2: Inbox · U3: Handoff · U4: Flow Builder + Billing + Knowledge integration) | EN PROGRESO |
 | 31 | Testing de webhooks (mocks Meta) | PENDIENTE |
 | 32 | Testing de fallbacks | PENDIENTE |
 | 33 | Performance | PENDIENTE |
@@ -3226,10 +3226,14 @@ FIRST REQUEST WARMUP** — no wait-condition flaky ni assets. Timeouts justifica
 - Gates: PostgreSQL canónica 184/184, Vitest 555/555, PHPStan 0, Pint PASS, typecheck/build PASS y audits
   sin vulnerabilidades.
 
-### U4-R4 — E2E infrastructure readiness · READY FOR JOURNEY IMPLEMENTATION
+### U4 — Flow Builder + Billing + Knowledge integration · COMPLETADA
 
-- Infraestructura preparada para Flow Builder, Knowledge/RAG y Billing sin cambios de lógica productiva.
-- Worker E2E consume `default,knowledge` y comparte `storage/e2e-shared` con la app.
-- Binding E2E de billing, fixtures de planes/customer/subscription y estrategia de integración Knowledge están
-  documentados en `docs/testing.md` y `docs/decisions.md`.
-- U4 funcional/journeys Playwright aún no está completada. FASE31 no inicia automáticamente. NO PUSH.
+- Flow Builder: `3/3` repetido; publish y persistencia de arista normal sin etiqueta y editor de etiqueta validados.
+- Billing: `4/4`; checkout, portal y permisos owner/admin/agent mediante HTTPS fake; Stripe real `0`.
+- Knowledge: integración de sistema API -> storage compartido -> Redis `knowledge` -> worker -> chunks -> fake
+  embeddings 1536 -> pgvector/search -> aislamiento -> cleanup. Tres ciclos por corrida, tres corridas frescas.
+- U4 focused `7/7`; regresion U1-U3 `20/20`; full browser `27/27` en dos corridas.
+- Gates: PHP `2510/7192/15 skips`, PostgreSQL `184/489`, Billing `438`, Vitest `562`, PHPStan `0`, Pint,
+  typecheck, production/E2E build y audits PASS.
+- Docker E2E healthy; queues `default,knowledge` sin failed/pending/reserved/delayed jobs.
+- Produccion sin cambios posteriores a `c95ce6a`; migraciones de produccion no ejecutadas. FASE31 queda pendiente.

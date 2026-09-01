@@ -60,6 +60,9 @@ final class SetupE2EEnvironment extends Command
         $this->info('Sembrando fixtures E2E (E2ETenantSeeder)...');
         $this->call('db:seed', ['--class' => E2ETenantSeeder::class, '--force' => true]);
 
+        $this->info('Preparando fixture draft para Flow Builder...');
+        $this->prepareFlowBuilderFixture();
+
         $this->info('Preparando fixture de handoff humano (FlowEngine Start -> Human)...');
         $this->prepareHumanHandoffFixture();
 
@@ -71,6 +74,63 @@ final class SetupE2EEnvironment extends Command
         $this->info('Entorno E2E listo para Playwright.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Crea el draft que se abre desde la UI de settings. La UI actual no incluye
+     * creación de flujos; el journey de creación queda fuera de U4 y parte de
+     * este fixture para ejercitar el editor real.
+     */
+    private function prepareFlowBuilderFixture(): void
+    {
+        $tenant = Tenant::query()->find(E2ETenantSeeder::TENANT_A_ID);
+
+        if ($tenant === null) {
+            throw new \RuntimeException('Tenant A no encontrado; no se pudo preparar el draft de Flow Builder.');
+        }
+
+        TenantContext::setId($tenant->id);
+
+        try {
+            $chatbot = Chatbot::query()->create(['name' => 'E2E Flow Builder Bot']);
+            $flow = Flow::query()->create([
+                'chatbot_id' => $chatbot->id,
+                'name' => 'E2E Flow Builder Draft',
+                'status' => FlowStatus::Draft,
+                'config' => ['max_steps' => 20],
+            ]);
+
+            $message = new FlowNode([
+                'flow_id' => $flow->id,
+                'type' => FlowNodeType::Message,
+                'name' => 'Mensaje inicial',
+                'position_x' => 0,
+                'position_y' => 0,
+                'config' => ['text' => 'Mensaje inicial U4'],
+                'is_start' => true,
+            ]);
+            $message->save();
+
+            $end = new FlowNode([
+                'flow_id' => $flow->id,
+                'type' => FlowNodeType::End,
+                'name' => 'Fin inicial',
+                'position_x' => 260,
+                'position_y' => 0,
+                'config' => [],
+                'is_start' => false,
+            ]);
+            $end->save();
+
+            FlowConnection::query()->create([
+                'flow_id' => $flow->id,
+                'source_node_id' => $message->id,
+                'target_node_id' => $end->id,
+                'label' => null,
+            ]);
+        } finally {
+            TenantContext::clear();
+        }
     }
 
     /**

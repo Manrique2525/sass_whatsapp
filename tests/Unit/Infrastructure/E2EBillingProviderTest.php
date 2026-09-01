@@ -23,7 +23,7 @@ test('E2E billing provider returns deterministic synthetic sessions without Stri
 
     expect($provider->validatePrice('price_e2e_monthly'))->toBeTrue()
         ->and($provider->validatePrice('price_real'))->toBeFalse()
-        ->and($checkout->url)->toBe('http://stripe-e2e.local/checkout/price_e2e_monthly')
+        ->and($checkout->url)->toBe('https://stripe-e2e.local/checkout/price_e2e_monthly')
         ->and($checkout->providerSessionId)->toBe($provider->createCheckoutSession([
             'customer' => 'e2e-customer-a',
             'price' => 'price_e2e_monthly',
@@ -32,7 +32,7 @@ test('E2E billing provider returns deterministic synthetic sessions without Stri
             'cancel_url' => 'http://localhost/cancel',
             'idempotency_key' => 'checkout:key',
         ])->providerSessionId)
-        ->and($portal->url)->toBe('http://stripe-e2e.local/portal/e2e-customer-a');
+        ->and($portal->url)->toBe('https://stripe-e2e.local/portal/e2e-customer-a');
 });
 
 test('E2E binding is opt-in and non-e2e keeps Stripe provider', function (): void {

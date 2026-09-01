@@ -3477,3 +3477,25 @@ una pantalla de upload/search en el frontend.
   limitación de serialización de closures creadas con `php -r`, sin bloquear la readiness.
 - R4 deja el entorno listo para implementar journeys; no declara U4 funcional completa.
 - Una llamada real a OpenAI o Stripe en E2E debe fallar la prueba, no degradarse silenciosamente.
+
+## ADR-113 - FASE 30 U4 E2E closure boundaries
+
+- **Estado**: Aceptado - FASE 30 U4
+- **Contexto**: U4 necesita evidencia repetible de Flow Builder, Billing y Knowledge sin introducir UI Knowledge,
+  llamadas externas ni cambios productivos adicionales.
+- **Decision**:
+  1. Flow Builder se valida con Playwright sobre el draft determinista, incluyendo persistencia de nodos, publish y
+     etiquetas; la arista normal sin etiqueta es parte del contrato.
+  2. Billing se valida mediante `E2EBillingProvider` HTTPS bajo `APP_ENV=e2e`; checkout, portal y permisos reales
+     de owner/admin/agent se cubren sin Stripe real.
+  3. Knowledge se valida como integracion de sistema por API: TXT sintetico -> storage compartido -> cola Redis
+     `knowledge` -> worker real -> chunks -> `FakeEmbeddingProvider` 1536 -> pgvector/search. Wrong-KB y cross-tenant
+     deben fallar cerradamente y delete elimina fuente, chunks y resultados de busqueda.
+  4. La suite Playwright mantiene `workers=1`, `retries=0`, no usa `waitForTimeout`, y cada closure parte de un reset
+     E2E fresco.
+- **Consecuencias**:
+  - Flow `3/3`, Billing `4/4`, U4 focused `7/7` y Knowledge tres ciclos en tres corridas frescas.
+  - U1-U3 `20/20`; full browser E2E `27/27` en dos corridas (`12.6m` y `11.8m`).
+  - PHP `2510` tests / `7192` assertions / `15` skips; PostgreSQL `184/184` / `489`; Vitest `562/562`.
+  - Meta, OpenAI, Stripe y Sentry reales permanecen en `0`; worker sin failed, pending, reserved ni delayed jobs.
+  - No se declara UI Knowledge ni se inicia FASE31. El cierre final se entrega en un commit local separado.
