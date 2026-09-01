@@ -23,10 +23,21 @@ const targetNode = computed(() =>
 );
 
 const label = computed(() => edge.value?.label ?? '');
+const isConditionEdge = computed(() => sourceNode.value?.data.type === 'condition');
+const conditionBranch = computed(() => {
+    if (!isConditionEdge.value) {
+        return null;
+    }
 
-function updateLabel(value: string): void {
+    return edge.value?.sourceHandle === 'true' || edge.value?.sourceHandle === 'false'
+        ? edge.value.sourceHandle
+        : null;
+});
+const hasInvalidNormalLabel = computed(() => !isConditionEdge.value && label.value !== '');
+
+function clearInvalidLabel(): void {
     if (edgeId.value) {
-        props.editor.updateEdgeLabel(edgeId.value, value);
+        props.editor.updateEdgeLabel(edgeId.value, '');
     }
 }
 
@@ -46,17 +57,25 @@ function remove(): void {
             </p>
         </div>
 
-        <label class="block">
-            <span class="mb-1 block text-xs font-medium text-zinc-600">Rama / etiqueta</span>
-            <input
-                :value="label"
-                type="text"
-                class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                :disabled="editor.readOnly.value"
-                placeholder="true / false / otra etiqueta"
-                @input="updateLabel(($event.target as HTMLInputElement).value)"
-            />
-        </label>
+        <div v-if="isConditionEdge" class="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2">
+            <span class="block text-xs font-medium text-zinc-600">Rama</span>
+            <span v-if="conditionBranch" class="mt-1 block text-sm font-semibold text-zinc-900">{{ conditionBranch }}</span>
+            <span v-else class="mt-1 block text-xs text-red-600">Rama inválida o desconocida.</span>
+        </div>
+
+        <div v-else-if="hasInvalidNormalLabel" class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+            <span class="block text-xs font-medium text-amber-800">Esta conexión no admite etiquetas.</span>
+            <button
+                v-if="!editor.readOnly.value"
+                type="button"
+                class="mt-2 rounded-md border border-amber-300 px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100"
+                @click="clearInvalidLabel"
+            >
+                Quitar etiqueta
+            </button>
+        </div>
+
+        <p v-else class="text-xs text-zinc-500">Salida determinista sin etiqueta.</p>
 
         <button
             v-if="!editor.readOnly.value"

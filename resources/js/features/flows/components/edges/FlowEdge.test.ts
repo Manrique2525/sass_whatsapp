@@ -24,7 +24,7 @@ describe('FlowEdge', () => {
                 markerStart: '',
                 markerEnd: '',
                 data: {},
-                events: {},
+                events: {} as never,
             },
         });
 

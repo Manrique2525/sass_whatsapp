@@ -86,12 +86,12 @@ describe('useFlowEditor', () => {
         expect(editor.error.value).toBe('No encontrado');
     });
 
-    it('transiciona de nodo a edge y conserva la seleccion al editar el label', async () => {
+    it('transiciona de nodo a edge y conserva la seleccion', async () => {
         const http = installAxios(() => Promise.resolve({
             data: {
                 flow: makeFlow({
                     nodes: [
-                        ...makeFlow().nodes,
+                        ...(makeFlow().nodes ?? []),
                         {
                             id: 'end',
                             type: 'end',
@@ -122,11 +122,9 @@ describe('useFlowEditor', () => {
         editor.onEdgesChange([{ type: 'select', id: 'e-start-end-Inicial', selected: true } as EdgeChange]);
         expect(editor.selected.value).toEqual({ kind: 'edge', id: 'e-start-end-Inicial' });
 
-        editor.updateEdgeLabel('e-start-end-Inicial', 'Continuar U4');
-
         expect(editor.selected.value?.kind).toBe('edge');
-        expect(editor.selected.value?.id).toBe('e-start-end-Continuar U4');
-        expect(editor.edges.value[0].label).toBe('Continuar U4');
+        expect(editor.selected.value?.id).toBe('e-start-end-Inicial');
+        expect(editor.edges.value[0].label).toBe('Inicial');
         expect(http.get).toHaveBeenCalledOnce();
     });
 
@@ -336,7 +334,7 @@ describe('useFlowEditor', () => {
         expect(editor.dirty.value).toBe(true);
     });
 
-    it('updateEdgeLabel actualiza la arista y la serializa al draft', async () => {
+    it('updateEdgeLabel rechaza labels arbitrarios en aristas normales', async () => {
         installAxios(() => Promise.resolve({ data: { flow: makeFlow() } }));
         const editor = useFlowEditor(context);
         await editor.load();
@@ -351,11 +349,55 @@ describe('useFlowEditor', () => {
         editor.updateEdgeLabel(oldId, 'respuesta');
 
         expect(editor.edges.value[0]).toMatchObject({
-            id: `e-${source}-${target}-respuesta`,
-            label: 'respuesta',
+            id: oldId,
         });
-        expect(editor.edges.value[0].id).not.toBe(oldId);
-        expect(graphToDraft(editor.nodes.value, editor.edges.value, null).connections[0].label).toBe('respuesta');
+        expect(editor.edges.value[0].label).toBeUndefined();
+        expect(graphToDraft(editor.nodes.value, editor.edges.value, null).connections[0].label).toBeNull();
+    });
+
+    it('updateEdgeLabel conserva únicamente la rama del handle de una condición', async () => {
+        const http = installAxios();
+        http.get.mockResolvedValue({
+            data: {
+                flow: makeFlow({
+                    nodes: [
+                        {
+                            id: 'condition',
+                            type: 'condition',
+                            type_label: 'Condición',
+                            name: 'Condición',
+                            position_x: 0,
+                            position_y: 0,
+                            config: { rules: [{ field: 'x', operator: 'equals', value: '1' }] },
+                            is_start: true,
+                        },
+                        {
+                            id: 'end',
+                            type: 'end',
+                            type_label: 'Fin',
+                            name: 'Fin',
+                            position_x: 200,
+                            position_y: 0,
+                            config: {},
+                            is_start: false,
+                        },
+                    ],
+                }),
+            },
+        });
+        const editor = useFlowEditor(context);
+        await editor.load();
+
+        editor.onConnect({ source: 'condition', target: 'end', sourceHandle: CONDITION_TRUE, targetHandle: null });
+        const edgeId = editor.edges.value[0].id;
+
+        editor.updateEdgeLabel(edgeId, 'Continuar U4');
+
+        expect(editor.edges.value[0]).toMatchObject({
+            id: edgeId,
+            sourceHandle: CONDITION_TRUE,
+            label: CONDITION_TRUE,
+        });
     });
 
     it('updateNodeConfig no muta en modo solo lectura (VAR-34)', async () => {

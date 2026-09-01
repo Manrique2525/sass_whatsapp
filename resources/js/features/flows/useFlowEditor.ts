@@ -4,6 +4,8 @@ import type { Connection, EdgeChange, NodeChange } from '@vue-flow/core';
 import {
     apiToGraph,
     canCreateConnection,
+    CONDITION_FALSE,
+    CONDITION_TRUE,
     createEditorNode,
     edgeIdFor,
     graphSignature,
@@ -333,14 +335,28 @@ export function useFlowEditor(context: FlowEditorContext) {
             return;
         }
 
-        const label = value.trim() || undefined;
         const edge = edges.value.find((item) => item.id === id);
         if (!edge) {
             return;
         }
 
         const source = nodes.value.find((node) => node.id === edge.source);
-        const sourceHandle = source?.data.type === 'condition' ? label ?? null : edge.sourceHandle;
+        const requestedLabel = value.trim();
+        const isCondition = source?.data.type === 'condition';
+        const conditionBranch = edge.sourceHandle === CONDITION_TRUE || edge.sourceHandle === CONDITION_FALSE
+            ? edge.sourceHandle
+            : null;
+
+        if (isCondition && (conditionBranch === null || requestedLabel !== conditionBranch)) {
+            return;
+        }
+
+        if (!isCondition && requestedLabel !== '') {
+            return;
+        }
+
+        const label = isCondition ? conditionBranch! : undefined;
+        const sourceHandle = isCondition ? conditionBranch : null;
         const updatedId = edgeIdFor(edge.source, edge.target, label);
 
         mutate(() => {
