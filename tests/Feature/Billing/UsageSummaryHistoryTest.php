@@ -49,11 +49,13 @@ it('BILL-USG-14: summary returns all categories with used/limit/remaining', func
         tenant: $this->tenant,
         category: UsageCategory::Messages,
         quantity: 30,
+        recordedAt: Carbon::parse('2026-08-15 12:00:00'),
     );
     $this->service->record(
         tenant: $this->tenant,
         category: UsageCategory::AiTokens,
         quantity: 1200,
+        recordedAt: Carbon::parse('2026-08-15 12:01:00'),
     );
 
     $summary = $this->service->currentPeriodSummary($this->tenant);

@@ -98,7 +98,7 @@ it('USG-U1-UNIT-03: remaining returns limit minus usage', function (): void {
         'category' => UsageCategory::Messages,
         'quantity' => 30,
         'metadata' => [],
-        'recorded_at' => now(),
+        'recorded_at' => Carbon::parse('2026-08-15 12:00:00'),
     ]);
 
     $remaining = $this->guard->remaining($this->tenant, UsageCategory::Messages);
@@ -224,7 +224,7 @@ it('USG-U1-UNIT-13: reserve fails when at exact limit', function (): void {
         'category' => UsageCategory::Messages,
         'quantity' => 100,
         'metadata' => [],
-        'recorded_at' => now(),
+        'recorded_at' => Carbon::parse('2026-08-15 12:00:00'),
     ]);
 
     $this->expectException(TenantQuotaExceededException::class);

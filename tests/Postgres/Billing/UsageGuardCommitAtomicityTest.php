@@ -405,7 +405,7 @@ it('UA-COMMIT-05: remaining returns correct snapshot with mixed reservation stat
         'category' => UsageCategory::Messages,
         'quantity' => 30,
         'metadata' => [],
-        'recorded_at' => now(),
+        'recorded_at' => Carbon::parse('2026-08-15 12:00:00'),
     ]);
 
     UsageReservation::create([
@@ -463,7 +463,7 @@ it('UA-COMMIT-06: reserve during commit never exceeds limit', function () use ($
         'category' => UsageCategory::Messages,
         'quantity' => 50,
         'metadata' => [],
-        'recorded_at' => now(),
+        'recorded_at' => Carbon::parse('2026-08-15 12:00:00'),
     ]);
 
     $reservation = $this->guard->reserve(

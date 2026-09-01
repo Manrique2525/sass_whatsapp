@@ -105,7 +105,7 @@ it('BILL-PERIOD-04: null-period fallback uses calendar month', function (): void
         tenant: $this->tenant,
         category: UsageCategory::Messages,
         quantity: 4,
-        recordedAt: now()->startOfMonth()->addDays(5),
+        recordedAt: Carbon::parse('2026-08-06 12:00:00'),
     );
 
     $usage = $this->service->currentPeriodUsage($this->tenant, UsageCategory::Messages);

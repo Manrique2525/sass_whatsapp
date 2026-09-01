@@ -37,10 +37,13 @@ use Illuminate\Support\Facades\DB;
 uses(RefreshDatabase::class);
 
 afterEach(function (): void {
+    Carbon::setTestNow();
     TenantContext::clear();
 });
 
 beforeEach(function (): void {
+    Carbon::setTestNow(Carbon::parse('2026-08-15 12:00:00'));
+
     $this->guard = new UsageGuard(new EntitlementResolver);
 
     $this->tenant = Tenant::factory()->create();
@@ -335,6 +338,8 @@ it('UA-PG-08: multiple ai operations consume quota cumulatively', function (): v
     $tokensUsed = [25, 40, 15];
 
     foreach ($tokensUsed as $i => $tokens) {
+        Carbon::setTestNow(Carbon::parse('2026-08-15 12:00:00')->addSeconds($i));
+
         $reservation = $this->guard->reserve(
             tenant: $this->tenant,
             category: UsageCategory::AiTokens,

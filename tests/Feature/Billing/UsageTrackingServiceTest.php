@@ -164,6 +164,7 @@ it('BILL-USG-15: unlimited semantics — null limit in summary', function (): vo
         tenant: $this->tenant,
         category: UsageCategory::Messages,
         quantity: 999,
+        recordedAt: Carbon::parse('2026-08-15 12:00:00'),
     );
 
     $summary = $this->service->currentPeriodSummary($this->tenant);

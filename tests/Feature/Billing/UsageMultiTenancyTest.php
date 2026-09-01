@@ -74,6 +74,7 @@ it('BILL-USG-MT-01: tenant A usage excludes tenant B', function (): void {
         tenant: $this->tenantA,
         category: UsageCategory::Messages,
         quantity: 10,
+        recordedAt: Carbon::parse('2026-08-15 12:00:00'),
     );
 
     TenantContext::setId($this->tenantB->id);
@@ -81,6 +82,7 @@ it('BILL-USG-MT-01: tenant A usage excludes tenant B', function (): void {
         tenant: $this->tenantB,
         category: UsageCategory::Messages,
         quantity: 20,
+        recordedAt: Carbon::parse('2026-08-15 12:00:00'),
     );
 
     TenantContext::setId($this->tenantA->id);
@@ -98,6 +100,7 @@ it('BILL-USG-MT-02: tenant A cannot attach usage to subscription B', function ()
     $record = $this->service->record(
         tenant: $this->tenantA,
         category: UsageCategory::Messages,
+        recordedAt: Carbon::parse('2026-08-15 12:00:00'),
     );
 
     $this->assertEquals($this->subscriptionA->id, $record->subscription_id);
@@ -110,6 +113,7 @@ it('BILL-USG-MT-03: same category A/B independent', function (): void {
         tenant: $this->tenantA,
         category: UsageCategory::Messages,
         quantity: 5,
+        recordedAt: Carbon::parse('2026-08-15 12:00:00'),
     );
 
     TenantContext::setId($this->tenantB->id);
@@ -117,6 +121,7 @@ it('BILL-USG-MT-03: same category A/B independent', function (): void {
         tenant: $this->tenantB,
         category: UsageCategory::Messages,
         quantity: 15,
+        recordedAt: Carbon::parse('2026-08-15 12:00:00'),
     );
 
     TenantContext::setId($this->tenantA->id);
@@ -137,6 +142,7 @@ it('BILL-USG-MT-04: TenantContext sequential A then B is safe', function (): voi
         tenant: $this->tenantA,
         category: UsageCategory::Contacts,
         quantity: 1,
+        recordedAt: Carbon::parse('2026-08-15 12:00:00'),
     );
 
     TenantContext::setId($this->tenantB->id);
@@ -144,6 +150,7 @@ it('BILL-USG-MT-04: TenantContext sequential A then B is safe', function (): voi
         tenant: $this->tenantB,
         category: UsageCategory::Contacts,
         quantity: 2,
+        recordedAt: Carbon::parse('2026-08-15 12:00:00'),
     );
 
     $usageA = $this->service->currentPeriodUsage($this->tenantA, UsageCategory::Contacts);
@@ -159,6 +166,7 @@ it('BILL-USG-MT-05: tenant_id in metadata cannot escape scope', function (): voi
         tenant: $this->tenantA,
         category: UsageCategory::Messages,
         metadata: ['tenant_id' => $this->tenantB->id],
+        recordedAt: Carbon::parse('2026-08-15 12:00:00'),
     );
 
     expect($record->metadata)->toBe([])
@@ -178,6 +186,7 @@ it('BILL-USG-SEC-01: tenant_id is server-derived, never from caller', function (
     $record = $this->service->record(
         tenant: $this->tenantA,
         category: UsageCategory::Messages,
+        recordedAt: Carbon::parse('2026-08-15 12:00:00'),
     );
 
     $this->assertEquals($this->tenantA->id, $record->tenant_id);
@@ -189,6 +198,7 @@ it('BILL-USG-SEC-02: category is enum only', function (): void {
     $record = $this->service->record(
         tenant: $this->tenantA,
         category: UsageCategory::Messages,
+        recordedAt: Carbon::parse('2026-08-15 12:00:00'),
     );
 
     $this->assertInstanceOf(UsageCategory::class, $record->category);
@@ -220,6 +230,7 @@ it('BILL-USG-SEC-04: no PII in summary response', function (): void {
         tenant: $this->tenantA,
         category: UsageCategory::Messages,
         quantity: 5,
+        recordedAt: Carbon::parse('2026-08-15 12:00:00'),
     );
 
     $summary = $this->service->currentPeriodSummary($this->tenantA);
@@ -276,7 +287,7 @@ it('BILL-USG-CONC-01: concurrent inserts produce correct SUM', function (): void
             tenant: $this->tenantA,
             category: UsageCategory::Messages,
             quantity: 1,
-            recordedAt: now()->addSeconds($i),
+            recordedAt: Carbon::parse('2026-08-15 12:00:00')->addSeconds($i),
         );
     }
 

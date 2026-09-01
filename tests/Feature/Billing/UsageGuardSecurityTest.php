@@ -75,7 +75,7 @@ it('USG-U1-SEC-03: exception exposes only safe fields', function (): void {
         'category' => UsageCategory::Messages,
         'quantity' => 100,
         'metadata' => [],
-        'recorded_at' => now(),
+        'recorded_at' => Carbon::parse('2026-08-15 12:00:00'),
     ]);
 
     try {
@@ -124,7 +124,7 @@ it('USG-U1-SEC-06: no PII in exception messages', function (): void {
         'category' => UsageCategory::Messages,
         'quantity' => 100,
         'metadata' => [],
-        'recorded_at' => now(),
+        'recorded_at' => Carbon::parse('2026-08-15 12:00:00'),
     ]);
 
     try {
@@ -160,7 +160,7 @@ it('USG-U1-SEC-08: exception code is 429', function (): void {
         'category' => UsageCategory::Messages,
         'quantity' => 100,
         'metadata' => [],
-        'recorded_at' => now(),
+        'recorded_at' => Carbon::parse('2026-08-15 12:00:00'),
     ]);
 
     try {

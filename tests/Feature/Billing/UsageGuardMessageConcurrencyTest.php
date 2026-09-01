@@ -18,10 +18,12 @@ use Illuminate\Support\Carbon;
 uses(RefreshDatabase::class);
 
 afterEach(function (): void {
+    Carbon::setTestNow();
     TenantContext::clear();
 });
 
 beforeEach(function (): void {
+    Carbon::setTestNow(Carbon::parse('2026-08-15 12:00:00'));
     $this->guard = new UsageGuard(new EntitlementResolver);
 
     $this->tenant = Tenant::factory()->create();
