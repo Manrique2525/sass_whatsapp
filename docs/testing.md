@@ -1,5 +1,33 @@
 # Testing
 
+## FASE 30 U4-R4 — E2E infrastructure readiness
+
+R4 prepara la infraestructura para los journeys de Flow Builder, Billing y Knowledge, pero no implementa
+los journeys U4 ni marca la unidad funcional como completada.
+
+La recuperación de Docker Desktop y del stack compartido fue completada; `docker compose config` y el
+arranque clean de la infraestructura E2E quedan verificados. El smoke sintético de `default` mediante una
+closure ejecutada con `php -r` no se ejecutó porque Laravel no puede serializar ese origen de closure; no es
+un bloqueo: el worker declara `default,knowledge`, U1-U3 ya ejercitan jobs reales en `default` y el runtime
+E2E no dejó jobs fallidos ni pendientes.
+
+- `docker-compose.e2e.yml` usa `APP_ENV=e2e`, PostgreSQL `whatsapp_saas_e2e_test`, Redis DB 15 y el worker
+  consume `default,knowledge`; el orden de producción es `default,analytics,knowledge`.
+- `e2e-app` y `e2e-worker` montan el mismo path aislado `storage/e2e-shared` en `storage/app`. El path no
+  es el storage del desarrollador ni MinIO; el setup debe limpiarlo de forma determinista.
+- Embeddings usan el `FakeEmbeddingProvider` existente, determinístico y compatible con `vector(1536)`.
+  AI usa el fake existente. Bajo `APP_ENV` distinto de `e2e` permanecen los bindings reales.
+- Billing usa `E2EBillingProvider` únicamente bajo `APP_ENV=e2e`; checkout y portal devuelven URLs sintéticas
+  `http://stripe-e2e.local/...` y no realizan HTTP a Stripe.
+- `E2ETenantSeeder` conserva Tenant B en `free`, Tenant A en el plan sintético `e2e-paid`, crea el customer
+  sintético y deja disponible también un plan inactivo. Los roles owner/admin/agent permanecen sujetos a
+  las policies reales.
+- No existe UI Knowledge. Su cobertura U4 será **E2E integration/system integration** contra la API real:
+  upload → Redis worker `knowledge` → storage compartido → extracción/chunks → fake embeddings → pgvector/search
+  → delete/cleanup. No se presentará como browser E2E.
+- La protección de red E2E mantiene OpenAI, Stripe, Meta y Sentry sin credenciales; cualquier llamada real a
+  OpenAI/Stripe se considera un fallo de infraestructura.
+
 ## FASE 30 U2 — Inbox + Human Handoff E2E
 
 La suite U2/U3 usa el entorno aislado `APP_ENV=e2e`, base `whatsapp_saas_e2e_test`, Redis lógico 15,

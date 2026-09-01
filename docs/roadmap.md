@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 EN PROGRESO (U1/U2/U3 COMPLETADAS)**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 EN PROGRESO (U1/U2/U3 COMPLETADAS · U4-R4 READY)**.
 
 ## Fases
 
@@ -3226,6 +3226,10 @@ FIRST REQUEST WARMUP** — no wait-condition flaky ni assets. Timeouts justifica
 - Gates: PostgreSQL canónica 184/184, Vitest 555/555, PHPStan 0, Pint PASS, typecheck/build PASS y audits
   sin vulnerabilidades.
 
-**Estado**: proyecto ahead=2, behind=0, master local. FASE30 EN PROGRESO:
-U1 COMPLETADA/PUBLICADA; U2 COMPLETADA; U3 COMPLETADA; U4 (Flow Builder), U5 (Billing)
-PENDIENTES. FASE31 PENDIENTE. NO PUSH. NO iniciar U4 automáticamente.
+### U4-R4 — E2E infrastructure readiness · READY FOR JOURNEY IMPLEMENTATION
+
+- Infraestructura preparada para Flow Builder, Knowledge/RAG y Billing sin cambios de lógica productiva.
+- Worker E2E consume `default,knowledge` y comparte `storage/e2e-shared` con la app.
+- Binding E2E de billing, fixtures de planes/customer/subscription y estrategia de integración Knowledge están
+  documentados en `docs/testing.md` y `docs/decisions.md`.
+- U4 funcional/journeys Playwright aún no está completada. FASE31 no inicia automáticamente. NO PUSH.

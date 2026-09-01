@@ -22,6 +22,7 @@ use App\Infrastructure\Testing\E2EEnvironmentGuard;
 use Database\Seeders\E2ETenantSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -222,6 +223,25 @@ final class SetupE2EEnvironment extends Command
     private function prepareStorage(): void
     {
         $disk = config('filesystems.default');
-        $this->info(sprintf('Storage E2E: disco "%s" listo.', $disk));
+
+        if ($disk !== 'local') {
+            throw new \RuntimeException(sprintf('Storage E2E: se esperaba el disco local aislado, se obtuvo "%s".', $disk));
+        }
+
+        $smokePath = 'e2e-readiness/storage-smoke.txt';
+        Storage::disk($disk)->deleteDirectory('e2e-readiness');
+        Storage::disk($disk)->put($smokePath, 'e2e-storage-smoke');
+
+        if (Storage::disk($disk)->get($smokePath) !== 'e2e-storage-smoke') {
+            throw new \RuntimeException('Storage E2E: el archivo de smoke no pudo leerse después de escribirlo.');
+        }
+
+        Storage::disk($disk)->delete($smokePath);
+
+        if (Storage::disk($disk)->exists($smokePath)) {
+            throw new \RuntimeException('Storage E2E: el archivo de smoke no pudo eliminarse.');
+        }
+
+        $this->info(sprintf('Storage E2E: disco local compartido "%s" con read/write/delete verificados.', $disk));
     }
 }

@@ -36,7 +36,7 @@ services:
       - .:/var/www/html
       # Storage E2E aislado: sustituye el storage/app del repositorio por una
       # carpeta dedicada en el host, para no escribir en la compartida con dev.
-      - ./storage/e2e-app:/var/www/html/storage/app
+      - ./storage/e2e-shared:/var/www/html/storage/app
       # Activa OPcache para el PHP built-in server (SAPI CLI) y acelera las
       # requests del entorno E2E. Carga después de opcache.ini (prefijo zz-).
       - ./docker/php/e2e-opcache.ini:/usr/local/etc/php/conf.d/zz-e2e-opcache.ini:ro
@@ -74,6 +74,7 @@ services:
       VITE_REVERB_SCHEME: http
       VITE_REVERB_APP_KEY: whatsapp-saas-e2e-key
       FILESYSTEM_DISK: local
+      KNOWLEDGE_STORAGE_DISK: local
       MAIL_MAILER: array
       AWS_ACCESS_KEY_ID: ""
       AWS_SECRET_ACCESS_KEY: ""
@@ -137,6 +138,7 @@ services:
       REVERB_PORT: "8080"
       REVERB_SCHEME: http
       FILESYSTEM_DISK: local
+      KNOWLEDGE_STORAGE_DISK: local
       MAIL_MAILER: array
       SENTRY_LARAVEL_DSN: ""
     healthcheck:
@@ -156,9 +158,10 @@ services:
     pull_policy: build
     restart: unless-stopped
     working_dir: /var/www/html
-    command: ["php", "artisan", "queue:work", "--queue=default", "--sleep=1", "--tries=1", "--max-time=3600"]
+    command: ["php", "artisan", "queue:work", "--queue=default,knowledge", "--sleep=1", "--tries=1", "--max-time=3600"]
     volumes:
       - .:/var/www/html
+      - ./storage/e2e-shared:/var/www/html/storage/app
     environment:
       APP_ENV: e2e
       APP_DEBUG: "true"
@@ -185,6 +188,7 @@ services:
       REVERB_PORT: "8080"
       REVERB_SCHEME: http
       FILESYSTEM_DISK: local
+      KNOWLEDGE_STORAGE_DISK: local
       MAIL_MAILER: array
       SENTRY_LARAVEL_DSN: ""
     depends_on:

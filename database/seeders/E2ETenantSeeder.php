@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Database\Seeders;
 
 use App\Domain\Billing\Enums\SubscriptionStatus;
+use App\Domain\Billing\Models\BillingCustomer;
 use App\Domain\Billing\Models\Plan;
 use App\Domain\Billing\Models\Subscription;
 use App\Domain\Contacts\Models\Contact;
@@ -83,12 +84,52 @@ final class E2ETenantSeeder extends Seeder
             PlanSeeder::class,
         ]);
 
-        $plan = Plan::query()->where('slug', 'free')->firstOrFail();
+        $freePlan = Plan::query()->where('slug', 'free')->firstOrFail();
+        $paidPlan = $this->createE2EPaidPlan();
+        $this->createE2EInactivePlan();
 
-        DB::transaction(function () use ($plan): void {
-            $this->createTenantA($plan);
-            $this->createTenantB($plan);
+        DB::transaction(function () use ($freePlan, $paidPlan): void {
+            $this->createTenantA($paidPlan);
+            $this->createTenantB($freePlan);
         });
+    }
+
+    private function createE2EPaidPlan(): Plan
+    {
+        return Plan::updateOrCreate(
+            ['slug' => 'e2e-paid'],
+            [
+                'name' => 'E2E Paid',
+                'description' => 'Synthetic paid plan for E2E checkout coverage',
+                'is_active' => true,
+                'price_monthly' => 29,
+                'price_yearly' => 290,
+                'stripe_price_id_monthly' => 'price_e2e_monthly',
+                'stripe_price_id_yearly' => 'price_e2e_yearly',
+                'limits' => ['messages' => 10000, 'ai_tokens' => 100000, 'contacts' => 1000, 'flow_executions' => 1000, 'users' => 20, 'knowledge_documents' => 100],
+                'features' => ['ai_enabled' => true],
+                'sort_order' => 1,
+            ],
+        );
+    }
+
+    private function createE2EInactivePlan(): Plan
+    {
+        return Plan::updateOrCreate(
+            ['slug' => 'e2e-inactive'],
+            [
+                'name' => 'E2E Inactive',
+                'description' => 'Synthetic inactive plan for negative coverage',
+                'is_active' => false,
+                'price_monthly' => 19,
+                'price_yearly' => 190,
+                'stripe_price_id_monthly' => 'price_e2e_inactive_monthly',
+                'stripe_price_id_yearly' => 'price_e2e_inactive_yearly',
+                'limits' => [],
+                'features' => [],
+                'sort_order' => 2,
+            ],
+        );
     }
 
     private function createTenantA(Plan $plan): void
@@ -101,6 +142,7 @@ final class E2ETenantSeeder extends Seeder
         $this->makeMember($tenant, 'switch@e2e.local', 'E2E Switch', UserRole::Owner);
 
         $this->createEntitlement($tenant, $plan);
+        $this->createBillingCustomer($tenant);
         $this->createConnectedWhatsAppSetup($tenant);
 
         $contact = $this->createContact($tenant, self::CONTACT_A_ID, '+15550001001', 'María A', 'maria.a@example.com');
@@ -270,6 +312,22 @@ final class E2ETenantSeeder extends Seeder
         }
     }
 
+    private function createBillingCustomer(Tenant $tenant): void
+    {
+        TenantContext::setId($tenant->id);
+
+        try {
+            BillingCustomer::query()->firstOrCreate([
+                'tenant_id' => $tenant->id,
+                'provider' => 'stripe-e2e',
+            ], [
+                'provider_customer_id' => 'e2e-customer-'.$tenant->id,
+            ]);
+        } finally {
+            TenantContext::clear();
+        }
+    }
+
     private function createContact(Tenant $tenant, string $id, string $phone, string $name, string $email): Contact
     {
         TenantContext::setId($tenant->id);
@@ -362,16 +420,18 @@ final class E2ETenantSeeder extends Seeder
         TenantContext::setId($tenant->id);
 
         try {
-            $account = $tenant->whatsappAccount()->create([
+            $account = $tenant->whatsappAccount()->firstOrCreate([
                 'whatsapp_business_account_id' => 'waba-e2e-'.$tenant->slug,
+            ], [
                 'display_name' => 'E2E Negocio A',
                 'access_token' => env('E2E_WHATSAPP_TOKEN', 'e2e-'.str_repeat('a', 24)),
                 'status' => WhatsAppAccountStatus::Connected,
             ]);
 
-            $tenant->whatsappPhoneNumbers()->create([
+            $tenant->whatsappPhoneNumbers()->firstOrCreate([
                 'whatsapp_account_id' => $account->id,
                 'phone_id' => 'phone-e2e-'.$tenant->slug,
+            ], [
                 'display_phone_number' => '+15550009999',
                 'verified_name' => 'E2E Negocio A',
                 'quality_rating' => 'GREEN',

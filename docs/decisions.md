@@ -3447,3 +3447,33 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   - U2 focused pasó 5/5, U3 focused pasó 5/5 y full E2E pasó 20/20 en dos ejecuciones.
   - PostgreSQL canónica pasó 184/184; Vitest 555/555; PHPStan 0; Pint, typecheck y build PASS.
   - No hubo nuevos `No matching application`, failed jobs ni bugs productivos confirmados.
+## ADR-112 — FASE 30 U4-R4 E2E infrastructure boundaries
+
+**Estado**: aceptado
+
+**Contexto**: Los próximos journeys necesitan consumir la cola `knowledge`, compartir los archivos subidos
+entre `e2e-app` y `e2e-worker`, y ejercitar checkout/portal sin depender de OpenAI o Stripe. Knowledge no tiene
+una pantalla de upload/search en el frontend.
+
+**Decisión**:
+
+- El worker E2E consume `default,knowledge`; `default` permanece primero para no interrumpir Inbox/Reverb.
+- App y worker montan exclusivamente `storage/e2e-shared`. No se usa storage del desarrollador, MinIO ni
+  credenciales cloud en E2E.
+- Se reutiliza `FakeEmbeddingProvider` con dimensión 1536 y `FakeAIProvider`; los contratos reales siguen
+  enlazados fuera de `APP_ENV=e2e`.
+- `E2EBillingProvider` implementa solo el boundary necesario de customer, price, checkout y portal, devuelve
+  URLs locales sintéticas y se registra exclusivamente en `E2EOnlyServiceProvider`.
+- Knowledge se valida como integración de sistema mediante su API y worker real, no como browser E2E hasta
+  que exista una UI. El pipeline incluye creación/upload, procesamiento, embeddings, búsqueda y delete cleanup.
+- `E2ETenantSeeder` crea fixtures sintéticos de free, paid, inactive, customer y subscription, manteniendo
+  las policies owner/admin/agent sin bypass.
+
+**Consecuencias**:
+
+- Las pruebas U1-U3 siguen teniendo acceso al worker `default` y al Redis aislado DB 15.
+- La evidencia runtime R4 confirmó `ready`, un chunk y un embedding con storage compartido accesible;
+  OpenAI y Stripe reales permanecieron en cero. El smoke sintético de `default` no se ejecutó por la
+  limitación de serialización de closures creadas con `php -r`, sin bloquear la readiness.
+- R4 deja el entorno listo para implementar journeys; no declara U4 funcional completa.
+- Una llamada real a OpenAI o Stripe en E2E debe fallar la prueba, no degradarse silenciosamente.
