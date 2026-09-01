@@ -5,14 +5,18 @@ import type { EdgeProps } from '@vue-flow/core';
 
 const props = defineProps<EdgeProps>();
 
-const [path, labelX, labelY] = getBezierPath({
+const bezierPath = computed(() => getBezierPath({
     sourceX: props.sourceX,
     sourceY: props.sourceY,
     targetX: props.targetX,
     targetY: props.targetY,
     sourcePosition: props.sourcePosition,
     targetPosition: props.targetPosition,
-});
+}));
+
+const path = computed(() => bezierPath.value[0]);
+const labelX = computed(() => bezierPath.value[1]);
+const labelY = computed(() => bezierPath.value[2]);
 
 const label = computed(() => (props.label ? String(props.label) : ''));
 </script>

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useFlowEditor } from './useFlowEditor';
 import { CONDITION_FALSE, CONDITION_TRUE, graphToDraft } from './flowAdapter';
+import type { EdgeChange, NodeChange } from '@vue-flow/core';
 import type { Flow } from './flowTypes';
 
 function makeFlow(overrides: Partial<Flow> = {}): Flow {
@@ -83,6 +84,50 @@ describe('useFlowEditor', () => {
 
         expect(editor.loadState.value).toBe('error');
         expect(editor.error.value).toBe('No encontrado');
+    });
+
+    it('transiciona de nodo a edge y conserva la seleccion al editar el label', async () => {
+        const http = installAxios(() => Promise.resolve({
+            data: {
+                flow: makeFlow({
+                    nodes: [
+                        ...makeFlow().nodes,
+                        {
+                            id: 'end',
+                            type: 'end',
+                            type_label: 'Fin',
+                            name: 'Fin',
+                            position_x: 260,
+                            position_y: 0,
+                            config: {},
+                            is_start: false,
+                        },
+                    ],
+                    connections: [{
+                        id: 'connection-1',
+                        source_node_id: 'start',
+                        target_node_id: 'end',
+                        label: 'Inicial',
+                    }],
+                }),
+            },
+        }));
+        const editor = useFlowEditor(context);
+        await editor.load();
+
+        editor.onNodesChange([{ type: 'select', id: 'start', selected: true } as NodeChange]);
+        expect(editor.selected.value).toEqual({ kind: 'node', id: 'start' });
+
+        editor.onNodesChange([{ type: 'select', id: 'start', selected: false } as NodeChange]);
+        editor.onEdgesChange([{ type: 'select', id: 'e-start-end-Inicial', selected: true } as EdgeChange]);
+        expect(editor.selected.value).toEqual({ kind: 'edge', id: 'e-start-end-Inicial' });
+
+        editor.updateEdgeLabel('e-start-end-Inicial', 'Continuar U4');
+
+        expect(editor.selected.value?.kind).toBe('edge');
+        expect(editor.selected.value?.id).toBe('e-start-end-Continuar U4');
+        expect(editor.edges.value[0].label).toBe('Continuar U4');
+        expect(http.get).toHaveBeenCalledOnce();
     });
 
     it('addNode marca dirty y crea nodos ai', async () => {

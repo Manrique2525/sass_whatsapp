@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue';
 import { useVueFlow, VueFlow } from '@vue-flow/core';
+import '@vue-flow/core/dist/style.css';
+import '@vue-flow/core/dist/theme-default.css';
 import type { GraphEdge, GraphNode, NodeTypesObject, EdgeTypesObject } from '@vue-flow/core';
 import { Background, BackgroundVariant } from '@vue-flow/background';
 import { MiniMap } from '@vue-flow/minimap';
