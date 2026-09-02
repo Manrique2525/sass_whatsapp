@@ -61,6 +61,8 @@ class AppServiceProvider extends ServiceProvider
                 graphVersion: (string) config('whatsapp.graph_version'),
                 appSecret: (string) config('whatsapp.app_secret'),
                 verifyToken: (string) config('whatsapp.verify_token'),
+                connectTimeout: (int) config('whatsapp.connect_timeout'),
+                timeout: (int) config('whatsapp.timeout'),
             );
         });
 

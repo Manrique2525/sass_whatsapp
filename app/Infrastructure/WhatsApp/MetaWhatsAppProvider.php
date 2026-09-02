@@ -221,8 +221,8 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
     {
         // PHP convierte puntos a guiones bajos en los parámetros de query
         // (`hub.mode` llega como `hub_mode` en $_GET); se leen ambas variantes.
-        $mode = (string) ($query['hub_mode'] ?? $query['hub.mode'] ?? '');
-        $token = (string) ($query['hub_verify_token'] ?? $query['hub.verify_token'] ?? '');
+        $mode = $this->queryString($query, 'hub_mode', 'hub.mode');
+        $token = $this->queryString($query, 'hub_verify_token', 'hub.verify_token');
         $challenge = $query['hub_challenge'] ?? $query['hub.challenge'] ?? null;
 
         if ($mode !== 'subscribe'
@@ -232,7 +232,12 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
             return ['verified' => false, 'challenge' => null];
         }
 
-        return ['verified' => true, 'challenge' => is_scalar($challenge) ? (string) $challenge : null];
+        $challenge = is_scalar($challenge) ? (string) $challenge : null;
+
+        return [
+            'verified' => $challenge !== null && ! $this->isBlank($challenge),
+            'challenge' => $challenge !== null && ! $this->isBlank($challenge) ? $challenge : null,
+        ];
     }
 
     private function client(string $accessToken): PendingRequest
@@ -372,5 +377,19 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
     private function isBlank(string $value): bool
     {
         return trim($value) === '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $query
+     */
+    private function queryString(array $query, string ...$keys): string
+    {
+        foreach ($keys as $key) {
+            if (isset($query[$key]) && is_scalar($query[$key])) {
+                return (string) $query[$key];
+            }
+        }
+
+        return '';
     }
 }

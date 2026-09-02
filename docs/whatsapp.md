@@ -88,29 +88,37 @@ GET /api/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=...&hub.challenge
 - Si `hub.mode === 'subscribe'` y `hash_equals(verify_token, WHATSAPP_VERIFY_TOKEN)` →
   responder `hub.challenge`.
 - Sino → 403. (`WHATSAPP_VERIFY_TOKEN` es global de la app.)
+- `WHATSAPP_VERIFY_TOKEN` debe estar configurado y no vacío; `hub.mode`, `hub.verify_token` y
+  `hub.challenge` deben ser valores escalares presentes. Nunca se acepta un fallback vacío.
 
-### 4.2 Recepción (POST) — flujo del request (implementado en FASE 6)
+### 4.2 Recepción (POST) — flujo del request (U2)
 
 1. Validar firma `X-Hub-Signature-256` contra el **App Secret global** de la app:
    `HMAC-SHA256(app_secret, raw_body)` comparada con `hash_equals`. La firma se calcula sobre el
    **cuerpo crudo exacto** (`$request->getContent()`); jamás sobre un re-serializado del JSON.
    Firma ausente/incorrecta → **401** `WHATSAPP_SIGNATURE_INVALID` (nunca procesar).
-2. Leer `entry[].changes[].value.messages[]` y `...statuses[]`. Extraer el identificador:
+2. Rechazar de forma segura JSON inválido, payload sobredimensionado o envelope que no sea un objeto
+   `whatsapp_business_account` con `entry[].changes[]`. Los payloads firmados pero inválidos no se
+   persisten ni se encolan y reciben ACK `200` para evitar reintentos infinitos. Un `field` no soportado
+   se ignora; los cambios `messages` requieren `value` objeto.
+3. Leer `entry[].changes[].value.messages[]` y `...statuses[]`. Extraer el identificador:
    `messages[].id` para mensajes; para `statuses[]` la clave de dedupe es compuesta
    `id|status|timestamp` (Meta reusa el id de mensaje en `delivered`/`read` → un UNIQUE simple
    sobre `statuses[].id` colisionaba). Otros `field` se ignoran.
-3. **Dedupe**: `webhook_events` (plataforma) con UNIQUE `provider_event_id`. Insert con
+4. **Dedupe**: `webhook_events` (plataforma) con UNIQUE `provider_event_id`. Insert con
    `ON CONFLICT DO NOTHING`; si ya existía → responde `200` con `duplicate = true` sin reprocesar.
    Esto cubre eventos duplicados y POSTs concurrentes (la violación de unique es el dedupe).
-4. Resolver tenant por `metadata.phone_number_id` → `whatsapp_phone_numbers.phone_id`
+5. Resolver tenant por `metadata.phone_number_id` → `whatsapp_phone_numbers.phone_id`
    (consulta indexada, sin scope de tenant). Si no se encuentra: registrar `webhook_events.status=failed`
    con motivo "unknown_phone_number_id" (y log de alerta) pero **responder 200** igualmente (Meta no debe
    reintentar infinitamente).
-5. Marcar `webhook_events.status=enqueued` y despachar
+6. Marcar atómicamente `webhook_events.status=enqueued` y despachar
    `ProcessIncomingWhatsAppMessage` / `ProcessWhatsAppStatusUpdate` a la cola
    (`forTenant($tenantId)`, TenantAwareJob). (`WhatsAppWebhookService::resolveAndEnqueue()` +
    `reprocessEvent()` público para el outbox, FASE 9.)
-6. Responder `200`. **El request del webhook nunca hace trabajo pesado.**
+7. Responder `200`. **El request del webhook nunca hace trabajo pesado.** Si el dispatch falla,
+   el evento vuelve a `received`, conserva `dispatch_failed` como código seguro y el sweeper lo
+   recupera; no se descarta silenciosamente.
 
 Los jobs (FASE 9) delegan en `MessageService`: mensaje entrante → find-or-create contacto
 (`ContactService::findOrCreateForPhone`, FASE 7) + conversación activa (`findOrCreateActiveForContact`,
@@ -119,14 +127,17 @@ update por `provider_message_id` (nunca crea). El tipo no soportado de Meta lanz
 `UnsupportedMessageTypeException` → el job marca el evento `failed` (permanente). Luego el evento
 pasa a `processed`. El motor de flujos (§5) se conecta en FASE 11.
 
-### 4.3 Outbox (no perder eventos) — FASE 9
+### 4.3 Outbox (no perder eventos) — U2
 
 `webhook_events.status` ∈ {received, enqueued, processed, failed}. El comando
 `whatsapp:reprocess-webhook-events` (programado cada 1 minuto con `withoutOverlapping` en
 `routes/console.php`) re-encola eventos con `status='received'` y `created_at` anterior a 5 minutos
 (limit 100), usando `WhatsAppWebhookService::reprocessEvent()`. Así, si el proceso cae entre el
-insert y el encolado, el evento no se pierde. Exitoso → marca `enqueued` y despacha el job;
-evento desconocido → `failed` con `error_code`.
+  insert y el encolado, el evento no se pierde. La transición a `enqueued` es atómica para que un replay y la ingesta inicial
+  no despachen dos veces. Exitoso → marca `enqueued` y despacha el job; evento desconocido → `failed` con `error_code`.
+  El comando `whatsapp:prune-webhook-events` elimina únicamente eventos terminales fuera de retención: procesados
+  después de 7 días y fallidos después de 30 días por defecto. `received` y `enqueued` nunca se podan porque son
+  recuperables.
 
 ### 4.4 Idempotencia
 
@@ -136,6 +147,20 @@ evento desconocido → `failed` con `error_code`.
   → el mensaje inbound se crea una sola vez por worker (backstop `QueryException`).
 - Un evento de `status` (sent/delivered/read/failed) **actualiza** el mensaje existente por
   `provider_message_id`, no crea mensajes.
+
+### 4.5 Payload y privacidad (U2)
+
+El registro persistido no conserva el envelope completo ni el raw body: solo guarda
+`phone_number_id`, `type` y el elemento `data` necesario para replay del job. El límite de aplicación
+por defecto es `WHATSAPP_WEBHOOK_MAX_PAYLOAD_BYTES=5242880` (5 MiB), configurable para batches
+legítimos de Meta. El raw body no se registra en logs ni se envía a Sentry. La poda terminal usa
+`WHATSAPP_WEBHOOK_RETENTION_DAYS=7`, `WHATSAPP_WEBHOOK_FAILED_RETENTION_DAYS=30` y un lote máximo
+`WHATSAPP_WEBHOOK_PRUNE_BATCH=100`; no afecta eventos `received`/`enqueued`.
+
+La resolución de tenant confía exclusivamente en `metadata.phone_number_id` y en la fila globalmente
+única de `whatsapp_phone_numbers`. `tenant_id`, `waba_id` u otros valores del payload nunca seleccionan
+tenant. La relación cuenta/número debe conservar el mismo tenant en el flujo de conexión; U2 no añade
+una migración, y el webhook no usa la cuenta para seleccionar ownership.
 
 ## 5. Flujo de mensaje entrante (worker)
 

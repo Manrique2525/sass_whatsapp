@@ -19,6 +19,26 @@ HTTP contract suite. Access-token, App Secret and verify-token rotation remain
 operational procedures; U1 documents them but does not execute production
 rotation or implement secret overlap.
 
+## FASE 31 U2 - Webhook authenticity and durable ingestion
+
+U2 validates GET verification fail-closed and validates the POST signature over the exact raw body
+before JSON parsing. Missing or invalid signatures return `401`; signed malformed JSON/envelopes,
+unknown objects and oversized bodies are rejected without persistence or queue dispatch and return
+the safe `200` ACK contract. Only `object=whatsapp_business_account` with `entry[].changes[]` is
+accepted for parsing.
+
+Webhook ownership is resolved only through `metadata.phone_number_id` to the globally unique
+`whatsapp_phone_numbers.phone_id`. Payload `tenant_id` and `waba_id` are ignored. `provider_event_id`
+remains the database idempotency barrier; messages use Meta message IDs and statuses use
+`id|status|timestamp`. Multiple entries, messages and statuses are ingested independently.
+
+Persistence precedes dispatch. Dispatch failures atomically return an event to `received` with a
+safe `dispatch_failed` code; the minute sweeper retries it, while an atomic `received` to `enqueued`
+transition prevents initial-ingest/replay races. Terminal-only pruning is scheduled daily; processed
+events default to 7 days and failed events to 30 days, while replayable `received`/`enqueued` events
+are never pruned. Persisted payloads contain only `phone_number_id`, type and the data required by
+the existing jobs. Raw bodies and message contents are not logged.
+
 ## CI Foundation (FASE 30 U5-A)
 
 GitHub Actions is the CI provider. The foundation workflow is

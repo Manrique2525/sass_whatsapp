@@ -3268,5 +3268,7 @@ FIRST REQUEST WARMUP** — no wait-condition flaky ni assets. Timeouts justifica
 - Contratos HTTP del provider y binding normal/E2E cubiertos con `Http::fake()`; no se realizan llamadas reales a Meta.
 - Política de versión y estrategia futura de rotación documentadas; no se ejecutan operaciones de producción.
 
-U2-U6 quedan **NO INICIADAS**. U1 no modifica durabilidad/idempotencia de webhooks, estados inbound, reconciliación
-outbound, media, templates ni migrations.
+U1 queda COMPLETADA LOCALMENTE. U2 queda COMPLETADA LOCALMENTE: autenticidad GET/POST, validación de envelope,
+dedupe durable, ownership por `phone_number_id`, recuperación de dispatch y retención terminal limitada.
+U2 no modifica normalización inbound de U3, monotonicidad de estados, reconciliación outbound, ventana de 24 horas,
+media, templates ni migrations. U3-U6 quedan **NO INICIADAS**.

@@ -27,6 +27,14 @@ return [
 
     'timeout' => (int) env('WHATSAPP_TIMEOUT', 10),
 
+    'webhook_max_payload_bytes' => (int) env('WHATSAPP_WEBHOOK_MAX_PAYLOAD_BYTES', 5242880),
+
+    'webhook_retention_days' => (int) env('WHATSAPP_WEBHOOK_RETENTION_DAYS', 7),
+
+    'webhook_failed_retention_days' => (int) env('WHATSAPP_WEBHOOK_FAILED_RETENTION_DAYS', 30),
+
+    'webhook_prune_batch' => (int) env('WHATSAPP_WEBHOOK_PRUNE_BATCH', 100),
+
     'app_secret' => env('WHATSAPP_APP_SECRET', ''),
 
     'verify_token' => env('WHATSAPP_VERIFY_TOKEN', ''),

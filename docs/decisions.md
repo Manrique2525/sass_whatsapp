@@ -3577,3 +3577,26 @@ una pantalla de upload/search en el frontend.
   - La rotación de access token, App Secret y verify token se documenta como operación futura; no se implementa solapamiento
     de secretos ni se ejecuta producción en U1.
   - Durabilidad/idempotencia webhook, estados, reconciliación outbound, media, templates y migrations quedan fuera de U1.
+
+## ADR-118 - FASE 31 U2 webhook authenticity and durable ingestion
+
+- **Estado**: Aceptado - FASE 31 U2 (local)
+- **Contexto**: El webhook ya verificaba HMAC y deduplicaba por un índice único, pero aceptaba envelopes
+  incompletos y una excepción de dispatch podía dejar eventos en `enqueued`, fuera del alcance del sweeper.
+  Además, el payload mínimo de replay no tenía una política explícita de tamaño y retención.
+- **Decision**:
+  1. La firma se valida contra `$request->getContent()` antes de parsear JSON. GET exige modo subscribe,
+     verify token configurado y no vacío, token escalar exacto y challenge escalar no vacío.
+  2. POST acepta solo `object=whatsapp_business_account` con `entry[].changes[]`; malformed JSON/envelope
+     se rechaza sin persistencia ni dispatch y recibe ACK 200. El límite configurable por defecto es 5 MiB.
+  3. `metadata.phone_number_id` es la única fuente de ownership. La unicidad global existente de `phone_id`
+     y `provider_event_id` es suficiente para U2; no se añade migración ni se usa `tenant_id`/`waba_id` del request.
+  4. La ingesta persiste antes de encolar. La transición `received -> enqueued` es atómica; si dispatch falla,
+     el evento vuelve a `received` y el sweeper lo recupera. No se mantiene una transacción abierta durante dispatch.
+  5. Se conserva solo el payload mínimo requerido por los jobs actuales y se podan estados terminales con TTL
+     configurable: 7 días procesados, 30 días fallidos y lotes de 100 por defecto. `received`/`enqueued` no se podan.
+- **Consecuencias**:
+  - Los eventos firmados inválidos no generan datos confiables ni trabajo asíncrono.
+  - Las reentregas y carreras de replay quedan protegidas por índices existentes y transición atómica.
+  - WABA uniqueness y la consistencia DB account/phone siguen como gaps del flujo de conexión, no como dependencia
+    del ownership del webhook; cualquier constraint futuro requiere una migración separada.

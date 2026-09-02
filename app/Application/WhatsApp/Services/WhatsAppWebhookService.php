@@ -16,6 +16,8 @@ use App\Jobs\ProcessWhatsAppStatusUpdate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use JsonException;
+use Throwable;
 
 /**
  * Pipeline de recepción de webhooks de Meta (FASE 6, ADR-029).
@@ -56,17 +58,29 @@ final class WhatsAppWebhookService
             throw new WhatsAppWebhookSignatureInvalidException;
         }
 
-        $payload = json_decode($rawBody, true);
-
-        if (! is_array($payload)) {
-            Log::warning('whatsapp.webhook_invalid', ['reason' => 'invalid_json']);
-
+        if (strlen($rawBody) > (int) config('whatsapp.webhook_max_payload_bytes', 5242880)) {
             throw new WhatsAppWebhookInvalidException;
         }
 
-        $entries = $payload['entry'] ?? [];
+        try {
+            $payload = json_decode($rawBody, true, 512, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            Log::warning('whatsapp.webhook_invalid', ['reason' => 'invalid_json']);
 
-        if (! is_array($entries)) {
+            return;
+        }
+
+        if (! is_array($payload)) {
+            Log::warning('whatsapp.webhook_invalid', ['reason' => 'invalid_envelope']);
+
+            return;
+        }
+
+        $entries = $this->validateEnvelope($payload);
+
+        if ($entries === null) {
+            Log::warning('whatsapp.webhook_invalid', ['reason' => 'invalid_envelope']);
+
             return;
         }
 
@@ -86,11 +100,7 @@ final class WhatsAppWebhookService
                     continue;
                 }
 
-                $value = $change['value'] ?? null;
-
-                if (! is_array($value)) {
-                    continue;
-                }
+                $value = $change['value'];
 
                 $metadata = is_array($value['metadata'] ?? null) ? $value['metadata'] : [];
                 $phoneNumberId = isset($metadata['phone_number_id']) && is_scalar($metadata['phone_number_id'])
@@ -225,10 +235,18 @@ final class WhatsAppWebhookService
             return;
         }
 
-        $event->fill([
-            'status' => WebhookEventStatus::Enqueued,
-            'tenant_id' => $phone->tenant_id,
-        ])->save();
+        $updated = WebhookEvent::query()
+            ->whereKey($event->id)
+            ->where('status', WebhookEventStatus::Received->value)
+            ->update([
+                'status' => WebhookEventStatus::Enqueued,
+                'tenant_id' => $phone->tenant_id,
+                'updated_at' => now(),
+            ]);
+
+        if ($updated === 0) {
+            return;
+        }
 
         $type = $event->event_type;
 
@@ -238,9 +256,62 @@ final class WhatsAppWebhookService
             return;
         }
 
-        match ($type) {
-            WebhookEventType::Message => dispatch((new ProcessIncomingWhatsAppMessage($event->id))->forTenant($phone->tenant_id)),
-            WebhookEventType::Status => dispatch((new ProcessWhatsAppStatusUpdate($event->id))->forTenant($phone->tenant_id)),
-        };
+        try {
+            match ($type) {
+                WebhookEventType::Message => dispatch((new ProcessIncomingWhatsAppMessage($event->id))->forTenant($phone->tenant_id)),
+                WebhookEventType::Status => dispatch((new ProcessWhatsAppStatusUpdate($event->id))->forTenant($phone->tenant_id)),
+            };
+        } catch (Throwable $exception) {
+            WebhookEvent::query()
+                ->whereKey($event->id)
+                ->where('status', WebhookEventStatus::Enqueued->value)
+                ->update([
+                    'status' => WebhookEventStatus::Received->value,
+                    'tenant_id' => null,
+                    'error_code' => 'dispatch_failed',
+                    'updated_at' => now(),
+                ]);
+
+            Log::error('whatsapp.webhook_dispatch_failed', [
+                'provider_event_id' => $event->provider_event_id,
+                'tenant_id' => $phone->tenant_id,
+                'exception' => $exception::class,
+            ]);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<int, mixed>|null
+     */
+    private function validateEnvelope(array $payload): ?array
+    {
+        if (($payload['object'] ?? null) !== 'whatsapp_business_account') {
+            return null;
+        }
+
+        $entries = $payload['entry'] ?? null;
+
+        if (! is_array($entries) || $entries === []) {
+            return null;
+        }
+
+        foreach ($entries as $entry) {
+            if (! is_array($entry) || ! is_array($entry['changes'] ?? null) || $entry['changes'] === []) {
+                return null;
+            }
+
+            foreach ($entry['changes'] as $change) {
+                if (! is_array($change)) {
+                    return null;
+                }
+
+                if (($change['field'] ?? null) === 'messages' && ! is_array($change['value'] ?? null)) {
+                    return null;
+                }
+            }
+        }
+
+        return $entries;
     }
 }

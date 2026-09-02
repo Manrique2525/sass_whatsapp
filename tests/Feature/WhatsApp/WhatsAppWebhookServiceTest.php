@@ -8,6 +8,7 @@ use App\Domain\WhatsApp\Contracts\WhatsAppProviderInterface;
 use App\Domain\WhatsApp\Enums\WebhookEventStatus;
 use App\Domain\WhatsApp\Models\WebhookEvent;
 use App\Jobs\ProcessIncomingWhatsAppMessage;
+use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Queue;
@@ -154,6 +155,30 @@ test('U4-WS-INGEST-01: handle ignora silenciosamente payloads malformados pero J
     $service->handle($request);
 
     expect(WebhookEvent::query()->count())->toBe(0);
+});
+
+test('U2-WS-DISPATCH-01: un fallo de dispatch devuelve el evento a received para el sweeper', function (): void {
+    $tenant = Tenant::factory()->create();
+    make_whatsapp_setup($tenant);
+
+    $dispatcher = Mockery::mock(Dispatcher::class);
+    $dispatcher->shouldReceive('dispatch')->once()->andThrow(new RuntimeException('queue unavailable'));
+    app()->instance(Dispatcher::class, $dispatcher);
+
+    config(['whatsapp.app_secret' => whatsapp_secret()]);
+    $body = whatsapp_webhook_payload('u2-dispatch-failure', 'phone-1');
+    $request = Request::create('/api/webhooks/whatsapp', 'POST', [], [], [], [
+        'CONTENT_TYPE' => 'application/json',
+        'HTTP_X_HUB_SIGNATURE_256' => whatsapp_signature($body),
+    ], $body);
+
+    u4_webhook_service()->handle($request);
+
+    $event = WebhookEvent::query()->where('provider_event_id', 'u2-dispatch-failure')->firstOrFail();
+
+    expect($event->status)->toBe(WebhookEventStatus::Received)
+        ->and($event->tenant_id)->toBeNull()
+        ->and($event->error_code)->toBe('dispatch_failed');
 });
 
 test('U4-WS-INGEST-BUG-01: BUG-WEBHOOK-FOREACH RESOLVIDO — changes string ya no causa 500', function (): void {
