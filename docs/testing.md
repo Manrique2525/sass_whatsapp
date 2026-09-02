@@ -20,7 +20,23 @@ manual `workflow_dispatch` executions.
   serialized canonical `tests/Postgres` suite. Because the job runs directly on the GitHub runner, ports are mapped
   to localhost and the canonical `postgres`/`redis` names are mapped locally. The job requires no repository secrets.
 - No repository secrets are required. U5-C is validated locally against disposable PostgreSQL/Redis services;
-  Docker/Playwright E2E, Knowledge E2E and the final release gate belong to later U5 stages.
+  Docker/Playwright E2E is covered by U5-D and the final release gate belongs to a later U5 stage.
+
+## FASE 30 U5-D - Self-contained E2E integration gate
+
+U5-D adds the complete Playwright and Knowledge integration gate to CI. The E2E Compose project is
+self-contained and never attaches to the development stack:
+
+- PostgreSQL uses `pgvector/pgvector:pg16` with the exact disposable database `whatsapp_saas_e2e_test`.
+- Redis uses logical database `15`, the worker consumes `default,knowledge`, and `--tries=1` is enforced.
+- The app, worker and Reverb run with `APP_ENV=e2e`; external WhatsApp, OpenAI, Stripe and Sentry calls are
+  blocked by the E2E-only providers and empty DSNs.
+- Storage uses the named `e2e_storage` volume. PostgreSQL and Redis persistence are disabled or relaxed because
+  all state is disposable; this avoids Docker Desktop checkpoint stalls without changing development services.
+- CI starts the stack with health-based dependencies, runs setup, the deterministic E2E build, browser plus
+  Knowledge integration tests, and then asserts failed/pending/reserved/delayed jobs are all zero.
+- Playwright remains serial with `workers=1`, `retries=0`; failure diagnostics are limited to Compose logs and
+  `test-results/e2e` / `playwright-report` artifacts.
 
 ## FASE 30 U4 — E2E closure
 
@@ -53,8 +69,8 @@ E2E no dejó jobs fallidos ni pendientes.
 
 - `docker-compose.e2e.yml` usa `APP_ENV=e2e`, PostgreSQL `whatsapp_saas_e2e_test`, Redis DB 15 y el worker
   consume `default,knowledge`; el orden de producción es `default,analytics,knowledge`.
-- `e2e-app` y `e2e-worker` montan el mismo path aislado `storage/e2e-shared` en `storage/app`. El path no
-  es el storage del desarrollador ni MinIO; el setup debe limpiarlo de forma determinista.
+- `e2e-app` y `e2e-worker` montan el mismo volumen nombrado `e2e_storage` en `storage/app`. No es el storage
+  del desarrollador ni MinIO; el setup lo recrea y limpia de forma determinista.
 - Embeddings usan el `FakeEmbeddingProvider` existente, determinístico y compatible con `vector(1536)`.
   AI usa el fake existente. Bajo `APP_ENV` distinto de `e2e` permanecen los bindings reales.
 - Billing usa `E2EBillingProvider` únicamente bajo `APP_ENV=e2e`; checkout y portal devuelven URLs sintéticas

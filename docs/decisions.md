@@ -3458,7 +3458,7 @@ una pantalla de upload/search en el frontend.
 **Decisión**:
 
 - El worker E2E consume `default,knowledge`; `default` permanece primero para no interrumpir Inbox/Reverb.
-- App y worker montan exclusivamente `storage/e2e-shared`. No se usa storage del desarrollador, MinIO ni
+- App y worker montan exclusivamente el volumen nombrado `e2e_storage`. No se usa storage del desarrollador, MinIO ni
   credenciales cloud en E2E.
 - Se reutiliza `FakeEmbeddingProvider` con dimensión 1536 y `FakeAIProvider`; los contratos reales siguen
   enlazados fuera de `APP_ENV=e2e`.
@@ -3515,3 +3515,22 @@ una pantalla de upload/search en el frontend.
 - **Consecuencias**:
   - El job PostgreSQL puede correr en paralelo con los jobs static, frontend y backend porque sus servicios son desechables y aislados.
   - No se ejecutan PostgreSQL, Redis ni migraciones productivas; Docker/Playwright E2E y el release gate quedan fuera de U5-C.
+
+## ADR-115 - FASE 30 U5-D self-contained E2E integration gate
+
+- **Estado**: Aceptado - FASE 30 U5-D
+- **Contexto**: El gate browser/Knowledge necesita PostgreSQL con pgvector, Redis, worker y Reverb reales, pero no
+  puede depender del stack de desarrollo ni provocar escrituras o llamadas externas.
+- **Decision**:
+  1. `docker-compose.e2e.yml` levanta un proyecto autocontenido con PostgreSQL `pgvector/pgvector:pg16`, Redis,
+     app, worker y Reverb en redes y volumenes nombrados propios.
+  2. El guard exige `APP_ENV=e2e` y la base exacta `whatsapp_saas_e2e_test`; Redis usa DB 15 y el worker consume
+     `default,knowledge` con `--tries=1`.
+  3. El job CI ejecuta setup, build E2E, Playwright y Knowledge integration, y solo despues verifica que las colas
+     `default` y `knowledge` no tengan jobs failed, pending, reserved o delayed.
+  4. Como el estado es descartable, PostgreSQL desactiva fsync/checkpoint costoso y Redis desactiva persistencia.
+     Esta optimizacion queda confinada al Compose E2E y no altera desarrollo ni produccion.
+- **Consecuencias**:
+  - El gate valida el worker Redis y Reverb reales sin secretos ni proveedores cloud.
+  - Los diagnosticos de fallo quedan limitados a logs de Compose y artefactos Playwright seguros.
+  - El cierre de U5-D requiere dos corridas finales completas `27/27` y los gates estaticos/frontend/backend.

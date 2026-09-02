@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 EN PROGRESO (U1/U2/U3/U4/U5-A/U5-B/U5-C COMPLETADAS)**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 EN PROGRESO (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D COMPLETADAS)**.
 
 ## Fases
 
@@ -3237,3 +3237,12 @@ FIRST REQUEST WARMUP** — no wait-condition flaky ni assets. Timeouts justifica
   typecheck, production/E2E build y audits PASS.
 - Docker E2E healthy; queues `default,knowledge` sin failed/pending/reserved/delayed jobs.
 - Produccion sin cambios posteriores a `c95ce6a`; migraciones de produccion no ejecutadas. FASE31 queda pendiente.
+
+### U5-D - Self-contained E2E integration gate · COMPLETADA
+
+- Compose E2E es autocontenido: PostgreSQL/pgvector, Redis DB 15, app, worker y Reverb aislados de desarrollo.
+- El job CI ejecuta setup seguro, build E2E, browser E2E, Knowledge integration y assertion de colas limpias.
+- Los providers E2E y DSNs vacios mantienen Meta/OpenAI/Stripe/Sentry fuera del proceso.
+- La estabilidad de Docker Desktop se protege solo en el stack descartable: PostgreSQL no fuerza fsync y Redis no
+  persiste snapshots; no se modifican los servicios de desarrollo ni la logica productiva.
+- Cierre validado: dos corridas finales `27/27`, gates estaticos/frontend/backend y commit local de U5-D.

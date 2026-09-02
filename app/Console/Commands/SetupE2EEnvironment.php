@@ -21,6 +21,7 @@ use App\Infrastructure\Tenancy\TenantContext;
 use App\Infrastructure\Testing\E2EEnvironmentGuard;
 use Database\Seeders\E2ETenantSeeder;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -44,6 +45,7 @@ final class SetupE2EEnvironment extends Command
     public function handle(): int
     {
         E2EEnvironmentGuard::assertSafe();
+        $this->assertCanonicalDatabaseIdentity();
 
         $redisIndex = E2EEnvironmentGuard::E2E_REDIS_INDEX;
         $this->info(sprintf('E2E guard OK: APP_ENV=%s, BD=%s, Redis index=%d.',
@@ -278,6 +280,20 @@ final class SetupE2EEnvironment extends Command
         Redis::connection()->flushdb();
 
         return 0;
+    }
+
+    private function assertCanonicalDatabaseIdentity(): void
+    {
+        $database = (string) DB::scalar('select current_database()');
+
+        if ($database !== 'whatsapp_saas_e2e_test') {
+            throw new \RuntimeException(sprintf(
+                'E2E guard: el servidor devolvió la BD "%s"; se esperaba exactamente "whatsapp_saas_e2e_test". Operación E2E abortada.',
+                $database,
+            ));
+        }
+
+        $this->info('E2E guard: identidad exacta de PostgreSQL verificada.');
     }
 
     private function prepareStorage(): void

@@ -2,12 +2,10 @@ name: whatsapp-saas-e2e
 
 # Entorno E2E (Playwright) — FASE 30 / ADR-110.
 #
-# Levanta UN contenedor de app dedicado que se conecta a la misma red que el
-# stack de desarrollo para REUTILIZAR postgres/redis/minio ya en ejecución,
-# pero con:
+# Levanta un stack completamente autocontenido, con:
 #   - BD dedicada  whatsapp_saas_e2e_test  (guard: debe terminar en _e2e_test)
 #   - Redis índice lógico 15 (solo sus llaves)
-#   - almacenamiento local aislado (nunca minio comppartido)
+#   - almacenamiento local aislado (nunca MinIO compartido)
 #   - APP_ENV=e2e  (activa guard + fakes deterministas)
 #   - servidor HTTP php artisan serve en el puerto 8082 (sin nginx)
 #
@@ -20,7 +18,43 @@ name: whatsapp-saas-e2e
 # no sea la dedicada. NO toca el stack de desarrollo.
 
 services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    # The database is disposable. Avoid host-Docker checkpoint I/O pauses in
+    # the long serial E2E run; development PostgreSQL is not affected.
+    command: ["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off", "-c", "checkpoint_timeout=30min"]
+    environment:
+      POSTGRES_DB: whatsapp_saas_e2e_test
+      POSTGRES_USER: saas
+      POSTGRES_PASSWORD: saas_secret
+    volumes:
+      - e2e_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U saas -d whatsapp_saas_e2e_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - e2e
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Redis state is disposable and is recreated by e2e:setup.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - e2e
+
   e2e-app:
+    build:
+      context: .
+      target: runtime
     image: whatsapp-saas-app
     pull_policy: build
     restart: unless-stopped
@@ -34,9 +68,8 @@ services:
       - "8082:8082"
     volumes:
       - .:/var/www/html
-      # Storage E2E aislado: sustituye el storage/app del repositorio por una
-      # carpeta dedicada en el host, para no escribir en la compartida con dev.
-      - ./storage/e2e-shared:/var/www/html/storage/app
+      # Volumen nombrado compartido solo por el proyecto E2E; no depende del host.
+      - e2e_storage:/var/www/html/storage/app
       # Activa OPcache para el PHP built-in server (SAPI CLI) y acelera las
       # requests del entorno E2E. Carga después de opcache.ini (prefijo zz-).
       - ./docker/php/e2e-opcache.ini:/usr/local/etc/php/conf.d/zz-e2e-opcache.ini:ro
@@ -44,6 +77,9 @@ services:
       APP_ENV: e2e
       APP_DEBUG: "true"
       APP_URL: http://localhost:8082
+      # Permite requests HTTP concurrentes durante los journeys que mantienen
+      # autenticación Reverb abierta mientras consultan el inbox.
+      PHP_CLI_SERVER_WORKERS: "4"
       DB_CONNECTION: pgsql
       DB_HOST: postgres
       DB_PORT: "5432"
@@ -86,7 +122,12 @@ services:
       STRIPE_WEBHOOK_SECRET: ""
       SENTRY_LARAVEL_DSN: ""
       E2E_TEST_PASSWORD: e2e-password
+      REDIS_PREFIX: e2e_
     depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
       reverb:
         condition: service_healthy
     healthcheck:
@@ -96,10 +137,13 @@ services:
       retries: 5
       start_period: 20s
     networks:
-      - saas-existing
+      - e2e
       - e2e-realtime
 
   reverb:
+    build:
+      context: .
+      target: runtime
     image: whatsapp-saas-app
     pull_policy: build
     restart: unless-stopped
@@ -141,6 +185,12 @@ services:
       KNOWLEDGE_STORAGE_DISK: local
       MAIL_MAILER: array
       SENTRY_LARAVEL_DSN: ""
+      REDIS_PREFIX: e2e_
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "php", "/usr/local/bin/reverb-e2e-healthcheck.php"]
       interval: 5s
@@ -148,12 +198,15 @@ services:
       retries: 12
       start_period: 10s
     networks:
+      e2e: {}
       e2e-realtime:
         aliases:
           - reverb-e2e
-      saas-existing: {}
 
   e2e-worker:
+    build:
+      context: .
+      target: runtime
     image: whatsapp-saas-app
     pull_policy: build
     restart: unless-stopped
@@ -161,7 +214,7 @@ services:
     command: ["php", "artisan", "queue:work", "--queue=default,knowledge", "--sleep=1", "--tries=1", "--max-time=3600"]
     volumes:
       - .:/var/www/html
-      - ./storage/e2e-shared:/var/www/html/storage/app
+      - e2e_storage:/var/www/html/storage/app
     environment:
       APP_ENV: e2e
       APP_DEBUG: "true"
@@ -191,7 +244,12 @@ services:
       KNOWLEDGE_STORAGE_DISK: local
       MAIL_MAILER: array
       SENTRY_LARAVEL_DSN: ""
+      REDIS_PREFIX: e2e_
     depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
       e2e-app:
         condition: service_healthy
       reverb:
@@ -203,12 +261,15 @@ services:
       retries: 5
       start_period: 20s
     networks:
-      - saas-existing
+      - e2e
       - e2e-realtime
 
+volumes:
+  e2e_postgres_data:
+  e2e_storage:
+
 networks:
-  saas-existing:
-    name: whatsapp-saas_saas
-    external: true
+  e2e:
+    driver: bridge
   e2e-realtime:
     name: whatsapp-saas-e2e-realtime

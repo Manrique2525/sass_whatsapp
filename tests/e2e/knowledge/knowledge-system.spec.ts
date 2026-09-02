@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { USERS } from '../helpers/constants';
+import { COMPOSE_PROJECT_NAME, USERS } from '../helpers/constants';
 import { apiGet, apiPost, readXsrfToken } from '../helpers/auth';
 
 const TENANT_A_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
@@ -23,7 +23,7 @@ type InspectorResult = {
 
 function inspect(tenantId: string, knowledgeBaseId: string, documentId: string, query = ''): InspectorResult {
     const output = execFileSync('docker', [
-        'compose', '-f', 'docker-compose.e2e.yml', 'exec', '-T', 'e2e-app',
+        'compose', '-p', COMPOSE_PROJECT_NAME, '-f', 'docker-compose.e2e.yml', 'exec', '-T', 'e2e-app',
         'php', 'tests/e2e/knowledge/knowledge-inspector.php',
         tenantId, knowledgeBaseId, documentId, query,
     ], { encoding: 'utf8' });

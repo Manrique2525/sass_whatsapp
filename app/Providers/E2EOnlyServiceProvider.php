@@ -13,6 +13,7 @@ use App\Domain\Billing\Contracts\CapacityGuardInterface;
 use App\Domain\Billing\Contracts\UsageGuardInterface;
 use App\Domain\WhatsApp\Contracts\WhatsAppProviderInterface;
 use App\Infrastructure\Billing\E2EBillingProvider;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\ServiceProvider;
 use Tests\Fakes\FakeAIProvider;
 use Tests\Fakes\FakeCapacityGuard;
@@ -46,6 +47,8 @@ final class E2EOnlyServiceProvider extends ServiceProvider
         if (app()->environment() !== 'e2e') {
             return;
         }
+
+        Http::preventStrayRequests();
 
         $this->app->singleton(AIProviderInterface::class, FakeAIProvider::class);
         $this->app->singleton(EmbeddingProviderInterface::class, FakeEmbeddingProvider::class);

@@ -34,3 +34,4 @@ yarn-error.log
 /playwright/.cache/
 /tests/e2e/.auth/
 /storage/e2e-app/
+/storage/e2e-shared/

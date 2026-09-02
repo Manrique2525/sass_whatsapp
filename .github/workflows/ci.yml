@@ -240,3 +240,83 @@ jobs:
 
       - name: PostgreSQL canonical suite
         run: vendor/bin/pest --configuration=phpunit.pgsql.xml --testsuite=PostgresConcurrency --do-not-cache-result
+
+  e2e:
+    name: Self-contained E2E and Knowledge integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      APP_ENV: e2e
+      COMPOSE_PROJECT_NAME: whatsapp-saas-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+      E2E_BASE_URL: http://localhost:8082
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_pgsql, redis
+          tools: composer:v2
+          coverage: none
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: ${{ runner.os }}-php-8.3-composer-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-php-8.3-composer-
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Start self-contained E2E stack
+        run: docker compose -f docker-compose.e2e.yml up -d --build --wait
+
+      - name: Prepare E2E environment
+        run: docker compose -f docker-compose.e2e.yml exec -T e2e-app php artisan e2e:setup
+
+      - name: Build deterministic E2E bundle
+        run: npm run build:e2e
+
+      - name: Run browser and Knowledge E2E serially
+        run: npm run test:e2e
+
+      - name: Assert E2E queues are clean
+        if: ${{ success() }}
+        run: docker compose -f docker-compose.e2e.yml exec -T e2e-app php artisan e2e:assert-queue-clean
+
+      - name: Collect safe E2E diagnostics
+        if: ${{ failure() }}
+        run: |
+          docker compose -f docker-compose.e2e.yml ps
+          docker compose -f docker-compose.e2e.yml logs --no-color e2e-app e2e-worker reverb
+
+      - name: Upload safe Playwright artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          path: |
+            test-results/e2e
+            playwright-report
+
+      - name: Tear down self-contained E2E stack
+        if: ${{ always() }}
+        run: docker compose -f docker-compose.e2e.yml down --volumes --remove-orphans

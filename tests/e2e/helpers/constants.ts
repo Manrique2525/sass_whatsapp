@@ -7,6 +7,7 @@
  */
 
 export const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:8082';
+export const COMPOSE_PROJECT_NAME = process.env.COMPOSE_PROJECT_NAME ?? 'whatsapp-saas-e2e';
 
 /** Contraseña de los usuarios de prueba (misma que el seeder lee de .env.e2e). */
 export const PASSWORD = process.env.E2E_TEST_PASSWORD ?? 'e2e-password';

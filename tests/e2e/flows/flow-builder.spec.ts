@@ -37,7 +37,7 @@ test.describe('Flow Builder E2E-U4', () => {
         await expect(page.getByText('E2E Flow Builder Draft', { exact: true })).toBeVisible({ timeout: 60_000 });
         await page.getByRole('link', { name: 'Abrir editor' }).click();
         await page.waitForURL('**/settings/flows/*/*');
-        await expect(page.getByText('E2E Flow Builder Draft', { exact: true })).toBeVisible();
+        await expect(page.getByText('E2E Flow Builder Draft', { exact: true })).toBeVisible({ timeout: 60_000 });
         await expect(page.locator('.vue-flow')).toBeVisible({ timeout: 60_000 });
 
         await page.getByRole('button', { name: '+ Agregar nodo' }).click();
