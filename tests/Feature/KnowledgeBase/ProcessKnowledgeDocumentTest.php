@@ -24,6 +24,7 @@ uses(RefreshDatabase::class);
 
 beforeEach(function (): void {
     app()->instance(CapacityGuardInterface::class, new FakeCapacityGuard);
+    Storage::fake('minio');
 });
 
 // =========================================================================

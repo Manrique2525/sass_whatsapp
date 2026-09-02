@@ -11,9 +11,14 @@ use App\Domain\Users\Models\User;
 use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    Storage::fake('minio');
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -53,7 +58,7 @@ function make_kb_document(Tenant $tenant, KnowledgeBase $kb, array $attributes =
     TenantContext::setId($tenant->id);
 
     try {
-        return KnowledgeDocument::query()->create(array_merge([
+        $document = KnowledgeDocument::query()->create(array_merge([
             'knowledge_base_id' => $kb->id,
             'original_filename' => 'doc-'.substr((string) Str::uuid(), 0, 8).'.txt',
             'storage_disk' => 'minio',
@@ -63,6 +68,10 @@ function make_kb_document(Tenant $tenant, KnowledgeBase $kb, array $attributes =
             'file_hash' => hash('sha256', (string) Str::uuid()),
             'status' => 'uploaded',
         ], $attributes));
+
+        Storage::disk('minio')->put($document->storage_path, 'test document source');
+
+        return $document;
     } finally {
         TenantContext::clear();
     }
