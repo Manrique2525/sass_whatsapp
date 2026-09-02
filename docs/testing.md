@@ -1,5 +1,20 @@
 # Testing
 
+## CI Foundation (FASE 30 U5-A)
+
+GitHub Actions is the CI provider. The foundation workflow is
+`.github/workflows/ci.yml` and runs on pull requests, pushes to `master`, and
+manual `workflow_dispatch` executions.
+
+- Permissions are least-privilege: `contents: read`; no deployment or write permissions.
+- Pull request runs may be cancelled when superseded; `master` verification runs are not cancelled.
+- CI uses PHP `8.3` and Node `22`, matching the PHP runtime and Node-compatible lockfile dependencies.
+- Composer uses `composer validate --strict`, `composer install --no-interaction --prefer-dist --no-progress`,
+  and caches downloaded packages by `composer.lock`; mutable `vendor/` state is not cached.
+- npm uses `npm ci` and the `package-lock.json` cache through `actions/setup-node`; `node_modules` is not cached.
+- No repository secrets are required. No production providers, Docker E2E, PostgreSQL, Playwright or deployment
+  steps are part of U5-A; those belong to later U5 stages.
+
 ## FASE 30 U4 — E2E closure
 
 U4 queda completada con journeys Playwright de Flow Builder y Billing, y con integracion de sistema para Knowledge.
