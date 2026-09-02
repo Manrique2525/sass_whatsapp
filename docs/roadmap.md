@@ -3256,3 +3256,17 @@ FIRST REQUEST WARMUP** — no wait-condition flaky ni assets. Timeouts justifica
 - El release candidate requiere todos los jobs obligatorios, audits limpios y `release-gate` verde.
 - Cierre validado: provider boundaries, E2E `27/27`, colas limpias, lint, PHPStan, frontend, backend, PostgreSQL,
   audits y build; commit local unico preparado sin push.
+
+## FASE 31 - Meta / WhatsApp Cloud API (EN PROGRESO)
+
+### U1 - Meta provider and configuration hardening · COMPLETADA LOCALMENTE
+
+- El provider mantiene Graph API oficial, versión fijada, URL/host HTTPS validado y timeouts de conexión/request
+  explícitos y acotados.
+- App Secret, verify token, access token e identificadores se validan fail-closed sin exponer valores; el verify token
+  vacío nunca valida.
+- Contratos HTTP del provider y binding normal/E2E cubiertos con `Http::fake()`; no se realizan llamadas reales a Meta.
+- Política de versión y estrategia futura de rotación documentadas; no se ejecutan operaciones de producción.
+
+U2-U6 quedan **NO INICIADAS**. U1 no modifica durabilidad/idempotencia de webhooks, estados inbound, reconciliación
+outbound, media, templates ni migrations.

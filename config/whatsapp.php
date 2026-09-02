@@ -14,14 +14,18 @@ return [
     | webhook. El access token de cada WABA y el phone id viven en la base de
     | datos (cifrados), NO aquí. Ver docs/whatsapp.md.
     |
-    | La versión de Graph API debe estar fijada (nunca "latest"); se actualiza
-    | manualmente siguiendo el changelog de Meta.
+    | La versión de Graph API debe estar fijada (nunca "latest"); el provider
+    | valida el formato y solo se actualiza manualmente tras revisar contratos.
     |
     */
 
     'graph_url' => env('WHATSAPP_GRAPH_URL', 'https://graph.facebook.com'),
 
     'graph_version' => env('WHATSAPP_GRAPH_VERSION', 'v26.0'),
+
+    'connect_timeout' => (int) env('WHATSAPP_CONNECT_TIMEOUT', 3),
+
+    'timeout' => (int) env('WHATSAPP_TIMEOUT', 10),
 
     'app_secret' => env('WHATSAPP_APP_SECRET', ''),
 

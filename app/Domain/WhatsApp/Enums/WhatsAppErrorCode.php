@@ -12,6 +12,7 @@ namespace App\Domain\WhatsApp\Enums;
  */
 enum WhatsAppErrorCode: string
 {
+    case ConfigurationInvalid = 'WHATSAPP_CONFIGURATION_INVALID';
     case NotConnected = 'WHATSAPP_NOT_CONNECTED';
     case AuthFailed = 'WHATSAPP_AUTH_FAILED';
     case MessageFailed = 'WHATSAPP_MESSAGE_FAILED';

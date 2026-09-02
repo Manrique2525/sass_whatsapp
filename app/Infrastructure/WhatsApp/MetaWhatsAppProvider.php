@@ -6,6 +6,7 @@ namespace App\Infrastructure\WhatsApp;
 
 use App\Domain\WhatsApp\Contracts\WhatsAppProviderInterface;
 use App\Domain\WhatsApp\Exceptions\WhatsAppAuthFailedException;
+use App\Domain\WhatsApp\Exceptions\WhatsAppConfigurationException;
 use App\Domain\WhatsApp\Exceptions\WhatsAppMessageFailedException;
 use App\Domain\WhatsApp\Exceptions\WhatsAppPhoneNotFoundException;
 use App\Domain\WhatsApp\ValueObjects\InteractiveMessage;
@@ -37,6 +38,8 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
         private readonly string $graphVersion,
         private readonly string $appSecret,
         private readonly string $verifyToken,
+        private readonly int $connectTimeout = 3,
+        private readonly int $timeout = 10,
     ) {}
 
     /**
@@ -44,6 +47,8 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
      */
     public function sendText(string $accessToken, string $phoneId, string $to, string $text, array $context = []): MessageSendResult
     {
+        $this->assertIdentifiers($accessToken, $phoneId);
+
         $response = $this->http(fn (): Response => $this->client($accessToken)->post("/{$phoneId}/messages", [
             'messaging_product' => 'whatsapp',
             'recipient_type' => 'individual',
@@ -63,6 +68,8 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
      */
     public function sendTemplate(string $accessToken, string $phoneId, string $to, string $templateName, string $language, array $params = []): MessageSendResult
     {
+        $this->assertIdentifiers($accessToken, $phoneId);
+
         $components = [];
 
         if ($params !== []) {
@@ -92,6 +99,8 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
 
     public function sendImage(string $accessToken, string $phoneId, string $to, string $mediaUrl, string $caption = ''): MessageSendResult
     {
+        $this->assertIdentifiers($accessToken, $phoneId);
+
         $image = ['link' => $mediaUrl];
 
         if ($caption !== '') {
@@ -111,6 +120,8 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
 
     public function sendDocument(string $accessToken, string $phoneId, string $to, string $mediaUrl, string $filename = ''): MessageSendResult
     {
+        $this->assertIdentifiers($accessToken, $phoneId);
+
         $document = ['link' => $mediaUrl];
 
         if ($filename !== '') {
@@ -130,6 +141,8 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
 
     public function sendInteractiveMessage(string $accessToken, string $phoneId, string $to, InteractiveMessage $message): MessageSendResult
     {
+        $this->assertIdentifiers($accessToken, $phoneId);
+
         $response = $this->http(fn (): Response => $this->client($accessToken)->post("/{$phoneId}/messages", [
             'messaging_product' => 'whatsapp',
             'recipient_type' => 'individual',
@@ -143,6 +156,8 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
 
     public function markAsRead(string $accessToken, string $phoneId, string $messageId): void
     {
+        $this->assertIdentifiers($accessToken, $phoneId);
+
         $this->http(fn (): Response => $this->client($accessToken)->post("/{$phoneId}/messages", [
             'messaging_product' => 'whatsapp',
             'status' => 'read',
@@ -152,6 +167,8 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
 
     public function getPhoneNumberInfo(string $accessToken, string $phoneId): PhoneNumberInfo
     {
+        $this->assertIdentifiers($accessToken, $phoneId);
+
         $response = $this->http(fn (): Response => $this->client($accessToken)->get("/{$phoneId}", [
             'fields' => 'verified_name,display_phone_number,quality_rating,status',
         ]));
@@ -173,6 +190,8 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
 
     public function subscribeToWebhooks(string $accessToken, string $wabaId): bool
     {
+        $this->assertIdentifier($accessToken, $wabaId);
+
         $response = $this->http(fn (): Response => $this->client($accessToken)->post("/{$wabaId}/subscribed_apps"));
 
         return $response->successful();
@@ -180,6 +199,8 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
 
     public function unsubscribeFromWebhooks(string $accessToken, string $wabaId): bool
     {
+        $this->assertIdentifier($accessToken, $wabaId);
+
         $response = $this->http(fn (): Response => $this->client($accessToken)->delete("/{$wabaId}/subscribed_apps"));
 
         return $response->successful();
@@ -187,7 +208,7 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
 
     public function validateWebhookSignature(string $signature, string $rawBody): bool
     {
-        if ($this->appSecret === '' || $signature === '') {
+        if ($this->isBlank($this->appSecret) || $this->isBlank($signature)) {
             return false;
         }
 
@@ -204,7 +225,10 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
         $token = (string) ($query['hub_verify_token'] ?? $query['hub.verify_token'] ?? '');
         $challenge = $query['hub_challenge'] ?? $query['hub.challenge'] ?? null;
 
-        if ($mode !== 'subscribe' || ! hash_equals($this->verifyToken, $token)) {
+        if ($mode !== 'subscribe'
+            || $this->isBlank($this->verifyToken)
+            || $this->isBlank($token)
+            || ! hash_equals($this->verifyToken, $token)) {
             return ['verified' => false, 'challenge' => null];
         }
 
@@ -213,10 +237,13 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
 
     private function client(string $accessToken): PendingRequest
     {
+        $this->assertConfiguration();
+
         return Http::baseUrl(rtrim($this->graphUrl, '/').'/'.$this->graphVersion)
             ->withToken($accessToken)
             ->acceptJson()
-            ->timeout(10);
+            ->connectTimeout($this->connectTimeout)
+            ->timeout($this->timeout);
     }
 
     /**
@@ -277,6 +304,10 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
 
             $providerMessageId = (string) ($body['messages'][0]['id'] ?? '');
 
+            if ($this->isBlank($providerMessageId)) {
+                throw new WhatsAppMessageFailedException($fallback, null, false);
+            }
+
             return MessageSendResult::success($providerMessageId, null, $body);
         }
 
@@ -308,5 +339,38 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
             $providerCode !== '' ? $providerCode : null,
             $retryable,
         );
+    }
+
+    private function assertIdentifiers(string $accessToken, string $identifier): void
+    {
+        $this->assertIdentifier($accessToken, $identifier);
+    }
+
+    private function assertIdentifier(string $accessToken, string $identifier): void
+    {
+        if ($this->isBlank($accessToken) || $this->isBlank($identifier)) {
+            throw new WhatsAppConfigurationException;
+        }
+    }
+
+    private function assertConfiguration(): void
+    {
+        $parts = parse_url($this->graphUrl);
+        $host = is_array($parts) ? ($parts['host'] ?? null) : null;
+        $scheme = is_array($parts) ? ($parts['scheme'] ?? null) : null;
+
+        if ($scheme !== 'https'
+            || $host !== 'graph.facebook.com'
+            || ! preg_match('/^v\d+\.0$/', $this->graphVersion)
+            || $this->connectTimeout < 1
+            || $this->timeout < 1
+            || $this->connectTimeout >= $this->timeout) {
+            throw new WhatsAppConfigurationException;
+        }
+    }
+
+    private function isBlank(string $value): bool
+    {
+        return trim($value) === '';
     }
 }

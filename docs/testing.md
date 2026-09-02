@@ -1,5 +1,24 @@
 # Testing
 
+## FASE 31 U1 - Meta provider and configuration hardening
+
+U1 keeps Meta calls behind `WhatsAppProviderInterface` and tests the real
+`MetaWhatsAppProvider` only with Laravel `Http::fake()`. No test contacts
+`graph.facebook.com`. The provider requires the official HTTPS Graph host,
+validates a pinned `v<integer>.0` API version, and uses bounded connection and
+total request timeouts (`WHATSAPP_CONNECT_TIMEOUT < WHATSAPP_TIMEOUT`).
+
+Missing or blank App Secret/verify token values fail closed for signature and
+GET verification. Tenant access tokens and phone/WABA identifiers are rejected
+when blank, without logging their values. E2E continues to bind
+`FakeWhatsAppProvider` and uses `Http::preventStrayRequests()`.
+
+The API version is never inferred from `latest` or changed automatically. A
+future version bump requires reviewing Meta's changelog and passing the provider
+HTTP contract suite. Access-token, App Secret and verify-token rotation remain
+operational procedures; U1 documents them but does not execute production
+rotation or implement secret overlap.
+
 ## CI Foundation (FASE 30 U5-A)
 
 GitHub Actions is the CI provider. The foundation workflow is

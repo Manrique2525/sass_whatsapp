@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Domain\WhatsApp\Contracts\WhatsAppProviderInterface;
 use App\Domain\WhatsApp\Exceptions\WhatsAppAuthFailedException;
+use App\Domain\WhatsApp\Exceptions\WhatsAppConfigurationException;
 use App\Domain\WhatsApp\Exceptions\WhatsAppMessageFailedException;
 use App\Domain\WhatsApp\Exceptions\WhatsAppPhoneNotFoundException;
 use App\Infrastructure\WhatsApp\MetaWhatsAppProvider;
@@ -53,6 +55,116 @@ test('WHATSAPP-32: la verificación GET acepta modo subscribe con el token corre
     ]);
 
     expect($wrong)->toBe(['verified' => false, 'challenge' => null]);
+});
+
+test('WHATSAPP-U1-01: un verify token configurado vacío nunca valida', function (): void {
+    $provider = new MetaWhatsAppProvider(
+        'https://graph.facebook.com',
+        'v26.0',
+        'app-secret-test',
+        '',
+    );
+
+    expect($provider->verifyWebhook([
+        'hub_mode' => 'subscribe',
+        'hub_verify_token' => '',
+        'hub_challenge' => '1234567890',
+    ]))->toBe(['verified' => false, 'challenge' => null]);
+});
+
+test('WHATSAPP-U1-02: el provider normal resuelve MetaWhatsAppProvider', function (): void {
+    expect(app(WhatsAppProviderInterface::class))->toBeInstanceOf(MetaWhatsAppProvider::class);
+});
+
+test('WHATSAPP-U1-03: una respuesta exitosa sin provider message id falla de forma segura', function (): void {
+    Http::fake([
+        'graph.facebook.com/*/messages' => Http::response(['messages' => []], 200),
+    ]);
+
+    expect(fn (): mixed => wa_provider()->sendText('token-x', 'phone-1', '15550000001', 'Hola'))
+        ->toThrow(WhatsAppMessageFailedException::class);
+});
+
+test('WHATSAPP-U1-04: el app secret vacío falla cerrado para firmas', function (): void {
+    $provider = new MetaWhatsAppProvider(
+        'https://graph.facebook.com',
+        'v26.0',
+        '   ',
+        'verify-token-test',
+    );
+
+    expect($provider->validateWebhookSignature('sha256=anything', '{}'))->toBeFalse();
+});
+
+test('WHATSAPP-U1-05: el body modificado no valida con el HMAC original', function (): void {
+    $body = '{"hola":"mundo"}';
+    $signature = 'sha256='.hash_hmac('sha256', $body, 'app-secret-test');
+
+    expect(wa_provider()->validateWebhookSignature($signature, '{"hola":"cambiado"}'))->toBeFalse();
+});
+
+test('WHATSAPP-U1-06: configuración Graph inválida falla sin realizar HTTP', function (): void {
+    Http::fake();
+
+    $provider = new MetaWhatsAppProvider(
+        'http://graph.facebook.com',
+        'latest',
+        'app-secret-test',
+        'verify-token-test',
+    );
+
+    expect(fn (): mixed => $provider->sendText('token-x', 'phone-1', '15550000001', 'Hola'))
+        ->toThrow(WhatsAppConfigurationException::class);
+
+    Http::assertNothingSent();
+});
+
+test('WHATSAPP-U1-07: identificadores y token en blanco fallan cerrado', function (): void {
+    $provider = wa_provider();
+
+    expect(fn (): mixed => $provider->sendText('   ', 'phone-1', '15550000001', 'Hola'))
+        ->toThrow(WhatsAppConfigurationException::class);
+    expect(fn (): mixed => $provider->sendText('token-x', '   ', '15550000001', 'Hola'))
+        ->toThrow(WhatsAppConfigurationException::class);
+    expect(fn (): mixed => $provider->subscribeToWebhooks('token-x', '   '))
+        ->toThrow(WhatsAppConfigurationException::class);
+});
+
+test('WHATSAPP-U1-08: timeout de conexión es menor que el timeout total', function (): void {
+    $provider = new MetaWhatsAppProvider(
+        'https://graph.facebook.com',
+        'v26.0',
+        'app-secret-test',
+        'verify-token-test',
+        connectTimeout: 3,
+        timeout: 10,
+    );
+
+    Http::fake([
+        'graph.facebook.com/*' => Http::response([
+            'id' => 'phone-1',
+        ], 200),
+    ]);
+
+    $provider->getPhoneNumberInfo('token-x', 'phone-1');
+
+    Http::assertSent(function (Request $request): bool {
+        return $request->url() === 'https://graph.facebook.com/v26.0/phone-1?fields=verified_name%2Cdisplay_phone_number%2Cquality_rating%2Cstatus';
+    });
+});
+
+test('WHATSAPP-U1-09: timeouts inválidos fallan cerrado', function (): void {
+    $provider = new MetaWhatsAppProvider(
+        'https://graph.facebook.com',
+        'v26.0',
+        'app-secret-test',
+        'verify-token-test',
+        connectTimeout: 10,
+        timeout: 10,
+    );
+
+    expect(fn (): mixed => $provider->sendText('token-x', 'phone-1', '15550000001', 'Hola'))
+        ->toThrow(WhatsAppConfigurationException::class);
 });
 
 test('WHATSAPP-33: sendText envía el payload oficial y devuelve el provider_message_id', function (): void {

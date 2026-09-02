@@ -3557,3 +3557,23 @@ una pantalla de upload/search en el frontend.
     sensibles.
   - Los checks recomendados para proteger `master` son `static`, `frontend`, `backend`, `postgres`, `e2e` y
     `release-gate`; la configuracion de branch protection queda fuera de este cambio.
+
+## ADR-117 - FASE 31 U1 Meta provider and configuration hardening
+
+- **Estado**: Aceptado - FASE 31 U1 (local)
+- **Contexto**: El provider Meta ya existía, pero la configuración inválida podía detectarse tarde y la verificación GET
+  podía aceptar un verify token vacío. Los contratos HTTP necesitaban una política explícita sin llamadas reales.
+- **Decision**:
+  1. `WHATSAPP_GRAPH_VERSION` permanece fijada y debe cumplir `v<integer>.0`; no existe fallback `latest` ni mutación
+     automática. Un cambio de versión requiere revisión manual y contratos HTTP verdes.
+  2. El provider solo usa `https://graph.facebook.com`, rechaza timeouts no positivos o no ordenados, y aplica
+     `WHATSAPP_CONNECT_TIMEOUT < WHATSAPP_TIMEOUT` en cada cliente HTTP.
+  3. App Secret y verify token vacíos fallan cerrado; el provider no valida un verify token de request si la configuración
+     está vacía. Access tokens y phone/WABA IDs en blanco producen un error de configuración genérico sin registrar valores.
+  4. Respuestas exitosas de envío sin `messages[0].id` son errores permanentes de forma, no éxitos ambiguos.
+  5. Las pruebas del provider usan `Http::fake()`; E2E conserva `FakeWhatsAppProvider` y `Http::preventStrayRequests()`.
+- **Consecuencias**:
+  - La configuración local/test continúa arrancando sin secretos reales; los errores aparecen al usar una llamada Meta.
+  - La rotación de access token, App Secret y verify token se documenta como operación futura; no se implementa solapamiento
+    de secretos ni se ejecuta producción en U1.
+  - Durabilidad/idempotencia webhook, estados, reconciliación outbound, media, templates y migrations quedan fuera de U1.

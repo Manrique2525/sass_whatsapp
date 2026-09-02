@@ -49,7 +49,10 @@ interface WhatsAppProviderInterface
 ```
 
 Implementación: `MetaWhatsAppProvider` (Laravel HTTP Client, base `https://graph.facebook.com/v26.0/`,
-configurable vía `WHATSAPP_GRAPH_URL`/`WHATSAPP_GRAPH_VERSION`). **El `access_token` se pasa en
+configurable vía `WHATSAPP_GRAPH_URL`/`WHATSAPP_GRAPH_VERSION`). U1 valida que la URL use HTTPS
+y el host oficial `graph.facebook.com`, que la versión tenga formato `v<integer>.0`, y que el
+timeout de conexión sea menor que el timeout total (`WHATSAPP_CONNECT_TIMEOUT`/`WHATSAPP_TIMEOUT`).
+**El `access_token` se pasa en
 CADA llamada**: es el token del WABA del tenant (cifrado en `whatsapp_accounts.access_token`,
 ADR-029), nunca un token global de `.env`. El resultado normaliza `provider_message_id`, estado y
 errores (`MessageSendResult`). Los errores de Meta se mapean a excepciones de dominio
@@ -211,12 +214,27 @@ Esto previene: doble ejecución de flow, respuestas duplicadas y carreras en `va
 ```
 WHATSAPP_GRAPH_URL=https://graph.facebook.com   # opcional (default)
 WHATSAPP_GRAPH_VERSION=v26.0
+WHATSAPP_CONNECT_TIMEOUT=3        # conexión máxima en segundos
+WHATSAPP_TIMEOUT=10               # request total máximo en segundos
 WHATSAPP_APP_SECRET=...          # App Secret de la app (firma de webhooks, global)
 WHATSAPP_VERIFY_TOKEN=...        # verify token del webhook (global)
 WHATSAPP_MAX_ATTEMPTS=3          # reintentos de envío (FASE 9)
 ```
 El access token de cada WABA y el phone id viven en DB (cifrados); NO en `.env`. La URL del
 webhook a registrar en Meta es `https://<dominio>/api/webhooks/whatsapp`.
+
+U1 mantiene la versión de Graph fijada y no usa `latest` ni la cambia automáticamente. Un cambio
+de versión requiere revisar el changelog de Meta y ejecutar los contratos HTTP del provider antes
+de modificar `WHATSAPP_GRAPH_VERSION`. El provider rechaza configuración inválida al realizar
+llamadas salientes: URL insegura o host no oficial, versión inválida, timeouts no positivos o
+desordenados, y tokens/identificadores en blanco. La firma POST y la verificación GET fallan
+cerrado si falta el App Secret o el verify token configurado.
+
+La rotación de access token se realiza reemplazando el token del tenant mediante la conexión
+autorizada, que vuelve a cifrar el valor y no expone el anterior. La rotación del App Secret global
+requiere una estrategia futura de solapamiento para no rechazar webhooks durante el cambio; la
+rotación del verify token requiere actualizar la configuración de callback en Meta y revalidar el
+webhook. Ninguna rotación de producción se ejecuta en U1.
 
 ## 12. Tests (FASE 6 implementado; ver `testing.md` y FASE 31)
 
