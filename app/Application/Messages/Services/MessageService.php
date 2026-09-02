@@ -22,9 +22,10 @@ use App\Domain\Messages\Enums\MessageDirection;
 use App\Domain\Messages\Enums\MessageOrigin;
 use App\Domain\Messages\Enums\MessageStatus;
 use App\Domain\Messages\Enums\MessageType;
-use App\Domain\Messages\Exceptions\UnsupportedMessageTypeException;
 use App\Domain\Messages\Models\Message;
 use App\Domain\Messages\ValueObjects\InboundMessageResult;
+use App\Domain\Messages\ValueObjects\NormalizedInboundMessage;
+use App\Domain\Messages\ValueObjects\NormalizedStatusUpdate;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Enums\TenantMembershipStatus;
 use App\Domain\Users\Enums\TenantPermission;
@@ -34,6 +35,7 @@ use App\Events\ConversationUpdated;
 use App\Events\InboxConversationChanged;
 use App\Events\MessageCreated;
 use App\Events\MessageStatusUpdated;
+use App\Infrastructure\Logging\SafeLogContext;
 use App\Infrastructure\Tenancy\TenantContext;
 use App\Jobs\SendWhatsAppMessage;
 use Illuminate\Contracts\Cache\LockTimeoutException;
@@ -88,53 +90,45 @@ final class MessageService
      * `created = false`. El motor de flujos (FASE 11) se engancha después de
      * esta persistencia con su propia barrera de idempotencia.
      *
-     * @param  array<string, mixed>  $eventData
+     * @param  array<string, mixed>|NormalizedInboundMessage  $eventData
      */
-    public function handleInboundMessage(Tenant $tenant, array $eventData): InboundMessageResult
+    public function handleInboundMessage(Tenant $tenant, array|NormalizedInboundMessage $eventData): InboundMessageResult
     {
-        $providerMessageId = isset($eventData['id']) && is_scalar($eventData['id']) ? (string) $eventData['id'] : '';
-        $from = isset($eventData['from']) && is_scalar($eventData['from']) ? (string) $eventData['from'] : '';
-        $providerType = isset($eventData['type']) && is_scalar($eventData['type']) ? (string) $eventData['type'] : '';
-        $providerTimestamp = isset($eventData['timestamp']) && is_scalar($eventData['timestamp'])
-            ? (string) $eventData['timestamp']
-            : null;
+        $normalized = is_array($eventData) ? NormalizedInboundMessage::fromProvider($eventData) : $eventData;
 
-        if ($providerMessageId === '' || $from === '') {
-            Log::warning('messages.inbound_missing_fields', ['provider_message_id' => $providerMessageId]);
+        if ($normalized === null) {
+            Log::warning('messages.inbound_invalid_payload');
 
             return InboundMessageResult::unprocessable();
         }
 
-        $existing = $this->findByProviderMessageId($tenant, $providerMessageId);
+        $existing = $this->findByProviderMessageId($tenant, $normalized->providerMessageId);
 
         if ($existing !== null) {
             return InboundMessageResult::existing($existing);
         }
 
-        $type = MessageType::fromProvider($providerType);
-
-        if ($type === null) {
-            throw new UnsupportedMessageTypeException($providerType);
-        }
-
-        $contact = $this->contacts->findOrCreateForPhone($tenant, $from);
+        $contact = $this->contacts->findOrCreateForPhone($tenant, $normalized->sender);
         $conversation = $this->conversations->findOrCreateActiveForContact($tenant, $contact->id);
 
         try {
             $message = TenantContext::withId($tenant->id, fn (): Message => Message::query()->create([
                 'conversation_id' => $conversation->id,
-                'provider_message_id' => $providerMessageId,
+                'provider_message_id' => $normalized->providerMessageId,
                 'direction' => MessageDirection::Inbound,
-                'type' => $type,
+                'type' => $normalized->type,
                 'status' => MessageStatus::Delivered,
-                'body' => $this->extractBody($type, $eventData),
-                'media_mime' => $this->extractMediaMime($type, $eventData),
-                'media_size' => $this->extractMediaSize($type, $eventData),
-                'metadata' => $this->buildMetadata($eventData, $providerTimestamp),
-                'delivered_at' => $this->providerTimestamp($providerTimestamp),
+                'body' => $normalized->body,
+                'media_mime' => $normalized->mediaMime,
+                'media_size' => $normalized->mediaSize,
+                'metadata' => $normalized->metadata + [
+                    'from' => $normalized->sender,
+                    'provider_timestamp' => $normalized->providerTimestamp,
+                ],
+                'delivered_at' => $this->providerTimestamp($normalized->providerTimestamp),
             ]));
         } catch (QueryException $e) {
-            $existing = $this->findByProviderMessageId($tenant, $providerMessageId);
+            $existing = $this->findByProviderMessageId($tenant, $normalized->providerMessageId);
 
             if ($existing !== null) {
                 return InboundMessageResult::existing($existing);
@@ -143,15 +137,15 @@ final class MessageService
             throw $e;
         }
 
-        $reopened = $this->touchConversation($tenant, $conversation->id, $providerTimestamp);
+        $reopened = $this->touchConversation($tenant, $conversation->id, $normalized->providerTimestamp);
 
         $this->auditLogger->record(
             action: 'message.received',
             data: [
                 'tenant_id' => $tenant->id,
                 'conversation_id' => $conversation->id,
-                'provider_message_id' => $providerMessageId,
-                'type' => $type->value,
+                'provider_message_id' => $normalized->providerMessageId,
+                'type' => $normalized->type->value,
                 'reopened' => $reopened,
             ],
             subjectType: Message::class,
@@ -165,58 +159,78 @@ final class MessageService
     }
 
     /**
-     * Aplica un status update de Meta (sent/delivered/read/failed) al mensaje
-     * existente por `provider_message_id`. No crea mensajes.
+     * Aplica status de Meta de forma monotónica. Un status inferior o repetido
+     * no cambia la fila, no audita y no emite un broadcast.
      *
-     * @param  array<string, mixed>  $eventData
+     * @param  array<string, mixed>|NormalizedStatusUpdate  $eventData
      */
-    public function handleStatusUpdate(Tenant $tenant, array $eventData): void
+    public function handleStatusUpdate(Tenant $tenant, array|NormalizedStatusUpdate $eventData): void
     {
-        $providerMessageId = isset($eventData['id']) && is_scalar($eventData['id']) ? (string) $eventData['id'] : '';
-        $providerStatus = isset($eventData['status']) && is_scalar($eventData['status']) ? (string) $eventData['status'] : '';
-        $providerTimestamp = isset($eventData['timestamp']) && is_scalar($eventData['timestamp'])
-            ? (string) $eventData['timestamp']
-            : null;
+        $normalized = is_array($eventData) ? NormalizedStatusUpdate::fromProvider($eventData) : $eventData;
 
-        if ($providerMessageId === '') {
+        if ($normalized === null) {
             return;
         }
 
-        $message = $this->findByProviderMessageId($tenant, $providerMessageId);
+        $transition = DB::transaction(function () use ($tenant, $normalized): ?array {
+            $message = Message::query()
+                ->withoutTenantScope()
+                ->where('tenant_id', $tenant->id)
+                ->where('provider_message_id', $normalized->providerMessageId)
+                ->lockForUpdate()
+                ->first();
 
-        if ($message === null) {
-            Log::warning('messages.status_without_message', ['provider_message_id' => $providerMessageId]);
+            if ($message === null) {
+                Log::warning('messages.status_without_message', [
+                    'provider_message_id' => $normalized->providerMessageId,
+                ]);
 
+                return null;
+            }
+
+            if (! $this->shouldAdvanceStatus($message->status, $normalized->status)) {
+                return null;
+            }
+
+            $statusColumn = $normalized->status->columnFor();
+
+            if ($statusColumn === null) {
+                return null;
+            }
+
+            $fill = [
+                'status' => $normalized->status,
+                $statusColumn => $this->providerTimestamp($normalized->providerTimestamp),
+            ];
+
+            if ($normalized->status === MessageStatus::Failed && $normalized->failureDetails !== []) {
+                $fill['metadata'] = array_merge($message->metadata ?? [], [
+                    'status_failure' => $this->safeFailureDetails($normalized->failureDetails),
+                ]);
+            }
+
+            $previous = $message->status->value;
+            $message->forceFill($fill)->save();
+
+            return [$message, $previous, $normalized->status];
+        });
+
+        if ($transition === null) {
             return;
         }
 
-        $status = MessageStatus::tryFrom($providerStatus);
-
-        if ($status === null || $status === MessageStatus::Pending) {
-            return;
-        }
-
-        $at = $this->providerTimestamp($providerTimestamp);
-
-        $fill = ['status' => $status];
-
-        if ($status->columnFor() !== null) {
-            $fill[$status->columnFor()] = $at;
-        }
+        /** @var Message $message */
+        [$message, $previous, $status] = $transition;
 
         if ($status === MessageStatus::Failed) {
             $this->markConversationPending($tenant, $message->conversation_id);
         }
 
-        $previous = $message->status->value;
-
-        $message->forceFill($fill)->save();
-
         $this->auditLogger->record(
             action: 'message.status_updated',
             data: [
                 'tenant_id' => $tenant->id,
-                'provider_message_id' => $providerMessageId,
+                'provider_message_id' => $normalized->providerMessageId,
                 'status' => $status->value,
             ],
             subjectType: Message::class,
@@ -581,98 +595,40 @@ final class MessageService
         return Carbon::createFromTimestampUTC((int) $providerTimestamp);
     }
 
-    /**
-     * @param  array<string, mixed>  $eventData
-     */
-    private function extractBody(MessageType $type, array $eventData): ?string
+    private function shouldAdvanceStatus(MessageStatus $current, MessageStatus $incoming): bool
     {
-        return match ($type) {
-            MessageType::Text => isset($eventData['text']['body']) && is_scalar($eventData['text']['body'])
-                ? (string) $eventData['text']['body']
-                : null,
-            MessageType::Image, MessageType::Video, MessageType::Document => $this->stringOrNull($eventData, 'caption')
-                ?? $this->stringOrNull($eventData, 'filename'),
-            MessageType::Location => $this->stringOrNull($eventData, 'address')
-                ?? $this->stringOrNull($eventData, 'name'),
-            MessageType::Audio, MessageType::Interactive, MessageType::Template => null,
+        if ($current === MessageStatus::Failed) {
+            return false;
+        }
+
+        if ($incoming === MessageStatus::Failed) {
+            return in_array($current, [MessageStatus::Pending, MessageStatus::Sending, MessageStatus::Sent], true);
+        }
+
+        $rank = static fn (MessageStatus $status): int => match ($status) {
+            MessageStatus::Pending, MessageStatus::Sending => 0,
+            MessageStatus::Sent => 1,
+            MessageStatus::Delivered => 2,
+            MessageStatus::Read => 3,
+            MessageStatus::Failed => -1,
         };
+
+        return $rank($incoming) > $rank($current);
     }
 
     /**
-     * Busca un valor escalar dentro del payload del tipo de Meta (p. ej.
-     * `text.body`, `image.caption`, `image.mime_type`).
-     *
-     * @param  array<string, mixed>  $eventData
+     * @param  array<string, string>  $details
+     * @return array<string, string>
      */
-    private function stringOrNull(array $eventData, string $key): ?string
+    private function safeFailureDetails(array $details): array
     {
-        foreach ($eventData as $candidate) {
-            if (is_array($candidate) && isset($candidate[$key]) && is_scalar($candidate[$key])) {
-                return (string) $candidate[$key];
-            }
+        $safe = [];
+
+        foreach ($details as $key => $value) {
+            $sanitized = SafeLogContext::sanitizeProviderMessage($value);
+            $safe[$key] = preg_replace('/(?<!\d)\d{7,}(?!\d)/', '[REDACTED]', $sanitized) ?? '[REDACTED]';
         }
 
-        return null;
-    }
-
-    /**
-     * @param  array<string, mixed>  $eventData
-     */
-    private function extractMediaMime(MessageType $type, array $eventData): ?string
-    {
-        if (! in_array($type, [MessageType::Image, MessageType::Audio, MessageType::Video, MessageType::Document], true)) {
-            return null;
-        }
-
-        return $this->stringOrNull($eventData, 'mime_type');
-    }
-
-    /**
-     * @param  array<string, mixed>  $eventData
-     */
-    private function extractMediaSize(MessageType $type, array $eventData): ?int
-    {
-        if (! in_array($type, [MessageType::Image, MessageType::Audio, MessageType::Video, MessageType::Document], true)) {
-            return null;
-        }
-
-        foreach ($eventData as $candidate) {
-            if (is_array($candidate) && isset($candidate['size']) && is_numeric($candidate['size'])) {
-                return (int) $candidate['size'];
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Metadata del mensaje: `from`, timestamp del proveedor y el payload
-     * específico del tipo (sin secretos; los payloads de Meta no los llevan).
-     *
-     * @param  array<string, mixed>  $eventData
-     * @return array<string, mixed>
-     */
-    private function buildMetadata(array $eventData, ?string $providerTimestamp): array
-    {
-        $metadata = [
-            'from' => $eventData['from'] ?? null,
-            'provider_timestamp' => $providerTimestamp,
-        ];
-
-        foreach ([MessageType::Image, MessageType::Audio, MessageType::Video, MessageType::Document] as $mediaType) {
-            if (isset($eventData[$mediaType->value]) && is_array($eventData[$mediaType->value])) {
-                $metadata['media'] = $eventData[$mediaType->value];
-
-                break;
-            }
-        }
-
-        foreach ([MessageType::Location, MessageType::Interactive, MessageType::Template] as $objectType) {
-            if (isset($eventData[$objectType->value]) && is_array($eventData[$objectType->value])) {
-                $metadata[$objectType->value] = $eventData[$objectType->value];
-            }
-        }
-
-        return $metadata;
+        return $safe;
     }
 }

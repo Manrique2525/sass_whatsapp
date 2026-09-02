@@ -162,6 +162,33 @@ La resolución de tenant confía exclusivamente en `metadata.phone_number_id` y 
 tenant. La relación cuenta/número debe conservar el mismo tenant en el flujo de conexión; U2 no añade
 una migración, y el webhook no usa la cuenta para seleccionar ownership.
 
+### 4.6 Normalización inbound (U3)
+
+`ProcessIncomingWhatsAppMessage` convierte cada elemento de `messages[]` a
+`NormalizedInboundMessage` antes de llamar a `MessageService`. Los tipos soportados son `text`,
+`image`, `video`, `audio`, `document`, `interactive`, `location` y el tipo histórico `template`.
+El DTO conserva solo el identificador Meta, sender, timestamp, body normalizado y metadata específica:
+media ID/mime/sha256/caption/filename/size/voice, `interactive` button/list (`id` y `title`) o
+location (`latitude`, `longitude`, `name`, `address`). No se descargan binarios ni se aceptan URLs
+remotas como media. `reaction`, `contacts`, `sticker` y tipos desconocidos permanecen terminalmente
+unsupported, sin retry infinito.
+
+Text mantiene el pipeline existente de contacto, conversación, FlowEngine, FAQ y handoff. Interactive
+button/list expone su título como body para que los nodos de botones/preguntas existentes puedan
+resolver la respuesta sin depender del array Meta original. Un inbound duplicado no vuelve a ejecutar
+Flow/FAQ porque la barrera `provider_message_id` conserva `created=false`.
+
+### 4.7 Estados monotónicos (U3)
+
+El orden de éxito es `pending/sending < sent < delivered < read`. Se permiten `sent → delivered`,
+`delivered → read` y saltos como `sent → read`; se ignoran `read → delivered`, `read → sent`,
+`delivered → sent` y estados repetidos. `failed` se permite desde `pending`, `sending` o `sent`,
+pero no regresa un mensaje ya `delivered`/`read` y es terminal para estados posteriores. Cada transición
+se protege con `SELECT ... FOR UPDATE`; solo las transiciones reales auditan y emiten realtime.
+
+Un status `failed` guarda en `metadata.status_failure` únicamente código, título y detalle corto
+sanitizados; nunca el payload Meta completo. Los status de mensajes desconocidos siguen siendo no-op.
+
 ## 5. Flujo de mensaje entrante (worker)
 
 ```

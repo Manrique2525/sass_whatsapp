@@ -13,6 +13,7 @@ use App\Domain\Billing\Exceptions\SubscriptionNotFoundException;
 use App\Domain\Billing\Exceptions\TenantQuotaExceededException;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Messages\Exceptions\UnsupportedMessageTypeException;
+use App\Domain\Messages\ValueObjects\NormalizedInboundMessage;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\WhatsApp\Enums\WebhookEventStatus;
 use App\Domain\WhatsApp\Enums\WebhookEventType;
@@ -94,7 +95,15 @@ final class ProcessIncomingWhatsAppMessage implements ShouldQueue
         }
 
         try {
-            $result = app(MessageService::class)->handleInboundMessage($tenant, $data);
+            $normalized = NormalizedInboundMessage::fromProvider($data);
+
+            if ($normalized === null) {
+                $event->markFailed('invalid_inbound_message');
+
+                return;
+            }
+
+            $result = app(MessageService::class)->handleInboundMessage($tenant, $normalized);
         } catch (UnsupportedMessageTypeException) {
             $event->markFailed('unsupported_message_type');
 

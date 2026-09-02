@@ -39,6 +39,21 @@ events default to 7 days and failed events to 30 days, while replayable `receive
 are never pruned. Persisted payloads contain only `phone_number_id`, type and the data required by
 the existing jobs. Raw bodies and message contents are not logged.
 
+## FASE 31 U3 - Inbound normalization and monotonic statuses
+
+Inbound jobs normalize Meta arrays into `NormalizedInboundMessage` before persistence. Covered types
+are text, image, video, audio, document, interactive button/list, location and the existing template
+compatibility type. Media is metadata-only in U3: media IDs, MIME, hash, caption, filename, size and
+audio voice flag may be persisted, but no binary download or remote URL trust is introduced. Reaction,
+contacts, sticker and unknown types remain terminal `unsupported_message_type` events.
+
+`MessageService` preserves contact/conversation resolution, provider-message dedupe, FlowEngine, FAQ
+fallback and handoff pause behavior. Status updates use a row lock and the monotonic order
+`pending/sending < sent < delivered < read`; `failed` is accepted only before a successful delivery
+and is terminal afterward. Regressions and duplicate statuses are no-op and do not emit audits or
+realtime broadcasts. Failed metadata is allowlisted and sanitized; the full provider error payload is
+never stored.
+
 ## CI Foundation (FASE 30 U5-A)
 
 GitHub Actions is the CI provider. The foundation workflow is

@@ -12,6 +12,7 @@ use App\Domain\Tenants\Models\Tenant;
 use App\Domain\WhatsApp\Models\WebhookEvent;
 use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 
 uses(RefreshDatabase::class);
 
@@ -59,9 +60,9 @@ function statuses_webhook_payload(string $messageId, array $statuses): string
  * Crea contact + conversation (open) + mensaje saliente ya `sent` con el
  * provider_message_id de Meta, listo para recibir status updates.
  */
-function make_sent_message(Tenant $tenant, string $providerMessageId, string $conversationStatus = 'open'): Message
+function make_sent_message(Tenant $tenant, string $providerMessageId, string $conversationStatus = 'open', string $phone = '+15550000001'): Message
 {
-    $contact = make_contact($tenant, ['phone' => '+15550000001']);
+    $contact = make_contact($tenant, ['phone' => $phone]);
     $conversation = make_conversation($tenant, $contact, ['status' => $conversationStatus]);
 
     TenantContext::setId($tenant->id);
@@ -243,4 +244,93 @@ test('STAT-8: el service aplica status solo al mensaje del tenant correcto', fun
 
     expect($messageA->status)->toBe(MessageStatus::Read)
         ->and($messageB->status)->toBe(MessageStatus::Sent);
+});
+
+test('U3-STAT-01: status updates avanzan monotónicamente y no regresan', function (): void {
+    $tenant = Tenant::factory()->create();
+    $message = make_sent_message($tenant, 'wamid-monotonic');
+    $service = app(MessageService::class);
+
+    $service->handleStatusUpdate($tenant, ['id' => $message->provider_message_id, 'status' => 'delivered', 'timestamp' => '1725000001']);
+    $service->handleStatusUpdate($tenant, ['id' => $message->provider_message_id, 'status' => 'read', 'timestamp' => '1725000002']);
+    $service->handleStatusUpdate($tenant, ['id' => $message->provider_message_id, 'status' => 'delivered', 'timestamp' => '1725000003']);
+    $service->handleStatusUpdate($tenant, ['id' => $message->provider_message_id, 'status' => 'sent', 'timestamp' => '1725000004']);
+
+    $message->refresh();
+
+    expect($message->status)->toBe(MessageStatus::Read)
+        ->and($message->read_at)->not->toBeNull();
+});
+
+test('U3-STAT-02: status read puede saltar delivered y luego permanece final', function (): void {
+    $tenant = Tenant::factory()->create();
+    $message = make_sent_message($tenant, 'wamid-skip-delivered');
+    $service = app(MessageService::class);
+
+    $service->handleStatusUpdate($tenant, ['id' => $message->provider_message_id, 'status' => 'read', 'timestamp' => '1725000002']);
+    $service->handleStatusUpdate($tenant, ['id' => $message->provider_message_id, 'status' => 'delivered', 'timestamp' => '1725000003']);
+
+    $message->refresh();
+
+    expect($message->status)->toBe(MessageStatus::Read)
+        ->and($message->delivered_at)->toBeNull();
+});
+
+test('U3-STAT-03: failed conserva detalles seguros y no regresa desde delivered/read', function (): void {
+    $tenant = Tenant::factory()->create();
+    $message = make_sent_message($tenant, 'wamid-failed-details');
+    $service = app(MessageService::class);
+
+    $service->handleStatusUpdate($tenant, [
+        'id' => $message->provider_message_id,
+        'status' => 'failed',
+        'timestamp' => '1725000001',
+        'errors' => [[
+            'code' => 131000,
+            'title' => 'Message failed',
+            'message' => 'Provider detail +15550000001',
+            'error_data' => ['details' => 'safe detail'],
+        ]],
+    ]);
+
+    $message->refresh();
+
+    expect($message->status)->toBe(MessageStatus::Failed)
+        ->and($message->metadata['status_failure']['provider_code'])->toBe('131000')
+        ->and($message->metadata['status_failure']['message'])->not->toContain('+15550000001');
+
+    $service->handleStatusUpdate($tenant, ['id' => $message->provider_message_id, 'status' => 'delivered', 'timestamp' => '1725000002']);
+    $message->refresh();
+
+    expect($message->status)->toBe(MessageStatus::Failed);
+});
+
+test('U3-STAT-04: status repetido o de timestamp distinto no emite transición adicional', function (): void {
+    $tenant = Tenant::factory()->create();
+    $message = make_sent_message($tenant, 'wamid-status-repeat');
+    $service = app(MessageService::class);
+
+    $service->handleStatusUpdate($tenant, ['id' => $message->provider_message_id, 'status' => 'delivered', 'timestamp' => '1725000001']);
+    $firstDeliveredAt = $message->fresh()->delivered_at;
+    $auditCount = DB::table('audit_logs')->where('action', 'message.status_updated')->count();
+    $service->handleStatusUpdate($tenant, ['id' => $message->provider_message_id, 'status' => 'delivered', 'timestamp' => '1725000002']);
+    $message->refresh();
+
+    expect($message->delivered_at)->toEqual($firstDeliveredAt)
+        ->and(DB::table('audit_logs')->where('action', 'message.status_updated')->count())->toBe($auditCount);
+});
+
+test('U3-STAT-05: failed tardío no regresa delivered ni read', function (): void {
+    $tenant = Tenant::factory()->create();
+    $delivered = make_sent_message($tenant, 'wamid-failed-after-delivered');
+    $read = make_sent_message($tenant, 'wamid-failed-after-read', phone: '+15550000002');
+    $service = app(MessageService::class);
+
+    $service->handleStatusUpdate($tenant, ['id' => $delivered->provider_message_id, 'status' => 'delivered', 'timestamp' => '1725000001']);
+    $service->handleStatusUpdate($tenant, ['id' => $delivered->provider_message_id, 'status' => 'failed', 'timestamp' => '1725000002']);
+    $service->handleStatusUpdate($tenant, ['id' => $read->provider_message_id, 'status' => 'read', 'timestamp' => '1725000001']);
+    $service->handleStatusUpdate($tenant, ['id' => $read->provider_message_id, 'status' => 'failed', 'timestamp' => '1725000002']);
+
+    expect($delivered->fresh()->status)->toBe(MessageStatus::Delivered)
+        ->and($read->fresh()->status)->toBe(MessageStatus::Read);
 });

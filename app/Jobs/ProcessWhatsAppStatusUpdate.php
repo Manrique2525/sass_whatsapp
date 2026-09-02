@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Application\Messages\Services\MessageService;
+use App\Domain\Messages\ValueObjects\NormalizedStatusUpdate;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\WhatsApp\Enums\WebhookEventStatus;
 use App\Domain\WhatsApp\Enums\WebhookEventType;
@@ -72,7 +73,11 @@ final class ProcessWhatsAppStatusUpdate implements ShouldQueue
         $data = $event->payload['data'] ?? null;
 
         if (is_array($data)) {
-            app(MessageService::class)->handleStatusUpdate($tenant, $data);
+            $normalized = NormalizedStatusUpdate::fromProvider($data);
+
+            if ($normalized !== null) {
+                app(MessageService::class)->handleStatusUpdate($tenant, $normalized);
+            }
         }
 
         $event->markProcessed();

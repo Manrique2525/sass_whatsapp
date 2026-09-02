@@ -3270,5 +3270,15 @@ FIRST REQUEST WARMUP** — no wait-condition flaky ni assets. Timeouts justifica
 
 U1 queda COMPLETADA LOCALMENTE. U2 queda COMPLETADA LOCALMENTE: autenticidad GET/POST, validación de envelope,
 dedupe durable, ownership por `phone_number_id`, recuperación de dispatch y retención terminal limitada.
-U2 no modifica normalización inbound de U3, monotonicidad de estados, reconciliación outbound, ventana de 24 horas,
-media, templates ni migrations. U3-U6 quedan **NO INICIADAS**.
+U2 no modifica reconciliación outbound, ventana de 24 horas, media binaria, templates ni migrations.
+
+### U3 - Inbound message normalization and status monotonicity · COMPLETADA LOCALMENTE
+
+- Inbound normalizado mediante DTO para text, metadata-only media, interactive button/list y location.
+- Tipos unsupported permanecen terminales y no generan retry storm; no se descargan binarios ni se añaden URLs remotas.
+- Flow, FAQ y human handoff preservados; dedupe por `provider_message_id` evita automatización duplicada.
+- Status protegido con lock de fila y orden monotónico `sent < delivered < read`; `failed` guarda metadata segura y no
+  regresa estados ya entregados/leídos.
+- U3 no modifica outbound reliability, ventana de 24 horas, templates, media binaria ni migrations.
+
+U4-U6 quedan **NO INICIADAS**.

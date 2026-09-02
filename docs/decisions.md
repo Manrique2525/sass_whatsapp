@@ -3600,3 +3600,26 @@ una pantalla de upload/search en el frontend.
   - Las reentregas y carreras de replay quedan protegidas por índices existentes y transición atómica.
   - WABA uniqueness y la consistencia DB account/phone siguen como gaps del flujo de conexión, no como dependencia
     del ownership del webhook; cualquier constraint futuro requiere una migración separada.
+
+## ADR-119 - FASE 31 U3 inbound normalization and status monotonicity
+
+- **Estado**: Aceptado - FASE 31 U3 (local)
+- **Contexto**: El inbound persistía directamente arrays de Meta y copiaba subpayloads completos a metadata.
+  Los status jobs sobrescribían siempre el estado, permitiendo regresiones como `read -> delivered` y auditando
+  no-ops.
+- **Decision**:
+  1. `NormalizedInboundMessage` es el contrato canónico debajo del adapter: valida identificador/sender,
+     normaliza text, media metadata, interactive button/list, location y mantiene template compatible.
+     Reaction, contacts, sticker y unknown quedan unsupported terminales.
+  2. La normalización es metadata-only para media; U3 no descarga binarios, no persiste URLs remotas y no añade
+     storage, SSRF, MIME/size pipeline ni migrations.
+  3. El status usa `NormalizedStatusUpdate`, `SELECT FOR UPDATE` y el orden `pending/sending < sent < delivered < read`.
+     Saltos hacia adelante son válidos; regresiones y repeticiones son no-op sin audit/broadcast.
+  4. `failed` se permite desde pending/sending/sent, pero no regresa delivered/read y queda terminal ante estados posteriores.
+     Sus detalles se guardan en metadata con allowlist y sanitización; el payload del proveedor no se persiste.
+  5. Se preservan MessageService, FlowEngine, FAQ, handoff, tenant scoping y dedupe existente; no se cambia outbound reliability.
+- **Consecuencias**:
+  - Los workers consumen un contrato tipado y los tipos soportados no dependen de arrays Meta profundos.
+  - La barrera de fila hace determinista el status final bajo carreras; una suite PostgreSQL dedicada no es necesaria
+    para añadir invariantes porque no se modifica el esquema, aunque debe ejecutarse el canonical PG gate si está disponible.
+  - Media binaria completa queda explícitamente diferida a U5.

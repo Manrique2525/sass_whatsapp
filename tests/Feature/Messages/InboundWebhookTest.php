@@ -173,6 +173,111 @@ test('MSG-5: un mensaje de imagen persiste caption, mime, size y metadata media'
         ->and($message->metadata['media']['sha256'])->toBe('abc123');
 });
 
+test('U3-MSG-01: media inbound normaliza metadata sin descargar binarios', function (): void {
+    $tenant = Tenant::factory()->create();
+    $service = app(MessageService::class);
+
+    $cases = [
+        [
+            'type' => 'video',
+            'video' => ['id' => 'media-video', 'mime_type' => 'video/mp4', 'sha256' => 'hash-video', 'caption' => 'Video', 'size' => 10],
+            'expected_type' => MessageType::Video,
+            'expected_body' => 'Video',
+        ],
+        [
+            'type' => 'audio',
+            'audio' => ['id' => 'media-audio', 'mime_type' => 'audio/ogg', 'voice' => true, 'size' => 20],
+            'expected_type' => MessageType::Audio,
+            'expected_body' => null,
+        ],
+        [
+            'type' => 'document',
+            'document' => ['id' => 'media-document', 'mime_type' => 'application/pdf', 'filename' => 'factura.pdf', 'caption' => 'Factura'],
+            'expected_type' => MessageType::Document,
+            'expected_body' => 'Factura',
+        ],
+    ];
+
+    foreach ($cases as $index => $case) {
+        $data = array_merge([
+            'id' => 'wamid-media-'.$index,
+            'from' => '15550000001',
+            'timestamp' => '1725000000',
+        ], $case);
+
+        $message = $service->handleInboundMessage($tenant, $data)->message;
+
+        expect($message)->not->toBeNull()
+            ->and($message->type)->toBe($case['expected_type'])
+            ->and($message->body)->toBe($case['expected_body'])
+            ->and($message->metadata['media']['id'])->toBe($case[$case['type']]['id']);
+    }
+});
+
+test('U3-MSG-02: interactive button/list y location se normalizan de forma determinista', function (): void {
+    $tenant = Tenant::factory()->create();
+    $service = app(MessageService::class);
+
+    $button = $service->handleInboundMessage($tenant, [
+        'id' => 'wamid-button',
+        'from' => '15550000001',
+        'timestamp' => '1725000000',
+        'type' => 'interactive',
+        'interactive' => [
+            'type' => 'button',
+            'button_reply' => ['id' => 'button-id', 'title' => 'Sí'],
+        ],
+    ])->message;
+    $list = $service->handleInboundMessage($tenant, [
+        'id' => 'wamid-list',
+        'from' => '15550000001',
+        'timestamp' => '1725000001',
+        'type' => 'interactive',
+        'interactive' => [
+            'type' => 'list',
+            'list_reply' => ['id' => 'list-id', 'title' => 'Opción'],
+        ],
+    ])->message;
+    $location = $service->handleInboundMessage($tenant, [
+        'id' => 'wamid-location',
+        'from' => '15550000001',
+        'timestamp' => '1725000002',
+        'type' => 'location',
+        'location' => [
+            'latitude' => '19.4326',
+            'longitude' => '-99.1332',
+            'name' => 'Centro',
+            'address' => 'Avenida Principal',
+        ],
+    ])->message;
+
+    expect($button->body)->toBe('Sí')
+        ->and($button->metadata['interactive'])->toBe(['type' => 'button', 'id' => 'button-id', 'title' => 'Sí'])
+        ->and($list->body)->toBe('Opción')
+        ->and($list->metadata['interactive'])->toBe(['type' => 'list', 'id' => 'list-id', 'title' => 'Opción'])
+        ->and($location->metadata['location'])->toBe([
+            'latitude' => 19.4326,
+            'longitude' => -99.1332,
+            'name' => 'Centro',
+            'address' => 'Avenida Principal',
+        ]);
+});
+
+test('U3-MSG-03: inbound soportado malformado no persiste mensaje', function (): void {
+    $tenant = Tenant::factory()->create();
+    $service = app(MessageService::class);
+
+    expect($service->handleInboundMessage($tenant, [
+        'id' => 'wamid-invalid-text',
+        'from' => '15550000001',
+        'timestamp' => '1725000000',
+        'type' => 'text',
+        'text' => ['body' => ['not' => 'scalar']],
+    ])->message)->toBeNull();
+
+    expect(Message::query()->withoutTenantScope()->where('tenant_id', $tenant->id)->count())->toBe(0);
+});
+
 test('MSG-6: un mensaje sin id o sin from no persiste nada (no-op)', function (): void {
     $tenant = Tenant::factory()->create();
     $service = app(MessageService::class);
