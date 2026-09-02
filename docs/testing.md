@@ -12,8 +12,11 @@ manual `workflow_dispatch` executions.
 - Composer uses `composer validate --strict`, `composer install --no-interaction --prefer-dist --no-progress`,
   and caches downloaded packages by `composer.lock`; mutable `vendor/` state is not cached.
 - npm uses `npm ci` and the `package-lock.json` cache through `actions/setup-node`; `node_modules` is not cached.
-- No repository secrets are required. No production providers, Docker E2E, PostgreSQL, Playwright or deployment
-  steps are part of U5-A; those belong to later U5 stages.
+- U5-B adds independent `static`, `frontend` and `backend` jobs. Static gates run PHPStan, Pint, npm audit and
+  Composer audit; frontend gates run Vitest, typecheck, production build and the deterministic E2E bundle build;
+  backend runs the default SQLite/in-memory Pest suite with a 512 MB PHP memory limit.
+- No repository secrets are required. PostgreSQL CI, Docker/Playwright E2E, Knowledge E2E and the final release gate
+  are not implemented yet; they belong to later U5 stages.
 
 ## FASE 30 U4 — E2E closure
 

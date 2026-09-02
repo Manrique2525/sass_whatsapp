@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  foundation:
-    name: Dependency foundation
+  static:
+    name: Static quality gates
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -53,3 +53,76 @@ jobs:
 
       - name: Install Node dependencies
         run: npm ci
+
+      - name: PHPStan
+        run: vendor/bin/phpstan analyze
+
+      - name: Pint
+        run: vendor/bin/pint --test
+
+      - name: npm audit
+        run: npm audit --audit-level=moderate
+
+      - name: Composer audit
+        run: composer audit
+
+  frontend:
+    name: Frontend quality gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Vitest
+        run: npm run test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: E2E bundle build
+        run: npm run build:e2e
+
+  backend:
+    name: Backend default suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APP_ENV: testing
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer:v2
+          coverage: none
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: ${{ runner.os }}-php-8.3-composer-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-php-8.3-composer-
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: PHP default suite
+        run: php -d memory_limit=512M vendor/bin/pest
