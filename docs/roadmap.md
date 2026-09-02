@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 EN PROGRESO (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D COMPLETADAS)**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS)**.
 
 ## Fases
 
@@ -3142,10 +3142,10 @@ Cierre global de FASE 29. **FASE 29 = COMPLETADA.**
   (v8 html) que NO se versiona.
 - Migracion pendiente de produccion `2026_08_25_100001_create_usage_reservations_table` NO ejecutada
   (solo registrada en suite PG via RefreshDatabase). H1-H4 sin nuevas migraciones.
-- **FASE30 (E2E Playwright)** NO INICIADA y NO autorizada: login, inbox, handoff, flow builder, billing,
-  knowledge upload pertenecen a FASE30.
+- FASE 30 cubre login, inbox, handoff, flow builder, billing y knowledge upload; todas sus unidades autorizadas
+  quedan completadas en este roadmap.
 
-## FASE 30 — E2E Playwright (EN PROGRESO)
+## FASE 30 — E2E Playwright (COMPLETADA)
 
 ### U1 — Playwright Infrastructure + Auth + Multi-Tenancy Base · COMPLETADA
 
@@ -3246,3 +3246,13 @@ FIRST REQUEST WARMUP** — no wait-condition flaky ni assets. Timeouts justifica
 - La estabilidad de Docker Desktop se protege solo en el stack descartable: PostgreSQL no fuerza fsync y Redis no
   persiste snapshots; no se modifican los servicios de desarrollo ni la logica productiva.
 - Cierre validado: dos corridas finales `27/27`, gates estaticos/frontend/backend y commit local de U5-D.
+
+### U5-E - Security and release closure · COMPLETADA
+
+- `release-gate` depende estrictamente de `static`, `frontend`, `backend`, `postgres` y `e2e`; no despliega ni
+  ejecuta migraciones productivas.
+- E2E verifica providers fake, DSNs externos vacios, HTTP fail-closed y colas `default,knowledge` limpias.
+- Los artifacts son failure-only, limitados a diagnostics sanitizados y resultados Playwright, con retencion de 5 dias.
+- El release candidate requiere todos los jobs obligatorios, audits limpios y `release-gate` verde.
+- Cierre validado: provider boundaries, E2E `27/27`, colas limpias, lint, PHPStan, frontend, backend, PostgreSQL,
+  audits y build; commit local unico preparado sin push.

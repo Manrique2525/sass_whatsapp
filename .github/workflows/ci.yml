@@ -291,6 +291,9 @@ jobs:
       - name: Prepare E2E environment
         run: docker compose -f docker-compose.e2e.yml exec -T e2e-app php artisan e2e:setup
 
+      - name: Verify E2E provider boundaries
+        run: docker compose -f docker-compose.e2e.yml exec -T e2e-app php artisan e2e:assert-provider-boundaries
+
       - name: Build deterministic E2E bundle
         run: npm run build:e2e
 
@@ -304,8 +307,10 @@ jobs:
       - name: Collect safe E2E diagnostics
         if: ${{ failure() }}
         run: |
+          mkdir -p e2e-diagnostics
           docker compose -f docker-compose.e2e.yml ps
-          docker compose -f docker-compose.e2e.yml logs --no-color e2e-app e2e-worker reverb
+          docker compose -f docker-compose.e2e.yml ps > e2e-diagnostics/compose-ps.txt
+          docker compose -f docker-compose.e2e.yml exec -T e2e-app php artisan e2e:assert-queue-clean --report-only > e2e-diagnostics/queue-status.txt
 
       - name: Upload safe Playwright artifacts
         if: ${{ failure() }}
@@ -313,10 +318,26 @@ jobs:
         with:
           name: playwright-e2e-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: ignore
+          retention-days: 5
           path: |
+            e2e-diagnostics
             test-results/e2e
             playwright-report
 
       - name: Tear down self-contained E2E stack
         if: ${{ always() }}
         run: docker compose -f docker-compose.e2e.yml down --volumes --remove-orphans
+
+  release-gate:
+    name: Release verification complete
+    needs:
+      - static
+      - frontend
+      - backend
+      - postgres
+      - e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Confirm mandatory verification jobs passed
+        run: echo 'Release verification complete; no deployment or production migration performed.'

@@ -13,7 +13,7 @@ use RuntimeException;
 /** Verifica que el stack E2E no deja trabajos pendientes tras la suite. */
 final class AssertE2EQueueClean extends Command
 {
-    protected $signature = 'e2e:assert-queue-clean';
+    protected $signature = 'e2e:assert-queue-clean {--report-only : Reporta el estado sin cambiar el resultado del proceso}';
 
     protected $description = 'Verifica que las colas E2E default y knowledge están limpias';
 
@@ -37,7 +37,9 @@ final class AssertE2EQueueClean extends Command
         $this->line("reserved={$reserved}");
         $this->line("delayed={$delayed}");
 
-        if ($failed !== 0 || $pending !== 0 || $reserved !== 0 || $delayed !== 0) {
+        $dirty = $failed !== 0 || $pending !== 0 || $reserved !== 0 || $delayed !== 0;
+
+        if ($dirty && ! $this->option('report-only')) {
             throw new RuntimeException('E2E queue guard: quedaron trabajos después de la suite.');
         }
 

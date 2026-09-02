@@ -3534,3 +3534,26 @@ una pantalla de upload/search en el frontend.
   - El gate valida el worker Redis y Reverb reales sin secretos ni proveedores cloud.
   - Los diagnosticos de fallo quedan limitados a logs de Compose y artefactos Playwright seguros.
   - El cierre de U5-D requiere dos corridas finales completas `27/27` y los gates estaticos/frontend/backend.
+
+## ADR-116 - FASE 30 U5-E security and release closure
+
+- **Estado**: Aceptado - FASE 30 U5-E
+- **Contexto**: La verificacion E2E ya estaba aislada, pero el workflow necesitaba un cierre explicito, boundaries
+  observables y una politica de artifacts que no expusiera sesiones, documentos privados o logs sensibles.
+- **Decision**:
+  1. `release-gate` depende de `static`, `frontend`, `backend`, `postgres` y `e2e`, sin `always()`, soft failures,
+     permisos de escritura, environment ni deployment. Si falla un job obligatorio, el gate no puede ser exitoso.
+  2. E2E ejecuta una asercion de providers que exige los fakes de Meta/OpenAI/embeddings/Stripe, DSNs externos vacios
+     y `Http::preventStrayRequests()` activo. La asercion de colas falla ante cualquier residue en `default` o
+     `knowledge`, mientras su modo report-only solo se usa para diagnostico posterior a otro fallo.
+  3. Los artifacts se suben solo en fallos, durante 5 dias, y se limitan a status Compose, conteos de cola y paths
+     Playwright permitidos. No se suben logs crudos, auth state, cookies, `.env`, documentos privados, dumps ni
+     credenciales.
+  4. La elegibilidad de release candidate es una propiedad de verificacion: los cinco jobs obligatorios, ambos audits
+     y `release-gate` deben estar verdes. No implica migracion productiva, despliegue ni inicio de FASE31.
+- **Consecuencias**:
+  - Las pull requests de forks pueden ejecutar el workflow sin secretos ni privilegios de escritura.
+  - Los mantenedores pueden identificar el job fallido, el estado de infraestructura y residue de cola sin artifacts
+    sensibles.
+  - Los checks recomendados para proteger `master` son `static`, `frontend`, `backend`, `postgres`, `e2e` y
+    `release-gate`; la configuracion de branch protection queda fuera de este cambio.

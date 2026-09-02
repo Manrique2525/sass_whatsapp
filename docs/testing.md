@@ -38,6 +38,33 @@ self-contained and never attaches to the development stack:
 - Playwright remains serial with `workers=1`, `retries=0`; failure diagnostics are limited to Compose logs and
   `test-results/e2e` / `playwright-report` artifacts.
 
+## FASE 30 U5-E - Security and release closure
+
+The workflow now has five mandatory verification jobs: `static`, `frontend`, `backend`, `postgres` and `e2e`.
+`release-gate` depends on all five and is only scheduled after they succeed. It confirms verification completion;
+it does not deploy, approve deployment, run production migrations or require an environment.
+
+Failure diagnostics are failure-only. CI uploads only the short-retention (5 days) sanitized Compose status,
+queue-status report and Playwright result/report paths. Raw app, worker and Reverb logs are not uploaded. The
+following are never artifact paths: `tests/e2e/.auth`, storageState, cookies, `.env*`, private Knowledge files,
+database dumps, tokens, provider credentials and production data.
+
+The E2E boundary command verifies `FakeWhatsAppProvider`, `FakeAIProvider`, `FakeEmbeddingProvider` and
+`E2EBillingProvider`, empty Sentry/OpenAI/Stripe/Meta secret variables, and Laravel HTTP fail-closed protection.
+The queue assertion checks `failed_jobs` plus `pending`, `reserved` and `delayed` entries for both `default` and
+`knowledge`; non-zero residue fails the E2E job.
+
+The workflow runs on `pull_request`, pushes to `master`, and `workflow_dispatch`. It uses `contents: read`, no
+repository secrets, no `pull_request_target`, and no write permissions, so fork pull requests do not receive
+privileged credentials. To rerun manually, use GitHub Actions `workflow_dispatch`; local reruns use the commands
+in this file and the isolated Compose project. Recommended required checks for `master` are the five mandatory
+jobs plus `release-gate`.
+
+Release-candidate eligibility means all mandatory jobs and `release-gate` are green, both audits are clean,
+provider boundaries are enforced, and no queue residue remains. This status is verification only, not deployment.
+FASE 30 completion does not execute pending production migrations, Sanctum expiry rollout, TrustProxies/TLS
+operations, Sentry production DSNs or alerts, production deployment, or FASE31.
+
 ## FASE 30 U4 — E2E closure
 
 U4 queda completada con journeys Playwright de Flow Builder y Billing, y con integracion de sistema para Knowledge.
