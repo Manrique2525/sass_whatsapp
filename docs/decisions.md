@@ -3499,3 +3499,19 @@ una pantalla de upload/search en el frontend.
   - PHP `2510` tests / `7192` assertions / `15` skips; PostgreSQL `184/184` / `489`; Vitest `562/562`.
   - Meta, OpenAI, Stripe y Sentry reales permanecen en `0`; worker sin failed, pending, reserved ni delayed jobs.
   - No se declara UI Knowledge ni se inicia FASE31. El cierre final se entrega en un commit local separado.
+
+## ADR-114 - FASE 30 U5-C PostgreSQL integration CI boundary
+
+- **Estado**: Aceptado - FASE 30 U5-C
+- **Contexto**: La suite `tests/Postgres` valida pgvector, migraciones PostgreSQL, Redis locking y concurrencia. No
+  debe ejecutarse contra la base de desarrollo ni compartir Redis con E2E.
+- **Decision**:
+  1. GitHub Actions ejecuta un job independiente con `pgvector/pgvector:pg16` y `redis:7-alpine` como service containers.
+  2. El job usa exclusivamente `whatsapp_saas_handoff_u2_test`, `HANDOFF_U2_PG_TEST=1` y Redis DB `14`; E2E conserva DB `15`.
+  3. Healthchecks y guards exactos verifican el entorno antes de que `DatabaseTruncation` pueda ejecutar `migrate:fresh`.
+  4. La suite se ejecuta serialmente con `phpunit.pgsql.xml` y `--do-not-cache-result`, sin secretos de repositorio.
+     En local la suite corre dentro de la red U5-C; en GitHub, el runner directo usa puertos publicados y mapea los
+     hostnames canónicos `postgres`/`redis` a `127.0.0.1`.
+- **Consecuencias**:
+  - El job PostgreSQL puede correr en paralelo con los jobs static, frontend y backend porque sus servicios son desechables y aislados.
+  - No se ejecutan PostgreSQL, Redis ni migraciones productivas; Docker/Playwright E2E y el release gate quedan fuera de U5-C.

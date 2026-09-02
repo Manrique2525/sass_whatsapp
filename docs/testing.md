@@ -15,8 +15,12 @@ manual `workflow_dispatch` executions.
 - U5-B adds independent `static`, `frontend` and `backend` jobs. Static gates run PHPStan, Pint, npm audit and
   Composer audit; frontend gates run Vitest, typecheck, production build and the deterministic E2E bundle build;
   backend runs the default SQLite/in-memory Pest suite with a 512 MB PHP memory limit.
-- No repository secrets are required. PostgreSQL CI, Docker/Playwright E2E, Knowledge E2E and the final release gate
-  are not implemented yet; they belong to later U5 stages.
+- U5-C adds an independent `postgres` job using `pgvector/pgvector:pg16` and `redis:7-alpine`. It uses only the
+  disposable `whatsapp_saas_handoff_u2_test` database, Redis DB `14`, explicit pre-migration safety checks and the
+  serialized canonical `tests/Postgres` suite. Because the job runs directly on the GitHub runner, ports are mapped
+  to localhost and the canonical `postgres`/`redis` names are mapped locally. The job requires no repository secrets.
+- No repository secrets are required. U5-C is validated locally against disposable PostgreSQL/Redis services;
+  Docker/Playwright E2E, Knowledge E2E and the final release gate belong to later U5 stages.
 
 ## FASE 30 U4 — E2E closure
 

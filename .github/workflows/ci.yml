@@ -126,3 +126,117 @@ jobs:
 
       - name: PHP default suite
         run: php -d memory_limit=512M vendor/bin/pest
+
+  postgres:
+    name: PostgreSQL integration suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APP_ENV: testing
+      HANDOFF_U2_PG_TEST: '1'
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_DATABASE: whatsapp_saas_handoff_u2_test
+      DB_USERNAME: saas
+      DB_PASSWORD: saas_secret
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      REDIS_CLIENT: phpredis
+      REDIS_DB: '14'
+      REDIS_CACHE_DB: '14'
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: sync
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: whatsapp_saas_handoff_u2_test
+          POSTGRES_USER: saas
+          POSTGRES_PASSWORD: saas_secret
+        options: >-
+          --health-cmd "pg_isready -U saas -d whatsapp_saas_handoff_u2_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_pgsql, redis
+          tools: composer:v2
+          coverage: none
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: ${{ runner.os }}-php-8.3-composer-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-php-8.3-composer-
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Map canonical service hostnames
+        run: printf '127.0.0.1 postgres redis\n' | sudo tee -a /etc/hosts
+
+      - name: Verify disposable PostgreSQL and Redis boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test "$APP_ENV" = "testing"
+          test "$HANDOFF_U2_PG_TEST" = "1"
+          test "$DB_CONNECTION" = "pgsql"
+          test "$DB_HOST" = "postgres"
+          test "$DB_PORT" = "5432"
+          test "$DB_DATABASE" = "whatsapp_saas_handoff_u2_test"
+          test "$DB_USERNAME" = "saas"
+          test "$REDIS_HOST" = "redis"
+          test "$REDIS_PORT" = "6379"
+          test "$REDIS_DB" = "14"
+          test "$REDIS_CACHE_DB" = "14"
+
+          printf 'APP_ENV=%s\n' "$APP_ENV"
+          printf 'DB_CONNECTION=%s\n' "$DB_CONNECTION"
+          printf 'DB_HOST=%s\n' "$DB_HOST"
+          printf 'DB_PORT=%s\n' "$DB_PORT"
+          printf 'DB_DATABASE=%s\n' "$DB_DATABASE"
+          printf 'REDIS_DB=%s\n' "$REDIS_DB"
+
+          current_database="$(PGPASSWORD="$DB_PASSWORD" psql \
+            -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USERNAME" -d "$DB_DATABASE" \
+            -Atqc 'SELECT current_database()')"
+          test "$current_database" = "$DB_DATABASE"
+
+          PGPASSWORD="$DB_PASSWORD" psql \
+            -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USERNAME" -d "$DB_DATABASE" \
+            -v ON_ERROR_STOP=1 -c 'CREATE EXTENSION IF NOT EXISTS vector' >/dev/null
+          vector_count="$(PGPASSWORD="$DB_PASSWORD" psql \
+            -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USERNAME" -d "$DB_DATABASE" \
+            -Atqc "SELECT count(*) FROM pg_extension WHERE extname = 'vector'")"
+          test "$vector_count" = "1"
+          test "$(redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -n "$REDIS_DB" ping)" = "PONG"
+
+          echo 'DEDICATED TEST DATABASE VERIFIED'
+          echo 'PGVECTOR VERIFIED'
+          echo 'REDIS TEST DB 14 VERIFIED'
+
+      - name: PostgreSQL canonical suite
+        run: vendor/bin/pest --configuration=phpunit.pgsql.xml --testsuite=PostgresConcurrency --do-not-cache-result

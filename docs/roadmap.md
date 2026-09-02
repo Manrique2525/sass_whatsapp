@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 EN PROGRESO (U1/U2/U3 COMPLETADAS · U4 COMPLETADA)**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 EN PROGRESO (U1/U2/U3/U4/U5-A/U5-B/U5-C COMPLETADAS)**.
 
 ## Fases
 
@@ -36,7 +36,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA
 | 27 | Seguridad (refuerzo OWASP) — U1: Security Headers + CORS + Session Hardening · U2: Sanctum Token Expiry + TrustProxies + Structured Error Responses · U3: Token Rollout Verification + Documentation Closure | COMPLETADA |
 | 28 | Observabilidad (U1: Structured Logging + Correlation IDs · U2: Backend Sentry · U3: Frontend Sentry · U4: Health Checks + Queue · U5: Alerting + Ops Docs) | COMPLETADA |
 | 29 | Testing global + cobertura (U1: Coverage Infra + Critical Gap Baseline ✅ · U2: Tenancy + Auth · U3: Billing/Concurrency/PG · U4: Jobs/Webhooks · U5: Frontend + Closure) | COMPLETADA |
-| 30 | E2E Playwright (U1: Infra + Auth + Multi-Tenancy Base · U2: Inbox · U3: Handoff · U4: Flow Builder + Billing + Knowledge integration) | EN PROGRESO |
+| 30 | E2E Playwright (U1: Infra + Auth + Multi-Tenancy Base · U2: Inbox · U3: Handoff · U4: Flow Builder + Billing + Knowledge integration · U5: CI foundation/static/frontend/backend/PostgreSQL integration) | EN PROGRESO |
 | 31 | Testing de webhooks (mocks Meta) | PENDIENTE |
 | 32 | Testing de fallbacks | PENDIENTE |
 | 33 | Performance | PENDIENTE |
