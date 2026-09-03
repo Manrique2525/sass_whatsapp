@@ -19,10 +19,12 @@ use App\Domain\Conversations\Exceptions\ConversationNotFoundException;
 use App\Domain\Conversations\Exceptions\ConversationReplyForbiddenException;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Messages\Enums\MessageDirection;
+use App\Domain\Messages\Enums\MessageMediaProcessingStatus;
 use App\Domain\Messages\Enums\MessageOrigin;
 use App\Domain\Messages\Enums\MessageStatus;
 use App\Domain\Messages\Enums\MessageType;
 use App\Domain\Messages\Models\Message;
+use App\Domain\Messages\Models\MessageMedia;
 use App\Domain\Messages\ValueObjects\InboundMessageResult;
 use App\Domain\Messages\ValueObjects\NormalizedInboundMessage;
 use App\Domain\Messages\ValueObjects\NormalizedStatusUpdate;
@@ -37,6 +39,7 @@ use App\Events\MessageCreated;
 use App\Events\MessageStatusUpdated;
 use App\Infrastructure\Logging\SafeLogContext;
 use App\Infrastructure\Tenancy\TenantContext;
+use App\Jobs\ProcessWhatsAppMedia;
 use App\Jobs\SendWhatsAppMessage;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\Events\Dispatcher;
@@ -155,7 +158,41 @@ final class MessageService
 
         $this->events->dispatch(new MessageCreated($message));
 
+        $this->queueMediaIfPresent($tenant, $message, $normalized);
+
         return InboundMessageResult::created($message);
+    }
+
+    /**
+     * Crea el asset de media `pending` del mensaje entrante y encola su
+     * descarga segura (FASE 31 U5, ADR-121). La descarga NUNCA ocurre dentro de
+     * la request del webhook.
+     */
+    private function queueMediaIfPresent(Tenant $tenant, Message $message, NormalizedInboundMessage $normalized): void
+    {
+        if ($normalized->mediaId === null) {
+            return;
+        }
+
+        $mediaEntry = is_array($normalized->metadata['media'] ?? null) ? $normalized->metadata['media'] : [];
+        $filename = is_string($mediaEntry['filename'] ?? null) ? $mediaEntry['filename'] : null;
+
+        $media = TenantContext::withId($tenant->id, function () use ($tenant, $message, $normalized, $filename): MessageMedia {
+            $media = new MessageMedia([
+                'message_id' => $message->id,
+                'provider_media_id' => $normalized->mediaId,
+                'mime' => $normalized->mediaMime,
+                'size' => $normalized->mediaSize,
+                'original_filename' => MediaStorageService::sanitizeFilename($filename),
+                'processing_status' => MessageMediaProcessingStatus::Pending,
+            ]);
+            $media->forceFill(['tenant_id' => $tenant->id]);
+            $media->save();
+
+            return $media;
+        });
+
+        dispatch((new ProcessWhatsAppMedia($tenant->id, $media->id))->forTenant($tenant->id));
     }
 
     /**

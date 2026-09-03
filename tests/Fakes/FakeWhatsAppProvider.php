@@ -6,8 +6,11 @@ namespace Tests\Fakes;
 
 use App\Domain\WhatsApp\Contracts\WhatsAppProviderInterface;
 use App\Domain\WhatsApp\ValueObjects\InteractiveMessage;
+use App\Domain\WhatsApp\ValueObjects\MediaDownload;
+use App\Domain\WhatsApp\ValueObjects\MediaMetadata;
 use App\Domain\WhatsApp\ValueObjects\MessageSendResult;
 use App\Domain\WhatsApp\ValueObjects\PhoneNumberInfo;
+use App\Domain\WhatsApp\ValueObjects\TemplateInfo;
 
 /**
  * Fake del `WhatsAppProviderInterface` SOLO para el entorno E2E (FASE 30 U2).
@@ -83,6 +86,40 @@ final class FakeWhatsAppProvider implements WhatsAppProviderInterface
             'quality_rating' => 'GREEN',
             'status' => 'connected',
         ]);
+    }
+
+    public function getMediaMetadata(string $accessToken, string $mediaId): MediaMetadata
+    {
+        $this->recordInvocation($accessToken);
+
+        return new MediaMetadata(
+            mediaId: $mediaId,
+            mimeType: 'image/jpeg',
+            sha256: null,
+            fileSize: 0,
+            url: null,
+            filename: null,
+        );
+    }
+
+    public function downloadMedia(string $accessToken, MediaMetadata $metadata, int $maxBytes): MediaDownload
+    {
+        $this->recordInvocation($accessToken);
+
+        $buffer = fopen('php://temp', 'w+b');
+        fwrite($buffer, 'fake-bytes');
+
+        return new MediaDownload($buffer, 10, 'image/jpeg');
+    }
+
+    /**
+     * @return list<TemplateInfo>
+     */
+    public function listTemplates(string $accessToken, string $wabaId): array
+    {
+        $this->recordInvocation($accessToken);
+
+        return [];
     }
 
     public function subscribeToWebhooks(string $accessToken, string $wabaId): bool

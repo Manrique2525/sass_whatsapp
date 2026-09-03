@@ -4,14 +4,19 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\WhatsApp;
 
+use App\Domain\Messages\Enums\MessageMediaFailureReason;
 use App\Domain\WhatsApp\Contracts\WhatsAppProviderInterface;
 use App\Domain\WhatsApp\Exceptions\WhatsAppAuthFailedException;
 use App\Domain\WhatsApp\Exceptions\WhatsAppConfigurationException;
+use App\Domain\WhatsApp\Exceptions\WhatsAppMediaDownloadException;
 use App\Domain\WhatsApp\Exceptions\WhatsAppMessageFailedException;
 use App\Domain\WhatsApp\Exceptions\WhatsAppPhoneNotFoundException;
 use App\Domain\WhatsApp\ValueObjects\InteractiveMessage;
+use App\Domain\WhatsApp\ValueObjects\MediaDownload;
+use App\Domain\WhatsApp\ValueObjects\MediaMetadata;
 use App\Domain\WhatsApp\ValueObjects\MessageSendResult;
 use App\Domain\WhatsApp\ValueObjects\PhoneNumberInfo;
+use App\Domain\WhatsApp\ValueObjects\TemplateInfo;
 use App\Infrastructure\Logging\SafeLogContext;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
@@ -41,6 +46,8 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
         private readonly string $verifyToken,
         private readonly int $connectTimeout = 3,
         private readonly int $timeout = 10,
+        private readonly SecureDownloader $downloader = new SecureDownloader,
+        private readonly int $maxTemplatePages = 20,
     ) {}
 
     /**
@@ -187,6 +194,92 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
         }
 
         return PhoneNumberInfo::fromMeta((array) $response->json());
+    }
+
+    public function getMediaMetadata(string $accessToken, string $mediaId): MediaMetadata
+    {
+        $this->assertIdentifiers($accessToken, $mediaId);
+
+        $response = $this->http(fn (): Response => $this->client($accessToken)->get("/{$mediaId}", [
+            'fields' => 'url,mime_type,sha256,file_size,filename,id',
+        ]));
+
+        if ($response->status() === 404) {
+            throw new WhatsAppMediaDownloadException(
+                'Media no encontrado en Meta.',
+                MessageMediaFailureReason::ProviderNotFound,
+            );
+        }
+
+        if (! $response->successful()) {
+            throw $this->messageException($response, 'No se pudo consultar el media en Meta.');
+        }
+
+        $body = $this->body($response) ?? [];
+
+        return MediaMetadata::fromProvider($mediaId, $body);
+    }
+
+    public function downloadMedia(string $accessToken, MediaMetadata $metadata, int $maxBytes): MediaDownload
+    {
+        $this->assertIdentifier($accessToken, $metadata->mediaId);
+
+        if ($metadata->url === null || $metadata->url === '') {
+            throw new WhatsAppMediaDownloadException(
+                'El media no tiene URL de descarga.',
+                MessageMediaFailureReason::DownloadFailed,
+            );
+        }
+
+        return $this->downloader->download($metadata->url, $maxBytes);
+    }
+
+    /**
+     * @return list<TemplateInfo>
+     */
+    public function listTemplates(string $accessToken, string $wabaId): array
+    {
+        $this->assertIdentifiers($accessToken, $wabaId);
+
+        $templates = [];
+        $after = null;
+
+        for ($page = 0; $page < $this->maxTemplatePages; $page++) {
+            $params = ['limit' => 100];
+
+            if ($after !== null) {
+                $params['after'] = $after;
+            }
+
+            $response = $this->http(fn (): Response => $this->client($accessToken)->get("/{$wabaId}/message_templates", $params));
+
+            if (! $response->successful()) {
+                throw $this->messageException($response, 'No se pudo sincronizar el catálogo de plantillas.');
+            }
+
+            $body = $this->body($response) ?? [];
+
+            foreach ((array) ($body['data'] ?? []) as $entry) {
+                $normalized = TemplateInfo::fromProvider(is_array($entry) ? $entry : []);
+
+                if ($normalized !== null) {
+                    $templates[] = $normalized;
+                }
+            }
+
+            $cursor = $body['paging']['cursors']['after'] ?? null;
+            $hasNext = (bool) ($body['paging']['next'] ?? false);
+
+            if ($hasNext && is_string($cursor) && $cursor !== '') {
+                $after = $cursor;
+
+                continue;
+            }
+
+            break;
+        }
+
+        return $templates;
     }
 
     public function subscribeToWebhooks(string $accessToken, string $wabaId): bool

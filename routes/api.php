@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\KnowledgeBaseController;
 use App\Http\Controllers\Api\V1\LeadController;
 use App\Http\Controllers\Api\V1\MemberController;
 use App\Http\Controllers\Api\V1\MemberInvitationController;
+use App\Http\Controllers\Api\V1\MessageMediaController;
 use App\Http\Controllers\Api\V1\MessagesController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\NotificationPreferenceController;
@@ -30,6 +31,7 @@ use App\Http\Controllers\Api\V1\TenantController;
 use App\Http\Controllers\Api\V1\TriggerController;
 use App\Http\Controllers\Api\V1\UsageController;
 use App\Http\Controllers\Api\V1\WhatsAppController;
+use App\Http\Controllers\Api\V1\WhatsAppTemplateController;
 use App\Http\Controllers\Api\Webhooks\FlowWebhookController;
 use App\Http\Controllers\Api\Webhooks\StripeWebhookController;
 use App\Http\Controllers\Api\Webhooks\WhatsAppWebhookController;
@@ -131,6 +133,18 @@ Route::prefix('v1')->group(function (): void {
                 // FASE 10 — historial y envío de mensajes (inbox chat).
                 Route::get('{tenant}/conversations/{conversation}/messages', [MessagesController::class, 'index']);
                 Route::post('{tenant}/conversations/{conversation}/messages', [MessagesController::class, 'store']);
+
+                // FASE 31 U5 — envío de templates aprobados desde el inbox.
+                // El template se identifica por `template_id` en el body; el
+                // servicio valida tenant + status approved + variables (0 llamadas
+                // a Meta si no valida) y encola por el pipeline de U4.
+                Route::post('{tenant}/conversations/{conversation}/templates/send', [WhatsAppTemplateController::class, 'send']);
+
+                // FASE 31 U5 — catálogo de templates (leer/sincronizar) + descarga
+                // de media (tenant-scoped, 404 cross-tenant).
+                Route::get('{tenant}/whatsapp/templates', [WhatsAppTemplateController::class, 'index']);
+                Route::post('{tenant}/whatsapp/accounts/{account}/templates/sync', [WhatsAppTemplateController::class, 'sync']);
+                Route::get('{tenant}/whatsapp/media/{media}/download', [MessageMediaController::class, 'download']);
 
                 // FASE 11 — chatbots, flujos y triggers.
                 Route::get('{tenant}/chatbots', [ChatbotController::class, 'index']);

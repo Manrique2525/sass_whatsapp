@@ -314,4 +314,31 @@ webhook. Ninguna rotación de producción se ejecuta en U1.
   (`conversations.view` / `messages.send`) con envío async vía `SendWhatsAppMessage` y
   notificaciones Reverb (`MessageCreated`/`MessageStatusUpdated`/`ConversationUpdated`) en el canal
   privado por conversación para el inbox (MSG-API-1..16).
-- Pendiente (FASE 11+): media outbound, templates, lock de conversación, rate limits.
+## 13. Media seguro y templates (FASE 31 U5, ADR-121)
+
+### Pipeline de media inbound (seguro y aislado por tenant)
+
+- El media se referencia SIEMPRE por `provider_media_id` (id de Meta); el mensaje con media se persiste y su
+  procesamiento se encola (`ProcessWhatsAppMedia`), nunca se descarga en la request del webhook.
+- `SecureDownloader` es el único punto que abre una URL remota: la URL temporal llega del look-up del provider (nunca del
+  cliente). Valida SSRF (loopback, RFC1918, link-local, metadata cloud) en el destino y en cada hop, acota redirecciones
+  y bytes, y NO reenvía el token de autorización.
+- `MediaStorageService::process` es idempotente (CAS `pending -> processing`): en éxito marca `downloaded` con
+  `storage_disk`/`storage_path` opacos (`tenant/{tenantId}/whatsapp/media/{uuid}`), `sha256`/`mime`/`size` del contenido
+  real y `original_filename` sanitizado; en fallo de política marca `failed` con código seguro
+  (`oversize`/`invalid_mime`/`ssrf_rejected`/`download_failed`/`storage_failed`/`provider_not_found`).
+- La descarga se autoriza con `whatsapp.view`, resuelve el asset filtrado por `tenant_id` y devuelve 404 ante desajuste;
+  nunca expone `storage_disk`/`storage_path`.
+
+### Templates
+
+- `WhatsAppTemplate` materializa el catálogo de Meta (`sync`) con upsert por identify natural account+name+language y
+  provider id; la app NUNCA crea ni propone templates en Meta.
+- `send` exige template del tenant y `approved`, valida las variables contra el schema de componentes ANTES de llamar a
+  Meta (0 llamadas si falla), y encola el envío por el pipeline de U4 (`SendWhatsAppMessage`) con reserva de uso.
+- Ventana de 24h: solo un template `approved` puede enviarse fuera de la ventana (excepción explícita por tipo); la
+  ventana no se desactiva globalmente ni se automatiza la selección de plantilla.
+
+- Tests: `tests/Feature/WhatsApp/MediaPipelineTest.php` (MEDIA-1..6), `tests/Feature/WhatsApp/TemplateTest.php`
+  (TEMPLATE-1..8), `tests/Unit/WhatsApp/SsrUrlGuardTest.php` (SSRF-1..5),
+  `tests/Unit/WhatsApp/TemplateVariableValidatorTest.php` (VARS-1..6). Ver `testing.md`.

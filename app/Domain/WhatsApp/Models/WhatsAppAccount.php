@@ -70,6 +70,14 @@ final class WhatsAppAccount extends Model
         return $this->hasMany(WhatsAppPhoneNumber::class, 'whatsapp_account_id');
     }
 
+    /**
+     * @return HasMany<WhatsAppTemplate, $this>
+     */
+    public function templates(): HasMany
+    {
+        return $this->hasMany(WhatsAppTemplate::class, 'whatsapp_account_id');
+    }
+
     public function isConnected(): bool
     {
         return $this->status->isConnected();

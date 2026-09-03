@@ -14,6 +14,7 @@ use App\Domain\Users\Models\User;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
 /**
@@ -106,5 +107,15 @@ final class Message extends Model
     public function sentByUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'sent_by_user_id');
+    }
+
+    /**
+     * Asset de media del mensaje (FASE 31 U5); un mensaje tiene a lo sumo uno.
+     *
+     * @return HasOne<MessageMedia, $this>
+     */
+    public function media(): HasOne
+    {
+        return $this->hasOne(MessageMedia::class);
     }
 }

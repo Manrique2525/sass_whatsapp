@@ -47,4 +47,35 @@ return [
     'max_attempts' => (int) env('WHATSAPP_MAX_ATTEMPTS', 3),
 
     'customer_care_window_hours' => (int) env('WHATSAPP_CUSTOMER_CARE_WINDOW_HOURS', 24),
+
+    /*
+    | Límites de media (FASE 31 U5, ADR-121). Valores GLOBALES de app.
+    | `allowed_mime_types` es la lista blanca de tipos que el SaaS descarga y
+    | almacena internamente; `max_bytes` es el tope transportable de cualquier
+    | media (seguridad/SSRF y coste). El límite por tipo concreto lo aplica la
+    | policy de descarga (Meta: imagen 5MB, audio 16MB, vídeo 16MB, doc 100MB).
+    |
+    */
+    'media_endpoint_auth' => env('WHATSAPP_MEDIA_ENDPOINT_AUTH', true),
+
+    'media_disk' => env('WHATSAPP_MEDIA_DISK', 'local'),
+
+    'media_max_bytes' => (int) env('WHATSAPP_MEDIA_MAX_BYTES', 10485760),
+
+    'media_max_redirects' => (int) env('WHATSAPP_MEDIA_MAX_REDIRECTS', 3),
+
+    'media_allowed_mime_types' => [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'audio/ogg',
+        'audio/mpeg',
+        'audio/amr',
+        'audio/mp4',
+        'video/mp4',
+        'video/3gpp',
+        'application/pdf',
+    ],
+
+    'media_document_max_bytes' => (int) env('WHATSAPP_MEDIA_DOCUMENT_MAX_BYTES', 104857600),
 ];

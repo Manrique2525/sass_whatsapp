@@ -23,6 +23,8 @@ use App\Domain\WhatsApp\Enums\MessageSendStatus;
 use App\Domain\WhatsApp\Enums\PhoneNumberStatus;
 use App\Domain\WhatsApp\Exceptions\WhatsAppMessageFailedException;
 use App\Domain\WhatsApp\Models\MessageSendAttempt;
+use App\Domain\WhatsApp\Models\WhatsAppPhoneNumber;
+use App\Domain\WhatsApp\ValueObjects\MessageSendResult;
 use App\Events\MessageStatusUpdated;
 use App\Infrastructure\Tenancy\TenantContext;
 use App\Jobs\Concerns\TenantAwareJob;
@@ -205,7 +207,7 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
             $claimedPending = true;
         }
 
-        if ($message->type !== MessageType::Text) {
+        if (! in_array($message->type, [MessageType::Text, MessageType::Template], true)) {
             $this->failMessage($tenant, $message, 'unsupported_outbound_type');
 
             return;
@@ -255,14 +257,21 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
                 ? 1
                 : min(max(1, $this->attempts()), $providerMaxAttempts));
 
+        $payload = ['message_id' => $message->id];
+
+        if ($message->type === MessageType::Template) {
+            $payload['template_name'] = $message->metadata['template_name'] ?? null;
+            $payload['template_language'] = $message->metadata['template_language'] ?? null;
+            $payload['template_parameters'] = $message->metadata['template_parameters'] ?? [];
+        } else {
+            $payload['text'] = $message->body;
+        }
+
         $attempt = MessageSendAttempt::create([
             'whatsapp_phone_number_id' => $phone->id,
             'to' => $to,
             'type' => $message->type->value,
-            'payload' => [
-                'message_id' => $message->id,
-                'text' => $message->body,
-            ],
+            'payload' => $payload,
             'status' => MessageSendStatus::Pending,
             'attempt' => $providerAttempt,
             'max_attempts' => $providerMaxAttempts,
@@ -271,7 +280,7 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
         $provider = app(WhatsAppProviderInterface::class);
 
         try {
-            $result = $provider->sendText($accessToken, $phone->phone_id, $to, (string) $message->body);
+            $result = $this->sendViaProvider($provider, $accessToken, $phone, $to, $message);
         } catch (WhatsAppMessageFailedException $e) {
             $attempt->fill([
                 'status' => MessageSendStatus::Failed,
@@ -396,6 +405,27 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
     private function providerMaxAttempts(): int
     {
         return max(1, (int) config('whatsapp.max_attempts', 3));
+    }
+
+    private function sendViaProvider(
+        WhatsAppProviderInterface $provider,
+        string $accessToken,
+        WhatsAppPhoneNumber $phone,
+        string $to,
+        Message $message,
+    ): MessageSendResult {
+        if ($message->type === MessageType::Template) {
+            return $provider->sendTemplate(
+                $accessToken,
+                $phone->phone_id,
+                $to,
+                (string) ($message->metadata['template_name'] ?? ''),
+                (string) ($message->metadata['template_language'] ?? ''),
+                (array) ($message->metadata['template_parameters'] ?? []),
+            );
+        }
+
+        return $provider->sendText($accessToken, $phone->phone_id, $to, (string) $message->body);
     }
 
     /** @param array<string, mixed> $metadata */

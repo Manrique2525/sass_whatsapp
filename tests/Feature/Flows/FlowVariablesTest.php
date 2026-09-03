@@ -192,6 +192,45 @@ function flow_variables_outbound(Tenant $tenant, ?string $conversationId = null)
     return $query->orderBy('created_at')->get();
 }
 
+/**
+ * Devuelve el body del mensaje saliente cuyo contenido EXACTO es `$expected`,
+ * o `null` si no existe.
+ *
+ * `created_at` no es una clave de orden total: varios mensajes salientes de un
+ * mismo flujo pueden compartir timestamp (precisión de segundos), por lo que
+ * `->last()`/`->first()` sobre `ORDER BY created_at` NO es determinista en
+ * PostgreSQL ni en SQLite. El contrato del test se resuelve por contenido
+ * (selector semántico), no por posición temporal.
+ *
+ * @return ?string
+ */
+function flow_outbound_body(Tenant $tenant, string $expected, ?string $conversationId = null)
+{
+    $body = flow_variables_outbound($tenant, $conversationId)
+        ->map->body
+        ->first(fn (mixed $candidate): bool => $candidate === $expected, default: null);
+
+    return is_string($body) ? $body : null;
+}
+
+/**
+ * Devuelve el body del mensaje saliente cuyo contenido incluye el substring
+ * `$needle`, o `null` si ninguno lo contiene.
+ *
+ * Misma justificación que `flow_outbound_body`: la selección es semántica, no
+ * posicional.
+ *
+ * @return ?string
+ */
+function flow_outbound_body_containing(Tenant $tenant, string $needle, ?string $conversationId = null)
+{
+    $body = flow_variables_outbound($tenant, $conversationId)
+        ->map->body
+        ->first(fn (mixed $candidate): bool => is_string($candidate) && str_contains($candidate, $needle), default: null);
+
+    return is_string($body) ? $body : null;
+}
+
 test('VAR-2/VAR-3: la captura tipada conserva el tipo declarado en question.config.type', function (): void {
     Queue::fake();
 
@@ -272,9 +311,7 @@ test('VAR-2: el valor tipado se interpola con su representación estable', funct
     $conversation->refresh();
     run_flow_engine($tenant, $reply, $conversation);
 
-    $outbound = flow_variables_outbound($tenant, $conversation->id);
-
-    expect($outbound->last()->body)->toBe('¿VIP? true');
+    expect(flow_outbound_body($tenant, '¿VIP? true', $conversation->id))->toBe('¿VIP? true');
 });
 
 test('VAR-17: el webhook interpola el payload pero el URL queda literal (sin SSRF por variables)', function (): void {
@@ -350,18 +387,16 @@ test('VAR-19: regression — los nodos buttons siguen funcionando con el resolve
 
     run_flow_engine($tenant, $first, $conversation);
 
-    $prompt = flow_variables_outbound($tenant, $conversation->id)->last();
+    $promptBody = flow_outbound_body_containing($tenant, 'Hola Ana, elige', $conversation->id);
 
-    expect($prompt->body)->toContain('Hola Ana, elige')
-        ->and($prompt->body)->toContain('1. Ventas');
+    expect($promptBody ?? '')->toContain('Hola Ana, elige')
+        ->and($promptBody ?? '')->toContain('1. Ventas');
 
     $selection = make_inbound_message($tenant, 'Ventas');
     $conversation->refresh();
     run_flow_engine($tenant, $selection, $conversation);
 
-    $outbound = flow_variables_outbound($tenant, $conversation->id);
-
-    expect($outbound->last()->body)->toBe('Perfecto Ana');
+    expect(flow_outbound_body($tenant, 'Perfecto Ana', $conversation->id))->toBe('Perfecto Ana');
 
     $execution = FlowExecution::query()->withoutTenantScope()->where('tenant_id', $tenant->id)->firstOrFail();
 
@@ -396,10 +431,8 @@ test('VAR-3: el nodo condition con match any ramifica correctamente end-to-end',
 
     $execution = answer_typed_question($tenant, 'admin');
 
-    $outbound = flow_variables_outbound($tenant);
-
     expect($execution->status)->toBe(FlowExecutionStatus::Completed)
-        ->and($outbound->last()->body)->toBe('Acceso concedido');
+        ->and(flow_outbound_body($tenant, 'Acceso concedido'))->toBe('Acceso concedido');
 });
 
 test('VAR-3: el nodo condition con not y match all niega la regla', function (): void {
@@ -428,10 +461,8 @@ test('VAR-3: el nodo condition con not y match all niega la regla', function ():
 
     $execution = answer_typed_question($tenant, 'gratis');
 
-    $outbound = flow_variables_outbound($tenant);
-
     expect($execution->status)->toBe(FlowExecutionStatus::Completed)
-        ->and($outbound->last()->body)->toBe('Te ofrecemos pro');
+        ->and(flow_outbound_body($tenant, 'Te ofrecemos pro'))->toBe('Te ofrecemos pro');
 });
 
 test('VAR-3: el nodo condition con starts_with funciona end-to-end', function (): void {
@@ -460,10 +491,8 @@ test('VAR-3: el nodo condition con starts_with funciona end-to-end', function ()
 
     $execution = answer_typed_question($tenant, 'ana@negocio.com');
 
-    $outbound = flow_variables_outbound($tenant);
-
     expect($execution->status)->toBe(FlowExecutionStatus::Completed)
-        ->and($outbound->last()->body)->toBe('Email corporativo');
+        ->and(flow_outbound_body($tenant, 'Email corporativo'))->toBe('Email corporativo');
 });
 
 /*
@@ -514,11 +543,9 @@ test('VAR-35: una respuesta vacía persiste el default coerceado al tipo declara
     ]);
 
     $execution = answer_typed_question($tenant, '');
-    $outbound = flow_variables_outbound($tenant);
-
     expect($execution->variables['custom']['edad'])->toBe(42)
         ->and($execution->variables['custom']['edad'])->toBeInt()
-        ->and($outbound->last()->body)->toBe('Edad 42');
+        ->and(flow_outbound_body($tenant, 'Edad 42'))->toBe('Edad 42');
 });
 
 test('VAR-35: el default boolean se persiste con su tipo real', function (): void {
@@ -641,9 +668,7 @@ test('VAR-36: los defaults inline se resuelven en runtime en el motor (múltiple
     $conversation = Conversation::query()->withoutTenantScope()->whereKey($first->conversation_id)->firstOrFail();
     run_flow_engine($tenant, $first, $conversation);
 
-    $outbound = flow_variables_outbound($tenant, $conversation->id);
-
-    expect($outbound->last()->body)->toBe('A B');
+    expect(flow_outbound_body($tenant, 'A B', $conversation->id))->toBe('A B');
 });
 
 test('VAR-36: el valor capturado gana al default inline y el default del nodo llena el hueco', function (): void {
@@ -669,10 +694,8 @@ test('VAR-36: el valor capturado gana al default inline y el default del nodo ll
     ]);
 
     $execution = answer_typed_question($tenant, '');
-    $outbound = flow_variables_outbound($tenant);
-
     expect($execution->variables['custom']['a'])->toBe('X')
-        ->and($outbound->last()->body)->toBe('X B');
+        ->and(flow_outbound_body($tenant, 'X B'))->toBe('X B');
 });
 
 test('VAR-36: los caracteres de control del default inline se eliminan en runtime', function (): void {
@@ -701,7 +724,5 @@ test('VAR-36: los caracteres de control del default inline se eliminan en runtim
     $conversation = Conversation::query()->withoutTenantScope()->whereKey($first->conversation_id)->firstOrFail();
     run_flow_engine($tenant, $first, $conversation);
 
-    $outbound = flow_variables_outbound($tenant, $conversation->id);
-
-    expect($outbound->last()->body)->toBe('Hola ab');
+    expect(flow_outbound_body($tenant, 'Hola ab', $conversation->id))->toBe('Hola ab');
 });

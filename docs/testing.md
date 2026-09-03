@@ -54,6 +54,41 @@ and is terminal afterward. Regressions and duplicate statuses are no-op and do n
 realtime broadcasts. Failed metadata is allowlisted and sanitized; the full provider error payload is
 never stored.
 
+## FASE 31 U4 - Outbound delivery ambiguity and care window
+
+Outbound text responses are classified `ambiguous` when transport outcome is unknown (timeout/connection
+loss or success without `messages[].id`): the message stays `sending` and is NOT automatically retried.
+`RetryAmbiguousWhatsAppMessage` is the only explicit replay, uses a row lock + CAS and re-applies tenant
+limits through `SendWhatsAppMessage`. Human free-text replies require an inbound of the same
+tenant/conversation within the customer-care window; outside it, an approved template is required.
+No migration (state lives in `messages.metadata`).
+
+## FASE 31 U5 - Secure media pipeline and approved templates
+
+- **MediaPipelineTest** (`tests/Feature/WhatsApp/MediaPipelineTest.php`, MEDIA-1..6): the inbound media
+  message is persisted and the download is ENQUEUED (never in the webhook request). `MediaStorageService`
+  validates declared size, applies the MIME whitelist by content inspection, enforces byte caps, computes
+  `sha256` of the persisted bytes, writes to an opaque `tenant/{id}/whatsapp/media/{uuid}` path and stores a
+  sanitized `original_filename`. Policy failures (`oversize`, `invalid_mime`, `ssrf_rejected`,
+  `download_failed`, `storage_failed`, `provider_not_found`) land terminal `failed` with a safe reason code;
+  the worker is idempotent (CAS `pending -> processing`) and never revisits terminal assets. Tenant
+  isolation: an asset of tenant A is never served to tenant B (404 on any mismatch; storage paths are never
+  exposed).
+- **SsrUrlGuardTest** (`tests/Unit/WhatsApp/SsrUrlGuardTest.php`, SSRF-1..5): private/loopback/link-local/
+  multicast/unspecified and metadata-cloud destinations are rejected; https-only enforcement; redirect hops
+  are validated individually; the resolver is injectable for safe testing.
+- **TemplateTest** (`tests/Feature/WhatsApp/TemplateTest.php`, TEMPLATE-1..8): sync materializes the Meta
+  catalog (upsert by natural key; the app never creates/proposes templates), send rejects a template not owned
+  by the tenant or not `approved`, validates variables against the component schema BEFORE any Meta call (0
+  calls on failure), respects the 24h care window for free text (template exception), and enqueues through the
+  U4 pipeline with a usage reservation.
+- **TemplateVariableValidatorTest** (`tests/Unit/WhatsApp/TemplateVariableValidatorTest.php`, VARS-1..6):
+  placeholder arity is validated (missing/extra → rejection), scalar-only values, and normalized parameters
+  ready for `sendTemplate`.
+
+`tests/Feature/WhatsApp tests/Unit/WhatsApp` runs **110 tests / 280 assertions** (includes the FASE 31
+WhatsApp suite).
+
 ## CI Foundation (FASE 30 U5-A)
 
 GitHub Actions is the CI provider. The foundation workflow is

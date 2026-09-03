@@ -3624,23 +3624,35 @@ una pantalla de upload/search en el frontend.
     para añadir invariantes porque no se modifica el esquema, aunque debe ejecutarse el canonical PG gate si está disponible.
   - Media binaria completa queda explícitamente diferida a U5.
 
-## ADR-120 - FASE 31 U4 outbound delivery ambiguity and care window
+## ADR-121 - FASE 31 U5 secure media pipeline and approved templates
 
-- **Estado**: Aceptado - FASE 31 U4 (local)
-- **Contexto**: Una pérdida de conexión después de iniciar el POST a Meta no permite saber si Meta
-  aceptó el mensaje. Repetir automáticamente puede duplicar mensajes. Además, las respuestas humanas
-  de texto libre deben respetar la ventana customer-care de WhatsApp.
+- **Estado**: Aceptado - FASE 31 U5 (local)
+- **Contexto**: Los mensajes con media se persistían como metadata-only (U3), sin binario ni almacenamiento, y los
+  templates de Meta no tenían catálogo ni envío. Descargar un media requiere abrir una URL temporal de Meta (riesgo SSRF),
+  validar contenido real (MIME/size, no header) y aislar por tenant el almacenamiento.
 - **Decisión**:
-  1. Las respuestas HTTP 5xx/429 son fallos transitorios conocidos; 4xx son permanentes. 429 usa
-     `Retry-After` acotado a una hora cuando el mensaje está en cola.
-  2. Timeout/conexión y éxito sin `messages[].id` son ambiguos. El outbound queda `sending`, registra
-     `classification=ambiguous` en el intento y no se reenvía automáticamente.
-  3. `RetryAmbiguousWhatsAppMessage` es el único replay explícito; usa lock de fila, CAS posterior y
-     vuelve a aplicar los límites del tenant mediante `SendWhatsAppMessage`.
-  4. La API de respuesta humana solo permite texto libre si existe un inbound del mismo tenant y
-     conversación dentro de las últimas 24 horas; fuera de ventana se requiere una plantilla aprobada.
-  5. Se usa `messages.metadata` para el estado ambiguo; no se añade migración.
+  1. El media se referencia SIEMPRE por `message_media.provider_media_id` (id de Meta), nunca por URL arbitraria. La URL
+     de descarga la devuelve el provider en el look-up; la descarga pasa por `SecureDownloader` que valida SSRF (host/IP
+     privada, loopback, link-local, metadata cloud), acota redirecciones y bytes, y NO reenvía el token de autorización.
+  2. `message_media` es el asset de almacenamiento canónico: `storage_disk`/`storage_path` opacos generados por la app
+     (`tenant/{tenantId}/whatsapp/media/{uuid}`), `sha256`/`mime`/`size` validados del contenido real (no del header), y
+     `original_filename` sanitizado (basename, sin separadores ni control) que nunca se usa como base del path.
+  3. Se añaden candidatas padre `UNIQUE (tenant_id, id)` en `messages` y `whatsapp_accounts` (migración A), que permiten
+     el FK compuesto tenant-aware `message_media(tenant_id, message_id) -> messages(tenant_id, id)`: aislamiento del
+     storage a nivel de constraint, no solo de scope. (Detalle: `created_at` no es clave de orden total; ver reporte de
+     remediación en `roadmap.md` FASE 31 U5.)
+  4. `ProcessWhatsAppMedia` es un job tenant-aware, `ShouldBeUnique` por media y se encola tras persistir el inbound
+     (nunca en la request del webhook). `MediaStorageService::process` implementa CAS `pending -> processing` y estados
+     terminales `downloaded`/`failed` (código seguro `oversize`/`invalid_mime`/`ssrf_rejected`/`download_failed`
+     `/storage_failed`/`provider_not_found`), por lo que el job es idempotente y los reintentos no duplican trabajo.
+  5. `WhatsAppTemplate` materializa el catálogo de Meta con upsert por identify natural account+name+language y provider
+     id (la app NUNCA crea/propone templates). `send` valida pertenencia al tenant, estado `approved` y las variables
+     contra el schema de componentes ANTES de llamar al provider (0 llamadas a Meta si falla), y encola por el pipeline
+     de U4 (`SendWhatsAppMessage`) con reserva de uso.
+  6. Política de ventana: un template `approved` SE PUEDE enviar fuera de la ventana de 24 h (excepción explícita por
+     tipo de mensaje); la ventana no se desactiva globalmente ni se automatiza la selección de template.
 - **Consecuencias**:
-  - Se prioriza no duplicar mensajes sobre eventualidad automática en casos de transporte incierto.
-  - La operación debe reconciliar o autorizar replay ambiguo explícitamente.
-  - La ventana puede parametrizarse con `WHATSAPP_CUSTOMER_CARE_WINDOW_HOURS`.
+  - Un media de tenant A jamás se sirve a tenant B: el endpoint de descarga autoriza `whatsapp.view`, resuelve el asset
+    filtrado por `tenant_id` y devuelve 404 ante cualquier desajuste; nunca expone `storage_disk`/`storage_path`.
+  - Los fallos de política son terminales con código seguro (nunca body crudo ni contenido); solo errores transitorios
+    reintentan. Sin implementación real se marca `TODO` con explicación; nunca `return true;` ni arrays vacíos.

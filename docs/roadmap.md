@@ -3281,4 +3281,34 @@ U2 no modifica reconciliación outbound, ventana de 24 horas, media binaria, tem
   regresa estados ya entregados/leídos.
 - U3 no modifica outbound reliability, ventana de 24 horas, templates, media binaria ni migrations.
 
-U4-U6 quedan **NO INICIADAS**.
+### U4 - Outbound delivery ambiguity and care window · COMPLETADA LOCALMENTE
+
+- Timeout/conexión y éxito sin `messages[].id` se clasifican `ambiguous`: el outbound queda `sending` y NO se reenvía
+  automáticamente (prioridad: no duplicar mensajes). `RetryAmbiguousWhatsAppMessage` es el único replay explícito.
+- La respuesta humana de texto libre exige inbound del mismo tenant/conversación en ventana de 24h; fuera de ventana se
+  requiere una plantilla aprobada. Sin migración (estado ambiguo en `messages.metadata`). Ver ADR-120.
+
+### U5 - Secure media pipeline and approved templates · COMPLETADA LOCALMENTE
+
+- Pipeline de media inbound seguro y aislado por tenant: look-up por `provider_media_id`, descarga con `SecureDownloader`
+  (SSRF, redirecciones acotadas, sin reenvío de token, tope de bytes), validación de MIME/size por contenido y
+  almacenamiento opaco `tenant/{tenantId}/whatsapp/media/{uuid}`. Job `ProcessWhatsAppMedia` idempotente (CAS
+  `pending -> processing`, estados terminales con código seguro). Endpoint de descarga autorizado y aislado (404 ante
+  desajuste; nunca expone storage). Ver ADR-121.
+- Candidatas padre `UNIQUE (tenant_id, id)` en `messages`/`whatsapp_accounts` + FK compuesto tenant-aware de
+  `message_media` (migraciones A/B). Tabla `whatsapp_templates` (migración C).
+- Catálogo y envío de templates `approved`: `sync` materializa el catálogo de Meta (upsert; nunca crea/propone), `send`
+  valida pertenencia/estado/variables antes de Meta (0 llamadas si falla) y encola por el pipeline de U4. Excepción de
+  ventana de 24h solo por template `approved`. Ver ADR-121.
+
+**Remediación de regresión de orden (FASE 13 `FlowVariablesTest`)**:
+- `created_at` no es clave de orden total: varios mensajes salientes de un flujo comparten timestamp, por lo que
+  `ORDER BY created_at` con ties NO es determinista. La migración A (índice) cambió el plan de SQLite y expuso la
+  asunción latente en `FlowVariablesTest` (selección por `.last()`). Reconciliado SI seleccionar el mensaje esperado por
+  contenido (helper `flow_outbound_body`/`flow_outbound_body_containing`) manteniendo asserts estrictos. Verificado
+  determinista (12/12 y 5/5 corridas; suite completa verde).
+- `FOLLOW-UP — GLOBAL MESSAGE ORDERING`: el inbox de producción ordena solo por `created_at` sin tie-breaker
+  (`MessageService::indexForUser`) y el reproceso desordenado del sweeper (`WhatsAppReprocessWebhookEvents`) comparten el
+  mismo riesgo en PostgreSQL; NO se tocan en U5.
+
+U5 queda COMPLETADA LOCALMENTE. U6 (billing/aceleradores reales + cierre) queda NO INICIADA.
