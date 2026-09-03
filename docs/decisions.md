@@ -3624,6 +3624,27 @@ una pantalla de upload/search en el frontend.
     para añadir invariantes porque no se modifica el esquema, aunque debe ejecutarse el canonical PG gate si está disponible.
   - Media binaria completa queda explícitamente diferida a U5.
 
+## ADR-120 - FASE 31 U4 outbound delivery ambiguity and care window
+
+- **Estado**: Aceptado - FASE 31 U4 (local)
+- **Contexto**: Una pérdida de conexión después de iniciar el POST a Meta no permite saber si Meta
+  aceptó el mensaje. Repetir automáticamente puede duplicar mensajes. Además, las respuestas humanas
+  de texto libre deben respetar la ventana customer-care de WhatsApp.
+- **Decisión**:
+  1. Las respuestas HTTP 5xx/429 son fallos transitorios conocidos; 4xx son permanentes. 429 usa
+     `Retry-After` acotado a una hora cuando el mensaje está en cola.
+  2. Timeout/conexión y éxito sin `messages[].id` son ambiguos. El outbound queda `sending`, registra
+     `classification=ambiguous` en el intento y no se reenvía automáticamente.
+  3. `RetryAmbiguousWhatsAppMessage` es el único replay explícito; usa lock de fila, CAS posterior y
+     vuelve a aplicar los límites del tenant mediante `SendWhatsAppMessage`.
+  4. La API de respuesta humana solo permite texto libre si existe un inbound del mismo tenant y
+     conversación dentro de las últimas 24 horas; fuera de ventana se requiere una plantilla aprobada.
+  5. Se usa `messages.metadata` para el estado ambiguo; no se añade migración.
+- **Consecuencias**:
+  - Se prioriza no duplicar mensajes sobre eventualidad automática en casos de transporte incierto.
+  - La operación debe reconciliar o autorizar replay ambiguo explícitamente.
+  - La ventana puede parametrizarse con `WHATSAPP_CUSTOMER_CARE_WINDOW_HOURS`.
+
 ## ADR-121 - FASE 31 U5 secure media pipeline and approved templates
 
 - **Estado**: Aceptado - FASE 31 U5 (local)
