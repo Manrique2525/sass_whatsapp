@@ -47,4 +47,21 @@ return [
 
     'failed_jobs_retention_days' => (int) env('FAILED_JOBS_RETENTION_DAYS', 30),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Lightweight Metrics Counters
+    |--------------------------------------------------------------------------
+    |
+    | FASE 31 U6 — contadores y gauges ligeros (MetricsRecorder) sobre el cache
+    | compartido (Redis en producción), claves `observability:metrics:*`.
+    |
+    | Fail-safe por diseño: si Redis falla, la métrica se descarta y se registra
+    | `metrics.failure`, pero el camino caliente (webhook/envío) nunca se bloquea.
+    |
+    | Se desactiva globalmente poniendo `OBSERVABILITY_METRICS_ENABLED=false`.
+    |
+    */
+
+    'metrics_enabled' => env('OBSERVABILITY_METRICS_ENABLED', true) !== 'false',
+
 ];

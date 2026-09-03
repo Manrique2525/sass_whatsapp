@@ -18,6 +18,7 @@ use App\Domain\WhatsApp\ValueObjects\MessageSendResult;
 use App\Domain\WhatsApp\ValueObjects\PhoneNumberInfo;
 use App\Domain\WhatsApp\ValueObjects\TemplateInfo;
 use App\Infrastructure\Logging\SafeLogContext;
+use App\Infrastructure\Observability\MetricsRecorder;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
@@ -48,6 +49,7 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
         private readonly int $timeout = 10,
         private readonly SecureDownloader $downloader = new SecureDownloader,
         private readonly int $maxTemplatePages = 20,
+        private readonly ?MetricsRecorder $metrics = null,
     ) {}
 
     /**
@@ -57,7 +59,7 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
     {
         $this->assertIdentifiers($accessToken, $phoneId);
 
-        $response = $this->http(fn (): Response => $this->client($accessToken)->post("/{$phoneId}/messages", [
+        $response = $this->http('send_text', fn (): Response => $this->client($accessToken)->post("/{$phoneId}/messages", [
             'messaging_product' => 'whatsapp',
             'recipient_type' => 'individual',
             'to' => $to,
@@ -90,7 +92,7 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
             ];
         }
 
-        $response = $this->http(fn (): Response => $this->client($accessToken)->post("/{$phoneId}/messages", [
+        $response = $this->http('send_template', fn (): Response => $this->client($accessToken)->post("/{$phoneId}/messages", [
             'messaging_product' => 'whatsapp',
             'recipient_type' => 'individual',
             'to' => $to,
@@ -115,7 +117,7 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
             $image['caption'] = $caption;
         }
 
-        $response = $this->http(fn (): Response => $this->client($accessToken)->post("/{$phoneId}/messages", [
+        $response = $this->http('send_image', fn (): Response => $this->client($accessToken)->post("/{$phoneId}/messages", [
             'messaging_product' => 'whatsapp',
             'recipient_type' => 'individual',
             'to' => $to,
@@ -136,7 +138,7 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
             $document['filename'] = $filename;
         }
 
-        $response = $this->http(fn (): Response => $this->client($accessToken)->post("/{$phoneId}/messages", [
+        $response = $this->http('send_document', fn (): Response => $this->client($accessToken)->post("/{$phoneId}/messages", [
             'messaging_product' => 'whatsapp',
             'recipient_type' => 'individual',
             'to' => $to,
@@ -151,7 +153,7 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
     {
         $this->assertIdentifiers($accessToken, $phoneId);
 
-        $response = $this->http(fn (): Response => $this->client($accessToken)->post("/{$phoneId}/messages", [
+        $response = $this->http('send_interactive', fn (): Response => $this->client($accessToken)->post("/{$phoneId}/messages", [
             'messaging_product' => 'whatsapp',
             'recipient_type' => 'individual',
             'to' => $to,
@@ -166,7 +168,7 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
     {
         $this->assertIdentifiers($accessToken, $phoneId);
 
-        $this->http(fn (): Response => $this->client($accessToken)->post("/{$phoneId}/messages", [
+        $this->http('mark_as_read', fn (): Response => $this->client($accessToken)->post("/{$phoneId}/messages", [
             'messaging_product' => 'whatsapp',
             'status' => 'read',
             'message_id' => $messageId,
@@ -177,7 +179,7 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
     {
         $this->assertIdentifiers($accessToken, $phoneId);
 
-        $response = $this->http(fn (): Response => $this->client($accessToken)->get("/{$phoneId}", [
+        $response = $this->http('get_phone_info', fn (): Response => $this->client($accessToken)->get("/{$phoneId}", [
             'fields' => 'verified_name,display_phone_number,quality_rating,status',
         ]));
 
@@ -200,7 +202,7 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
     {
         $this->assertIdentifiers($accessToken, $mediaId);
 
-        $response = $this->http(fn (): Response => $this->client($accessToken)->get("/{$mediaId}", [
+        $response = $this->http('get_media_metadata', fn (): Response => $this->client($accessToken)->get("/{$mediaId}", [
             'fields' => 'url,mime_type,sha256,file_size,filename,id',
         ]));
 
@@ -251,7 +253,7 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
                 $params['after'] = $after;
             }
 
-            $response = $this->http(fn (): Response => $this->client($accessToken)->get("/{$wabaId}/message_templates", $params));
+            $response = $this->http('list_templates', fn (): Response => $this->client($accessToken)->get("/{$wabaId}/message_templates", $params));
 
             if (! $response->successful()) {
                 throw $this->messageException($response, 'No se pudo sincronizar el catálogo de plantillas.');
@@ -286,7 +288,7 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
     {
         $this->assertIdentifier($accessToken, $wabaId);
 
-        $response = $this->http(fn (): Response => $this->client($accessToken)->post("/{$wabaId}/subscribed_apps"));
+        $response = $this->http('subscribe_webhooks', fn (): Response => $this->client($accessToken)->post("/{$wabaId}/subscribed_apps"));
 
         return $response->successful();
     }
@@ -295,7 +297,7 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
     {
         $this->assertIdentifier($accessToken, $wabaId);
 
-        $response = $this->http(fn (): Response => $this->client($accessToken)->delete("/{$wabaId}/subscribed_apps"));
+        $response = $this->http('unsubscribe_webhooks', fn (): Response => $this->client($accessToken)->delete("/{$wabaId}/subscribed_apps"));
 
         return $response->successful();
     }
@@ -349,16 +351,29 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
      * Ejecuta la llamada HTTP traduciendo errores de conexión/timeout a
      * `WhatsAppMessageFailedException` transitoria (reintentable).
      *
+     * Registra métricas ligeras de latencia y clase de resultado para el
+     * provider. `$operation` no se deriva del entorno: cada llamada indica su
+     * operación de dominio (send_text, template, media, etc.).
+     *
+     * @param  string  $operation  nombre canónico (ver MetricsRecorder)
      * @param  callable(): Response  $callable
      */
-    private function http(callable $callable): Response
+    private function http(string $operation, callable $callable): Response
     {
+        $startedAt = hrtime(true);
+
         try {
-            return $callable();
+            $response = $callable();
+
+            $this->recordMetrics($operation, 'success', max(0.0, hrtime(true) - $startedAt));
+
+            return $response;
         } catch (ConnectionException $e) {
             Log::warning('whatsapp.meta_connection_error', [
                 'error' => $e->getMessage(),
             ]);
+
+            $this->recordMetrics($operation, 'connection_error', max(0.0, hrtime(true) - $startedAt));
 
             throw new WhatsAppMessageFailedException(
                 'Error de conexión con Meta.',
@@ -367,6 +382,23 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
                 true,
             );
         }
+    }
+
+    /**
+     * Registra latencia + contador por clase de resultado del provider.
+     *
+     * @param  string  $result  success|connection_error
+     */
+    private function recordMetrics(string $operation, string $result, float $seconds): void
+    {
+        if ($this->metrics === null) {
+            return;
+        }
+
+        $this->metrics->increment('whatsapp.provider.requests');
+        $this->metrics->increment('whatsapp.provider.'.$operation);
+        $this->metrics->increment('whatsapp.provider.'.$operation.'.'.$result);
+        $this->metrics->latency('whatsapp.provider.duration_'.$operation, $seconds);
     }
 
     /**

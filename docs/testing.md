@@ -89,6 +89,27 @@ No migration (state lives in `messages.metadata`).
 `tests/Feature/WhatsApp tests/Unit/WhatsApp` runs **110 tests / 280 assertions** (includes the FASE 31
 WhatsApp suite).
 
+## FASE 31 U6 - Operations, Observability & Production Readiness
+
+- **OperationsU6Test** (`tests/Feature/Operations/OperationsU6Test.php`, 17 tests):
+  - **U6-METRIC-01..04**: `MetricsRecorder` increments/gauges registers under `observability:metrics:*`; is
+    fail-safe (a Redis failure never throws) and config-gated (`observability.metrics_enabled=false` records
+    nothing); provider operation metrics update on success and connection error with duration.
+  - **U6-REPLAY-01..08**: `whatsapp/webhook-events/queue` counts only eligible events; `replay` re-enqueues
+    `failed` and `received` (over `Queue::fake()` because a synchronous dispatch would finalize to `processed`);
+    **never** `processed`/`enqueued`; a `failed` event with a missing `phone_number_id` re-fails
+    (`unknown_phone_number_id`) without re-enqueuing; authorization (non-member → 404, agent → 403, owner/admin
+    → 200) and tenant scoping (a B event is never touched by A); audit `whatsapp.webhook.replayed`.
+  - **U6-PHONE-01..04**: phone health persists `quality_rating`/`verified_name` and **never** writes `status`;
+    `409 WHATSAPP_NOT_CONNECTED` when no connected account; network failure is reported `degraded`
+    (fail-safe, no throw); owner/admin-only with tenant isolation; audit `whatsapp.phone.health.check`.
+  - **U6-READY-01**: `GET /health` and `GET /ready` work with the FASE 28 contract preserved and no dependency
+    on Meta.
+
+`tests/Feature/Operations/OperationsU6Test.php tests/Feature/Jobs/WhatsAppJobHardeningTest.php tests/Feature/Security`
+runs the FASE 31 U6-related suites green (125 WhatsApp job + 16 security + 17 operations). Metrics counters are
+Redis-backed (`MetricsRecorder`); provider HTTP is mocked via `Http::fake()` — no real Meta calls.
+
 ## CI Foundation (FASE 30 U5-A)
 
 GitHub Actions is the CI provider. The foundation workflow is

@@ -18,6 +18,7 @@ use App\Domain\Tenants\Models\Tenant;
 use App\Domain\WhatsApp\Enums\WebhookEventStatus;
 use App\Domain\WhatsApp\Enums\WebhookEventType;
 use App\Domain\WhatsApp\Models\WebhookEvent;
+use App\Infrastructure\Observability\MetricsRecorder;
 use App\Jobs\Concerns\TenantAwareJob;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -81,6 +82,8 @@ final class ProcessIncomingWhatsAppMessage implements ShouldQueue
         $tenant = Tenant::query()->find($event->tenant_id);
 
         if ($tenant === null) {
+            $this->recordTerminalMetric($event, 'tenant_not_found');
+
             $event->markFailed('tenant_not_found');
 
             return;
@@ -89,6 +92,8 @@ final class ProcessIncomingWhatsAppMessage implements ShouldQueue
         $data = $event->payload['data'] ?? null;
 
         if (! is_array($data)) {
+            $this->recordTerminalMetric($event, 'invalid_payload');
+
             $event->markFailed('invalid_payload');
 
             return;
@@ -98,6 +103,8 @@ final class ProcessIncomingWhatsAppMessage implements ShouldQueue
             $normalized = NormalizedInboundMessage::fromProvider($data);
 
             if ($normalized === null) {
+                $this->recordTerminalMetric($event, 'invalid_inbound_message');
+
                 $event->markFailed('invalid_inbound_message');
 
                 return;
@@ -105,6 +112,8 @@ final class ProcessIncomingWhatsAppMessage implements ShouldQueue
 
             $result = app(MessageService::class)->handleInboundMessage($tenant, $normalized);
         } catch (UnsupportedMessageTypeException) {
+            $this->recordTerminalMetric($event, 'unsupported_message_type');
+
             $event->markFailed('unsupported_message_type');
 
             return;
@@ -113,10 +122,14 @@ final class ProcessIncomingWhatsAppMessage implements ShouldQueue
                 throw $exception;
             }
 
+            $this->recordTerminalMetric($event, 'contact_quota_exceeded');
+
             $event->markFailed('contact_quota_exceeded');
 
             return;
         } catch (SubscriptionNotFoundException|SubscriptionNotActiveException) {
+            $this->recordTerminalMetric($event, 'subscription_not_available');
+
             $event->markFailed('subscription_not_available');
 
             return;
@@ -141,5 +154,26 @@ final class ProcessIncomingWhatsAppMessage implements ShouldQueue
         }
 
         $event->markProcessed();
+
+        $this->recordTerminalMetric($event, 'processed');
+    }
+
+    /**
+     * Registra métricas de estado terminal del evento (fail-safe).
+     *
+     * @param  string  $outcome  processed|failed:<reason>
+     */
+    private function recordTerminalMetric(WebhookEvent $event, string $outcome): void
+    {
+        $metrics = app(MetricsRecorder::class);
+
+        if ($outcome === 'processed') {
+            $metrics->increment('whatsapp.webhook.processed');
+
+            return;
+        }
+
+        $metrics->increment('whatsapp.webhook.failed');
+        $metrics->increment('whatsapp.webhook.failed.'.$outcome);
     }
 }

@@ -342,3 +342,21 @@ webhook. Ninguna rotación de producción se ejecuta en U1.
 - Tests: `tests/Feature/WhatsApp/MediaPipelineTest.php` (MEDIA-1..6), `tests/Feature/WhatsApp/TemplateTest.php`
   (TEMPLATE-1..8), `tests/Unit/WhatsApp/SsrUrlGuardTest.php` (SSRF-1..5),
   `tests/Unit/WhatsApp/TemplateVariableValidatorTest.php` (VARS-1..6). Ver `testing.md`.
+
+## 14. Operations & Observability (FASE 31 U6, ADR-122)
+
+- **Métricas ligeras**: `MetricsRecorder` (Redis, `observability:metrics:*`, fail-safe y desactivable con
+  `OBSERVABILITY_METRICS_ENABLED=false`). El provider registra resultado/duración de cada operación
+  (`whatsapp.provider.{op}.*`); webhook (`whatsapp.webhook.*`) y delivery (`whatsapp.outbound.delivery.*`) registran en
+  jobs. Sin alta cardinalidad (nunca wamid/phone/tenant en la clave).
+- **Replay operator**: `GET .../whatsapp/webhook-events/queue` (count) y `POST .../whatsapp/webhook-events/replay`
+  (owner/admin). `WhatsAppWebhookService::replayEvent` re-encola `failed`/`received`, NUNCA `processed`/`enqueued`.
+  Auditoría `whatsapp.webhook.replayed`.
+- **Phone health**: `POST .../whatsapp/phone-health` (owner/admin) — lee info del provider fail-safe, persiste
+  `quality_rating`/`verified_name` y NUNCA muta `status`. 409 si no hay cuenta conectada. Auditoría
+  `whatsapp.phone.health.check`.
+- **Failed jobs PII-safe**: `php artisan queue:failed-summary` (agrega por queue, no lee payload).
+- Operación de producción documentada en `docs/runbooks.md` (replay, phone health, rotación de tokens/app secret/verify
+  token, verificación de webhook, smoke tests de webhook y envío). Nada de esto se ejecuta en este entorno.
+- Tests: `tests/Feature/Operations/OperationsU6Test.php` (U6-METRIC-01..04, U6-REPLAY-01..08, U6-PHONE-01..04,
+  U6-READY-01).

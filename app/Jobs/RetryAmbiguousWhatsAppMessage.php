@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Application\Audit\Services\AuditLogger;
 use App\Domain\Messages\Enums\MessageStatus;
 use App\Domain\Messages\Models\Message;
 use App\Jobs\Concerns\TenantAwareJob;
@@ -55,6 +56,18 @@ final class RetryAmbiguousWhatsAppMessage implements ShouldQueue
                     'replay_requested_at' => now()->toIso8601String(),
                 ]),
             ])->save();
+
+            app(AuditLogger::class)->record(
+                action: 'message.delivery_replayed',
+                data: [
+                    'tenant_id' => $this->tenantId,
+                    'conversation_id' => $this->conversationId,
+                    'message_id' => $this->messageId,
+                ],
+                subjectType: Message::class,
+                subjectId: $this->messageId,
+                tenantId: $this->tenantId,
+            );
 
             return true;
         });

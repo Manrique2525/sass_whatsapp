@@ -31,7 +31,9 @@ use App\Http\Controllers\Api\V1\TenantController;
 use App\Http\Controllers\Api\V1\TriggerController;
 use App\Http\Controllers\Api\V1\UsageController;
 use App\Http\Controllers\Api\V1\WhatsAppController;
+use App\Http\Controllers\Api\V1\WhatsAppPhoneHealthController;
 use App\Http\Controllers\Api\V1\WhatsAppTemplateController;
+use App\Http\Controllers\Api\V1\WhatsAppWebhookReplayController;
 use App\Http\Controllers\Api\Webhooks\FlowWebhookController;
 use App\Http\Controllers\Api\Webhooks\StripeWebhookController;
 use App\Http\Controllers\Api\Webhooks\WhatsAppWebhookController;
@@ -145,6 +147,13 @@ Route::prefix('v1')->group(function (): void {
                 Route::get('{tenant}/whatsapp/templates', [WhatsAppTemplateController::class, 'index']);
                 Route::post('{tenant}/whatsapp/accounts/{account}/templates/sync', [WhatsAppTemplateController::class, 'sync']);
                 Route::get('{tenant}/whatsapp/media/{media}/download', [MessageMediaController::class, 'download']);
+
+                // FASE 31 U6 — replay operator de webhooks failed/received (owner/admin).
+                Route::get('{tenant}/whatsapp/webhook-events/queue', [WhatsAppWebhookReplayController::class, 'count']);
+                Route::post('{tenant}/whatsapp/webhook-events/replay', [WhatsAppWebhookReplayController::class, 'replayFailed']);
+
+                // FASE 31 U6 — salud de números (owner/admin; no desconecta).
+                Route::post('{tenant}/whatsapp/phone-health', [WhatsAppPhoneHealthController::class, 'check']);
 
                 // FASE 11 — chatbots, flujos y triggers.
                 Route::get('{tenant}/chatbots', [ChatbotController::class, 'index']);

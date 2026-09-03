@@ -3656,3 +3656,37 @@ una pantalla de upload/search en el frontend.
     filtrado por `tenant_id` y devuelve 404 ante cualquier desajuste; nunca expone `storage_disk`/`storage_path`.
   - Los fallos de política son terminales con código seguro (nunca body crudo ni contenido); solo errores transitorios
     reintentan. Sin implementación real se marca `TODO` con explicación; nunca `return true;` ni arrays vacíos.
+
+## ADR-122 - FASE 31 U6 operations, observability and production readiness
+
+- **Estado**: Aceptado - FASE 31 U6 (local)
+- **Contexto**: La integración Meta/WhatsApp (U1-U5) dejó que el operador necesitaba procedimientos y señales para
+  operar en producción: reproceso de webhooks fallidos/atascados, salud por número, métricas ligeras y seguridad de
+  tokens/vera. Queda prohibido ejecutar operaciones reales de Meta en este entorno; todo es local/gateado.
+- **Decisión**:
+  1. **Métricas**: se añade `MetricsRecorder` (Redis), fail-safe y config-gated (`observability.metrics_enabled`,
+     env `OBSERVABILITY_METRICS_ENABLED`, default `true`). Claves fijas `observability:metrics:*` con prefijos de domino
+     (`whatsapp.webhook.*`, `whatsapp.provider.{op}.*`, `whatsapp.outbound.delivery.*`, `whatsapp.phone.health.rating.*`).
+     NO hay alta cardinalidad (sin wamids/phones/tenants en las claves) y NO sustituye Prometheus/OTel/dashboards.
+     El provider registra vía `http(operation, callable)` con la duración de cada operación.
+  2. **Replay operator**: `WhatsAppWebhookReplayService` expone conteo (`queue`) y replay (`replay`) con autorización
+     `ManageWhatsApp` (owner/admin); `WhatsAppWebhookService::replayEvent` re-encola `failed`/`received` atómicamente
+     NUNCA `processed`/`enqueued`. El query del servicio filtra SIEMPRE por `tenant_id` (tabla plataforma sin
+     BelongsToTenant). Cada re-encolado audita `whatsapp.webhook.replayed`.
+  3. **Phone health**: `WhatsAppPhoneHealthService::check` lanza `WhatsAppNotConnectedHealthException` (409) si no hay
+     cuenta conectada, lee la info del provider fail-safe, persiste SOLO columnas informativas (`quality_rating`,
+     `verified_name`) y NUNCA muta `status` (que gobierna la elegibilidad de envío). Audita
+     `whatsapp.phone.health.check`.
+  4. **Failed jobs PII-safe**: `queue:failed-summary` agrega por queue sin leer `payload` (PII) y reporta recientes
+     según `observability.failed_jobs_retention_days` (30).
+  5. **Audit replay outbound**: `RetryAmbiguousWhatsAppMessage` audita `message.delivery_replayed` dentro de la
+     transacción de replay (única vía explícita; el estado ambiguo queda `sending` y no se re-envía automáticamente).
+  6. **Runbooks**: se documenta todo lo operator/seguridad en `docs/runbooks.md` (webhook replay, phone health, failed
+     jobs, rotación de token/app secret/verify token, verificación de webhook, smoke tests de webhook y envío) y se
+     actualiza `docs/observability.md`. Nada se ejecuta en este entorno.
+- **Consecuencias**:
+  - Los endpoints `whatsapp/webhook-events/queue`, `whatsapp/webhook-events/replay` y `whatsapp/phone-health` son de
+    operador (owner/admin); un agente sin rol recibe 403 y un no-miembro 404 (aislamiento tenant).
+  - El replay nunca re-encola eventos procesados y un `failed` cuyo `phone_number_id` ya no existe re-falla con `unknown_phone_number_id`
+    sin producir retry storm.
+  - Rotación de tokens sin dual-secret simultáneo: exige ventana de mantenimiento coordinada (ver `docs/runbooks.md` §4).

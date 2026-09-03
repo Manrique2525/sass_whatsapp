@@ -10,6 +10,7 @@ use App\Domain\Tenants\Models\Tenant;
 use App\Domain\WhatsApp\Enums\WebhookEventStatus;
 use App\Domain\WhatsApp\Enums\WebhookEventType;
 use App\Domain\WhatsApp\Models\WebhookEvent;
+use App\Infrastructure\Observability\MetricsRecorder;
 use App\Jobs\Concerns\TenantAwareJob;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -65,6 +66,8 @@ final class ProcessWhatsAppStatusUpdate implements ShouldQueue
         $tenant = Tenant::query()->find($event->tenant_id);
 
         if ($tenant === null) {
+            $this->recordTerminalMetric('tenant_not_found');
+
             $event->markFailed('tenant_not_found');
 
             return;
@@ -81,6 +84,8 @@ final class ProcessWhatsAppStatusUpdate implements ShouldQueue
         }
 
         $event->markProcessed();
+
+        $this->recordTerminalMetric('processed');
     }
 
     public function failed(?Throwable $exception): void
@@ -91,6 +96,27 @@ final class ProcessWhatsAppStatusUpdate implements ShouldQueue
             return;
         }
 
+        $this->recordTerminalMetric('job_exhausted');
+
         $event->markFailed('job_exhausted');
+    }
+
+    /**
+     * Registra métricas de estado terminal del evento (fail-safe).
+     *
+     * @param  string  $outcome  processed|failed:<reason>
+     */
+    private function recordTerminalMetric(string $outcome): void
+    {
+        $metrics = app(MetricsRecorder::class);
+
+        if ($outcome === 'processed') {
+            $metrics->increment('whatsapp.webhook.processed');
+
+            return;
+        }
+
+        $metrics->increment('whatsapp.webhook.failed');
+        $metrics->increment('whatsapp.webhook.failed.'.$outcome);
     }
 }

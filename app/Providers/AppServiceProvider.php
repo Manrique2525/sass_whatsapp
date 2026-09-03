@@ -35,6 +35,7 @@ use App\Events\InboxConversationChanged;
 use App\Infrastructure\AI\OpenAIEmbeddingProvider;
 use App\Infrastructure\AI\OpenAIProvider;
 use App\Infrastructure\Billing\StripeProvider;
+use App\Infrastructure\Observability\MetricsRecorder;
 use App\Infrastructure\WhatsApp\MetaWhatsAppProvider;
 use App\Listeners\DispatchTagTriggerJob;
 use App\Policies\TenantPolicy;
@@ -55,6 +56,8 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->singleton(ConversationLockContext::class);
 
+        $this->app->singleton(MetricsRecorder::class);
+
         $this->app->bind(WhatsAppProviderInterface::class, function (): MetaWhatsAppProvider {
             return new MetaWhatsAppProvider(
                 graphUrl: (string) config('whatsapp.graph_url'),
@@ -63,6 +66,7 @@ class AppServiceProvider extends ServiceProvider
                 verifyToken: (string) config('whatsapp.verify_token'),
                 connectTimeout: (int) config('whatsapp.connect_timeout'),
                 timeout: (int) config('whatsapp.timeout'),
+                metrics: $this->app->make(MetricsRecorder::class),
             );
         });
 

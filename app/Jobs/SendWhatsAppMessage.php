@@ -26,6 +26,7 @@ use App\Domain\WhatsApp\Models\MessageSendAttempt;
 use App\Domain\WhatsApp\Models\WhatsAppPhoneNumber;
 use App\Domain\WhatsApp\ValueObjects\MessageSendResult;
 use App\Events\MessageStatusUpdated;
+use App\Infrastructure\Observability\MetricsRecorder;
 use App\Infrastructure\Tenancy\TenantContext;
 use App\Jobs\Concerns\TenantAwareJob;
 use Illuminate\Contracts\Cache\LockTimeoutException;
@@ -316,6 +317,8 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
                     tenantId: $this->tenantId,
                 );
 
+                $this->recordDeliveryOutcome('ambiguous', 'provider_transport');
+
                 return;
             }
 
@@ -333,6 +336,8 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
             if ($reservation !== null) {
                 app(UsageGuardInterface::class)->release($reservation);
             }
+
+            $this->recordDeliveryOutcome('failed', (string) $e->errorCode()->value);
 
             return;
         }
@@ -368,6 +373,8 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
         );
 
         event(new MessageStatusUpdated($message, $previous));
+
+        $this->recordDeliveryOutcome('sent');
     }
 
     public function failed(?Throwable $exception): void
@@ -399,12 +406,25 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
                     'error_source' => 'internal',
                 ],
             );
+
+            $this->recordDeliveryOutcome('failed', 'job_exhausted');
         });
     }
 
     private function providerMaxAttempts(): int
     {
         return max(1, (int) config('whatsapp.max_attempts', 3));
+    }
+
+    private function recordDeliveryOutcome(string $outcome, ?string $reason = null): void
+    {
+        $metrics = app(MetricsRecorder::class);
+        $metrics->increment('whatsapp.outbound.delivery.'.$outcome);
+        $metrics->increment('whatsapp.outbound.delivery.total');
+
+        if ($reason !== null) {
+            $metrics->increment('whatsapp.outbound.delivery.'.$outcome.'.'.$reason);
+        }
     }
 
     private function sendViaProvider(

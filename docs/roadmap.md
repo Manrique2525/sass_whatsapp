@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS)**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global)**.
 
 ## Fases
 
@@ -37,7 +37,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA
 | 28 | Observabilidad (U1: Structured Logging + Correlation IDs · U2: Backend Sentry · U3: Frontend Sentry · U4: Health Checks + Queue · U5: Alerting + Ops Docs) | COMPLETADA |
 | 29 | Testing global + cobertura (U1: Coverage Infra + Critical Gap Baseline ✅ · U2: Tenancy + Auth · U3: Billing/Concurrency/PG · U4: Jobs/Webhooks · U5: Frontend + Closure) | COMPLETADA |
 | 30 | E2E Playwright (U1: Infra + Auth + Multi-Tenancy Base · U2: Inbox · U3: Handoff · U4: Flow Builder + Billing + Knowledge integration · U5: CI foundation/static/frontend/backend/PostgreSQL integration) | EN PROGRESO |
-| 31 | Testing de webhooks (mocks Meta) | PENDIENTE |
+| 31 | Meta / WhatsApp Cloud API (U1: Provider + config hardening · U2: Webhook authenticity + durable ingestion · U3: Inbound normalization + monotonic status · U4: Outbound delivery ambiguity + care window · U5: Secure media + approved templates · U6: Operations, Observability & Production Readiness) | COMPLETA LOCALMENTE (pendiente revisión) |
 | 32 | Testing de fallbacks | PENDIENTE |
 | 33 | Performance | PENDIENTE |
 | 34 | DevOps (Docker, CI/CD) | PENDIENTE |
@@ -3257,7 +3257,7 @@ FIRST REQUEST WARMUP** — no wait-condition flaky ni assets. Timeouts justifica
 - Cierre validado: provider boundaries, E2E `27/27`, colas limpias, lint, PHPStan, frontend, backend, PostgreSQL,
   audits y build; commit local unico preparado sin push.
 
-## FASE 31 - Meta / WhatsApp Cloud API (EN PROGRESO)
+## FASE 31 - Meta / WhatsApp Cloud API (COMPLETA LOCALMENTE; pendiente revisión global)
 
 ### U1 - Meta provider and configuration hardening · COMPLETADA LOCALMENTE
 
@@ -3311,4 +3311,26 @@ U2 no modifica reconciliación outbound, ventana de 24 horas, media binaria, tem
   (`MessageService::indexForUser`) y el reproceso desordenado del sweeper (`WhatsAppReprocessWebhookEvents`) comparten el
   mismo riesgo en PostgreSQL; NO se tocan en U5.
 
-U5 queda COMPLETADA LOCALMENTE. U6 (billing/aceleradores reales + cierre) queda NO INICIADA.
+### U6 - Operations, Observability & Production Readiness · COMPLETADA LOCALMENTE
+
+- **Métricas ligeras**: `Infrastructure/Observability/MetricsRecorder` (Redis, claves `observability:metrics:*`,
+  fail-safe, config-gated `OBSERVABILITY_METRICS_ENABLED`). Provider con `http(operation, callable)` + `recordMetrics`
+  (request/result/duración por operación); métricas de delivery outbound (`sent`/`ambiguous`/`failed.{code}`) y de
+  webhook (`received`/`duplicate`/`enqueued`/`processed`/`failed.{reason}`). Sin alta cardinalidad; sin Prometheus/OTel.
+- **Replay operator**: `WhatsAppWebhookReplayService` (count `queue` + `replayFailed`) con autorización `ManageWhatsApp`;
+  `WhatsAppWebhookService::replayEvent` re-encola `failed`/`received` atómicamente NUNCA `processed`/`enqueued`.
+  Endpoints `GET/POST /api/v1/tenants/{tenant}/whatsapp/webhook-events/queue|replay`. Auditoría `whatsapp.webhook.replayed`.
+- **Phone health**: `WhatsAppPhoneHealthService::check` (409 si no conectado), persiste `quality_rating`/`verified_name`
+  y NUNCA muta `status`. Endpoint `POST /api/v1/tenants/{tenant}/whatsapp/phone-health`. Auditoría
+  `whatsapp.phone.health.check`. Ver ADR-122.
+- **PII-safe failed jobs**: `queue:failed-summary` (agrega por queue, no lee payload). Ver `docs/runbooks.md`.
+- **Runbooks/security matrix/CI mapping**: `docs/runbooks.md` (replay, phone health, failed jobs, rotación de
+  token/app secret/verify token, verificación webhook, smoke tests webhook/envío) y actualización de
+  `docs/observability.md`, `docs/whatsapp.md`, `docs/testing.md`, `docs/decisions.md` (ADR-122). Nada se ejecuta en este
+  entorno; es documentación de producción.
+- **Tests**: `tests/Feature/Operations/OperationsU6Test.php` (17 tests). Gates verdes (pest/pint/phpstan/typecheck/build).
+
+FASE 31 queda **COMPLETA LOCALMENTE** (U1-U6). Nada de esto se ejecuta contra producción; requiere revisión y
+aprobación antes de considerar FASE 31 completada globalmente. U6 NO inicia FASE 32 ni ejecuta llamadas reales a Meta.
+(Nota histórica: la especificación original describía U6 como "billing/aceleradores reales + cierre"; aquí U6 se
+consolida como la fase de Operations, Observability & Production Readiness siguiendo el reporte de FASE 31.)

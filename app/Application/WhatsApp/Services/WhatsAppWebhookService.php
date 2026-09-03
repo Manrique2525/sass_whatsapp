@@ -11,6 +11,7 @@ use App\Domain\WhatsApp\Exceptions\WhatsAppWebhookInvalidException;
 use App\Domain\WhatsApp\Exceptions\WhatsAppWebhookSignatureInvalidException;
 use App\Domain\WhatsApp\Models\WebhookEvent;
 use App\Domain\WhatsApp\Models\WhatsAppPhoneNumber;
+use App\Infrastructure\Observability\MetricsRecorder;
 use App\Jobs\ProcessIncomingWhatsAppMessage;
 use App\Jobs\ProcessWhatsAppStatusUpdate;
 use Illuminate\Http\Request;
@@ -34,7 +35,10 @@ use Throwable;
  */
 final class WhatsAppWebhookService
 {
-    public function __construct(private readonly WhatsAppProviderInterface $provider) {}
+    public function __construct(
+        private readonly WhatsAppProviderInterface $provider,
+        private readonly ?MetricsRecorder $metrics = null,
+    ) {}
 
     /**
      * Verificación GET de Meta. Devuelve el challenge a repetir o null si el
@@ -179,11 +183,16 @@ final class WhatsAppWebhookService
 
             Log::info('whatsapp.webhook_duplicate', ['provider_event_id' => $providerEventId]);
 
+            $this->note('received');
+            $this->note('duplicate');
+
             return;
         }
 
         /** @var WebhookEvent $event */
         $event = WebhookEvent::query()->where('provider_event_id', $providerEventId)->firstOrFail();
+
+        $this->note('received');
 
         $this->resolveAndEnqueue($event, $phoneNumberId);
     }
@@ -209,12 +218,64 @@ final class WhatsAppWebhookService
         $this->resolveAndEnqueue($event, $phoneNumberId);
     }
 
+    /**
+     * Replay operator explícito (FASE 31 U6).
+     *
+     * Re-encola un evento terminal `failed` o un `received` que quedó atascado,
+     * reutilizando la misma resolución de tenant + encolado idempotente. Los
+     * eventos `processed`/`enqueued` NO son elegibles (evita doble trabajo).
+     *
+     * Para un `failed`, se restablece a `received` de forma atómica con la misma
+     * guarda de estado que la ingesta, para que un replay concurrente con otro
+     * no despache dos veces.
+     *
+     * @return bool true si el evento se restableció/encoló; false si no era
+     *              elegible o un concurrente lo tomó primero.
+     */
+    public function replayEvent(WebhookEvent $event): bool
+    {
+        if ($event->status !== WebhookEventStatus::Failed
+            && $event->status !== WebhookEventStatus::Received) {
+            return false;
+        }
+
+        $payload = $event->payload;
+
+        if ($event->status === WebhookEventStatus::Failed) {
+            $reset = WebhookEvent::query()
+                ->whereKey($event->id)
+                ->where('status', WebhookEventStatus::Failed->value)
+                ->update([
+                    'status' => WebhookEventStatus::Received,
+                    'error_code' => null,
+                    'processed_at' => null,
+                    'updated_at' => now(),
+                ]);
+
+            if ($reset === 0) {
+                return false;
+            }
+
+            $event->refresh();
+        }
+
+        $phoneNumberId = is_array($payload) && isset($payload['phone_number_id']) && is_scalar($payload['phone_number_id'])
+            ? (string) $payload['phone_number_id']
+            : null;
+
+        $this->resolveAndEnqueue($event, $phoneNumberId);
+
+        return $event->refresh()->status === WebhookEventStatus::Enqueued;
+    }
+
     private function resolveAndEnqueue(WebhookEvent $event, ?string $phoneNumberId): void
     {
         if ($phoneNumberId === null || $phoneNumberId === '') {
             $event->markFailed('missing_phone_number_id');
 
             Log::warning('whatsapp.webhook_missing_phone_number_id', ['provider_event_id' => $event->provider_event_id]);
+
+            $this->note('failed', 'missing_phone_number_id');
 
             return;
         }
@@ -232,6 +293,8 @@ final class WhatsAppWebhookService
                 'phone_number_id' => $phoneNumberId,
             ]);
 
+            $this->note('failed', 'unknown_phone_number_id');
+
             return;
         }
 
@@ -247,6 +310,8 @@ final class WhatsAppWebhookService
         if ($updated === 0) {
             return;
         }
+
+        $this->note('enqueued');
 
         $type = $event->event_type;
 
@@ -277,6 +342,27 @@ final class WhatsAppWebhookService
                 'tenant_id' => $phone->tenant_id,
                 'exception' => $exception::class,
             ]);
+
+            $this->note('dispatch_failed');
+        }
+    }
+
+    /**
+     * Registra un contador de observabilidad webhook (fail-safe).
+     *
+     * @param  string  $bucket  received|duplicate|enqueued|failed|dispatch_failed
+     * @param  ?string  $detail  matiz opcional (p. ej. código de fallo)
+     */
+    private function note(string $bucket, ?string $detail = null): void
+    {
+        if ($this->metrics === null) {
+            return;
+        }
+
+        $this->metrics->increment('whatsapp.webhook.'.$bucket);
+
+        if ($detail !== null) {
+            $this->metrics->increment('whatsapp.webhook.'.$bucket.'.'.$detail);
         }
     }
 

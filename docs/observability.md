@@ -129,6 +129,32 @@ See [Incident Response](incident-response.md) for severity model and alert confi
 | Provider timeout/error spike | P2 | Sentry fingerprint |
 | Security auth failure spike | P2 | AuditLog + Sentry |
 
+### 9. Lightweight Metrics Counters (FASE 31 U6)
+
+A thin Redis-backed counter/gauge layer for operations signals, provided by
+`app/Infrastructure/Observability/MetricsRecorder.php`. It deliberately does **not**
+replace a metrics backend (Prometheus/OTel/dashboards remain deferred — see below);
+it records fixed-domain counters that runbooks/dashboards can consume by reading
+the Redis keys `observability:metrics:*`.
+
+| Operation | Counter key prefix |
+|---|---|
+| Webhook ingestion | `whatsapp.webhook.received` / `duplicate` / `enqueued` / `failed.*` / `dispatch_failed` |
+| Webhook processing | `whatsapp.webhook.processed` / `failed.{reason}` |
+| Provider HTTP | `whatsapp.provider.{op}` / `whatsapp.provider.{op}.{success\|connection_error}` / `whatsapp.provider.duration_{op}` |
+| Outbound delivery | `whatsapp.outbound.delivery.total` / `sent` / `ambiguous` / `failed.{code}` |
+| Phone health | `whatsapp.phone.health.rating.{key}` |
+
+**Design rules** (enforced by `MetricsRecorder`):
+- **Fail-safe**: a Redis failure logs `metrics.failure` and never blocks the hot path.
+- **No high cardinality**: metric keys are fixed and domain-level — never phone numbers,
+  wamids, or tenant/message UUIDs.
+- **Config-gated**: `observability.metrics_enabled` (env `OBSERVABILITY_METRICS_ENABLED`,
+  default `true`). Disable globally to stop recording.
+
+Fail-safe behavior matches the existing guarantees in this doc: telemetry never
+blocks the product.
+
 ## Privacy Commitments
 
 - No PII in telemetry (phone, email, message content, AI prompts, auth headers)
@@ -151,6 +177,7 @@ See [Incident Response](incident-response.md) for severity model and alert confi
 | `SCHEDULER_HEARTBEAT_MAX_AGE` | `120` | Seconds before stale heartbeat |
 | `AUDIT_LOG_RETENTION_DAYS` | `90` | Audit log purge threshold |
 | `FAILED_JOBS_RETENTION_DAYS` | `30` | Failed jobs purge threshold |
+| `OBSERVABILITY_METRICS_ENABLED` | `true` | Enable/disable lightweight metrics counters |
 
 ### Frontend (.env)
 
@@ -162,7 +189,8 @@ See [Incident Response](incident-response.md) for severity model and alert confi
 
 ## Deferred (Not in Scope)
 
-- **Metrics backend** (Prometheus, etc.)
+- **Metrics backend** (Prometheus, etc.) — U6 adds lightweight Redis counters
+  (`MetricsRecorder`), not a full metrics backend
 - **Distributed tracing** (OpenTelemetry)
 - **Dashboards** (Grafana, etc.)
 - **Source map upload** (requires secure CI pipeline)
