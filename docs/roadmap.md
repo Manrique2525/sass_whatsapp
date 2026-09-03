@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global)**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global) · FASE 32 COMPLETADA/PUBLICADA (U1: deterministic message ordering)**.
 
 ## Fases
 
@@ -38,7 +38,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA
 | 29 | Testing global + cobertura (U1: Coverage Infra + Critical Gap Baseline ✅ · U2: Tenancy + Auth · U3: Billing/Concurrency/PG · U4: Jobs/Webhooks · U5: Frontend + Closure) | COMPLETADA |
 | 30 | E2E Playwright (U1: Infra + Auth + Multi-Tenancy Base · U2: Inbox · U3: Handoff · U4: Flow Builder + Billing + Knowledge integration · U5: CI foundation/static/frontend/backend/PostgreSQL integration) | EN PROGRESO |
 | 31 | Meta / WhatsApp Cloud API (U1: Provider + config hardening · U2: Webhook authenticity + durable ingestion · U3: Inbound normalization + monotonic status · U4: Outbound delivery ambiguity + care window · U5: Secure media + approved templates · U6: Operations, Observability & Production Readiness) | COMPLETA LOCALMENTE (pendiente revisión) |
-| 32 | Testing de fallbacks | PENDIENTE |
+| 32 | Deterministic message ordering (U1: `ORDER BY created_at, id` en inbox + conversación activa + frontend realtime==reload · contract + tests) | COMPLETADA/PUBLICADA |
 | 33 | Performance | PENDIENTE |
 | 34 | DevOps (Docker, CI/CD) | PENDIENTE |
 | 35 | Documentación API (OpenAPI) | PENDIENTE |
@@ -3336,3 +3336,28 @@ FASE 31 queda **COMPLETA LOCALMENTE** (U1-U6). Nada de esto se ejecuta contra pr
 aprobación antes de considerar FASE 31 completada globalmente. U6 NO inicia FASE 32 ni ejecuta llamadas reales a Meta.
 (Nota histórica: la especificación original describía U6 como "billing/aceleradores reales + cierre"; aquí U6 se
 consolida como la fase de Operations, Observability & Production Readiness siguiendo el reporte de FASE 31.)
+
+## FASE 32 — Deterministic Message Ordering (U1) · COMPLETADA/PUBLICADA
+
+- **Alcance (U1)**: orden total determinista `ORDER BY created_at, id` para el contrato de mensajes/conversación,
+  documentado en ADR-123. `created_at` es clave cronológica visible; `id` (UUIDv7, monótono) desempata ties de la
+  misma forma en backend y frontend. Aplicado en `MessageService::indexForUser` y
+  `ConversationService::findOrCreateActiveForContact` (DESC DESC, newest-first) y en el comparador frontend
+  `compareMessagesChronologically` (`mergeIncomingMessage`: ASC ASC, reload == realtime, dedupe por `id`).
+  Sin migrations, sin schema, sin backfill: cambio de contrato/query puro. Ver ADR-123.
+- **Decisión de cierre**: NO se requiere U2.
+- **Validación (gates verdes)**: backend 2585 passed / 15 skipped / 7438 assertions / 0 failed · Flow 232 passed ·
+  PostgreSQL 185 passed · Frontend 38 files / 567 passed · typecheck PASS · build PASS · build:e2e PASS ·
+  E2E focused 8 passed · E2E full 28 passed (workers=1, retries=0, fresh setup) · PHPStan PASS · Pint PASS · diff --check PASS.
+- **Tests**: `tests/Feature/Messages/MessageApiTest.php` (MSG-API-21/22, ties de paginación), `tests/Feature/Conversations/ConversationTest.php`
+  (CONV-27), `tests/Postgres/Messages/MessageOrderingPostgresTest.php` (MESSAGE-ORDER-PG-01), `resources/js/features/messages/messageUtils.test.ts`,
+  `tests/e2e/z-realtime.spec.ts` (contrato realtime==reload).
+- **Follow-ups NON-BLOCKING (no parte de este U1)**: (1) P2 — `WhatsAppReprocessWebhookEvents::handle` ordena solo por
+  `created_at` (semanticalmente neutral por idempotencia/status monotónico); (2) P2 — ties cosméticos de listas de
+  presentación; (3) future — keyset/cursor pagination; (4) future — índice opcional
+  `(tenant_id, conversation_id, created_at, id)`. Ninguno se implementa aquí.
+- **Nota de alcance**: el ítem previamente catalogado en esta fila como "Testing de fallbacks" queda diferido fuera del
+  alcance de FASE 32 (no es parte de este cierre) y pasa a fases posteriores.
+
+U1 queda **COMPLETA + VALIDADA + PUBLICADA**. NO deploy, NO ejecución de migrations, NO configuración de Meta, NO envío
+a clientes: el push es publicación de fuente únicamente.
