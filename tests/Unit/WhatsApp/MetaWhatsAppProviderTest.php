@@ -81,8 +81,13 @@ test('WHATSAPP-U1-03: una respuesta exitosa sin provider message id falla de for
         'graph.facebook.com/*/messages' => Http::response(['messages' => []], 200),
     ]);
 
-    expect(fn (): mixed => wa_provider()->sendText('token-x', 'phone-1', '15550000001', 'Hola'))
-        ->toThrow(WhatsAppMessageFailedException::class);
+    try {
+        wa_provider()->sendText('token-x', 'phone-1', '15550000001', 'Hola');
+        $this->fail('Se esperaba WhatsAppMessageFailedException.');
+    } catch (WhatsAppMessageFailedException $e) {
+        expect($e->ambiguous())->toBeTrue()
+            ->and($e->retryable())->toBeFalse();
+    }
 });
 
 test('WHATSAPP-U1-04: el app secret vacío falla cerrado para firmas', function (): void {
@@ -250,7 +255,7 @@ test('WHATSAPP-37b: un rate limit (429) es retryable', function (): void {
     }
 });
 
-test('WHATSAPP-38: un timeout de conexión se traduce a error transitorio', function (): void {
+test('WHATSAPP-U4-01: un timeout de conexión se clasifica como resultado ambiguo y no se reintenta a ciegas', function (): void {
     Http::fake(function (Request $request): never {
         throw new ConnectionException('Connection timed out.');
     });
@@ -259,8 +264,24 @@ test('WHATSAPP-38: un timeout de conexión se traduce a error transitorio', func
         wa_provider()->sendText('token-x', 'phone-1', '15550000001', 'Hola');
         $this->fail('Se esperaba WhatsAppMessageFailedException.');
     } catch (WhatsAppMessageFailedException $e) {
-        expect($e->retryable())->toBeTrue()
+        expect($e->retryable())->toBeFalse()
+            ->and($e->ambiguous())->toBeTrue()
             ->and($e->getMessage())->toContain('conexión');
+    }
+});
+
+test('WHATSAPP-U4-02: Retry-After numérico de 429 se limita a una hora', function (): void {
+    Http::fake([
+        'graph.facebook.com/*/messages' => Http::response(['error' => ['code' => 80007]], 429, ['Retry-After' => '7200']),
+    ]);
+
+    try {
+        wa_provider()->sendText('token-x', 'phone-1', '15550000001', 'Hola');
+        $this->fail('Se esperaba WhatsAppMessageFailedException.');
+    } catch (WhatsAppMessageFailedException $e) {
+        expect($e->retryable())->toBeTrue()
+            ->and($e->ambiguous())->toBeFalse()
+            ->and($e->retryAfterSeconds())->toBe(3600);
     }
 });
 

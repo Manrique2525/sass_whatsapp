@@ -163,6 +163,10 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        if (($message->metadata['delivery_state'] ?? null) === 'ambiguous') {
+            return;
+        }
+
         $conversation = Conversation::query()
             ->withoutTenantScope()
             ->where('tenant_id', $this->tenantId)
@@ -276,11 +280,43 @@ final class SendWhatsAppMessage implements ShouldBeUnique, ShouldQueue
                 'payload' => array_merge((array) $attempt->payload, [
                     'provider_error_code' => $e->providerErrorCode(),
                     'retryable' => $e->retryable(),
+                    'classification' => $e->ambiguous() ? 'ambiguous' : ($e->retryable() ? 'transient' : 'permanent'),
+                    'retry_after_seconds' => $e->retryAfterSeconds(),
                 ]),
                 'attempted_at' => now(),
             ])->save();
 
+            if ($e->ambiguous()) {
+                $message->forceFill([
+                    'metadata' => array_merge($message->metadata ?? [], [
+                        'delivery_state' => 'ambiguous',
+                        'error_code' => 'whatsapp_delivery_ambiguous',
+                        'error_source' => 'provider_transport',
+                    ]),
+                ])->save();
+
+                app(AuditLogger::class)->record(
+                    action: 'message.delivery_ambiguous',
+                    data: [
+                        'tenant_id' => $this->tenantId,
+                        'conversation_id' => $this->conversationId,
+                        'attempt_id' => $attempt->id,
+                    ],
+                    subjectType: Message::class,
+                    subjectId: $message->id,
+                    tenantId: $this->tenantId,
+                );
+
+                return;
+            }
+
             if ($e->retryable() && $providerAttempt < $providerMaxAttempts) {
+                if ($e->retryAfterSeconds() !== null && $this->job !== null) {
+                    $this->release($e->retryAfterSeconds());
+
+                    return;
+                }
+
                 throw $e;
             }
 

@@ -20,6 +20,7 @@ use App\Jobs\SendWhatsAppMessage;
 use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Queue\Jobs\FakeJob;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -167,6 +168,30 @@ test('OUT-4: un error retryable relanza el job y deja el mensaje en sending', fu
 
     expect($attempt->status->value)->toBe('failed')
         ->and($attempt->payload['retryable'])->toBeTrue();
+});
+
+test('OUT-U4-01: una pérdida de transporte deja el mensaje ambiguo y no lo reenvía', function (): void {
+    Http::fake(function (): never {
+        throw new ConnectionException('Connection timed out.');
+    });
+
+    $tenant = Tenant::factory()->create();
+    make_whatsapp_setup($tenant);
+    $conversation = make_ready_conversation($tenant);
+
+    app(MessageService::class)->createOutbound($tenant, $conversation, 'Hola cliente');
+
+    $message = Message::query()->withoutTenantScope()->where('tenant_id', $tenant->id)->firstOrFail();
+    $attempt = MessageSendAttempt::query()->withoutTenantScope()->where('tenant_id', $tenant->id)->firstOrFail();
+
+    expect($message->status)->toBe(MessageStatus::Sending)
+        ->and($message->metadata['delivery_state'])->toBe('ambiguous')
+        ->and($attempt->payload['classification'])->toBe('ambiguous')
+        ->and(MessageSendAttempt::query()->withoutTenantScope()->where('tenant_id', $tenant->id)->count())->toBe(1);
+
+    (new SendWhatsAppMessage($tenant->id, $conversation->id, $message->id))->handle();
+
+    expect(MessageSendAttempt::query()->withoutTenantScope()->where('tenant_id', $tenant->id)->count())->toBe(1);
 });
 
 test('OUT-5: el CAS evita reenviar un mensaje ya enviado', function (): void {

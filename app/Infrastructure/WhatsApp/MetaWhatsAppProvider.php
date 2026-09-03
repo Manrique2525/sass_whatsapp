@@ -18,6 +18,7 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Proveedor oficial de la Meta WhatsApp Cloud API (FASE 6, ADR-029).
@@ -25,7 +26,7 @@ use Illuminate\Support\Facades\Log;
  * - El token de cada llamada es el del WABA del tenant (nunca un token global).
  * - El resultado se normaliza en `MessageSendResult`; los errores de Meta se
  *   mapean a excepciones de dominio con el código de error del provider y la
- *   marca `retryable` (transitorios: timeout/5xx/429; permanentes: 4xx).
+ *   marca `retryable` (transitorios conocidos: 5xx/429; permanentes: 4xx).
  * - La firma del webhook (X-Hub-Signature-256) se valida SIEMPRE sobre el body
  *   crudo con hash_equals; jamás sobre un JSON re-serializado.
  * - FASE 26 U4: Los errores raw del provider NUNCA se exponen en el mensaje de
@@ -269,6 +270,7 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
             throw new WhatsAppMessageFailedException(
                 'Error de conexión con Meta.',
                 null,
+                false,
                 true,
             );
         }
@@ -310,7 +312,7 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
             $providerMessageId = (string) ($body['messages'][0]['id'] ?? '');
 
             if ($this->isBlank($providerMessageId)) {
-                throw new WhatsAppMessageFailedException($fallback, null, false);
+                throw new WhatsAppMessageFailedException($fallback, null, false, true);
             }
 
             return MessageSendResult::success($providerMessageId, null, $body);
@@ -338,12 +340,38 @@ final class MetaWhatsAppProvider implements WhatsAppProviderInterface
         ]);
 
         $retryable = $response->serverError() || $response->status() === 429;
+        $retryAfterSeconds = $response->status() === 429
+            ? $this->retryAfterSeconds($response)
+            : null;
 
         return new WhatsAppMessageFailedException(
             $fallback,
             $providerCode !== '' ? $providerCode : null,
             $retryable,
+            false,
+            $retryAfterSeconds,
         );
+    }
+
+    private function retryAfterSeconds(Response $response): ?int
+    {
+        $header = trim($response->header('Retry-After'));
+
+        if ($header === '') {
+            return null;
+        }
+
+        if (is_numeric($header)) {
+            return min(max(1, (int) $header), 3600);
+        }
+
+        try {
+            $seconds = strtotime($header) - time();
+
+            return min(max(1, $seconds), 3600);
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     private function assertIdentifiers(string $accessToken, string $identifier): void

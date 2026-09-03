@@ -159,6 +159,7 @@ test('MSG-API-6: POST envía un mensaje de texto: pending + job encolado + times
 
     $contact = make_contact($tenant);
     $conversation = make_conversation($tenant, $contact);
+    make_message($tenant, $conversation);
 
     $this->actingAs($owner)
         ->postJson(message_url($tenant, $conversation->id), ['body' => 'Hola, ¿en qué te ayudo?'])
@@ -169,7 +170,11 @@ test('MSG-API-6: POST envía un mensaje de texto: pending + job encolado + times
         ->assertJsonPath('created_message.status', 'pending')
         ->assertJsonPath('created_message.body', 'Hola, ¿en qué te ayudo?');
 
-    $message = Message::query()->withoutTenantScope()->where('tenant_id', $tenant->id)->firstOrFail();
+    $message = Message::query()
+        ->withoutTenantScope()
+        ->where('tenant_id', $tenant->id)
+        ->where('direction', MessageDirection::Outbound->value)
+        ->firstOrFail();
 
     expect($message->direction)->toBe(MessageDirection::Outbound)
         ->and($message->type)->toBe(MessageType::Text)
@@ -238,6 +243,7 @@ test('MSG-API-9: un agente puede responder desde el inbox (messages.send)', func
 
     $contact = make_contact($tenant);
     $conversation = make_conversation($tenant, $contact);
+    make_message($tenant, $conversation);
     TenantContext::withId($tenant->id, fn () => app(ConversationService::class)
         ->assign($owner, $tenant, $conversation->id, $agent->id));
 
@@ -283,6 +289,7 @@ test('MSG-API-12: enviar un mensaje emite MessageCreated en el canal privado de 
 
     $contact = make_contact($tenant);
     $conversation = make_conversation($tenant, $contact);
+    make_message($tenant, $conversation);
 
     $this->actingAs($owner)
         ->postJson(message_url($tenant, $conversation->id), ['body' => 'Hola'])
@@ -417,11 +424,30 @@ test('MSG-API-18: owner puede responder sin assignment como override administrat
     $owner = User::factory()->create();
     make_tenant_member($owner, $tenant, 'owner');
     $conversation = make_conversation($tenant, make_contact($tenant));
+    make_message($tenant, $conversation);
 
     $this->actingAs($owner)
         ->postJson(message_url($tenant, $conversation->id), ['body' => 'Respuesta owner'])
         ->assertCreated()
         ->assertJsonPath('created_message.sent_by_user_id', $owner->id);
+});
+
+test('MSG-U4-01: texto libre fuera de la ventana customer-care devuelve 403', function (): void {
+    Queue::fake();
+
+    $tenant = Tenant::factory()->create();
+    $owner = User::factory()->create();
+    make_tenant_member($owner, $tenant, 'owner');
+    $conversation = make_conversation($tenant, make_contact($tenant));
+    $inbound = make_message($tenant, $conversation);
+    $inbound->forceFill(['created_at' => now()->subHours(25)])->save();
+
+    $this->actingAs($owner)
+        ->postJson(message_url($tenant, $conversation->id), ['body' => 'Respuesta tardía'])
+        ->assertStatus(403)
+        ->assertJsonPath('code', 'CONVERSATION_REPLY_FORBIDDEN');
+
+    Queue::assertNothingPushed();
 });
 
 test('MSG-API-19: responder una conversación cerrada devuelve conflicto sin encolar', function (string $status): void {

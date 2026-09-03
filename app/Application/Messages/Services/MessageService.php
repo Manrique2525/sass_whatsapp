@@ -444,6 +444,10 @@ final class MessageService
                     throw ConversationReplyForbiddenException::notAssignedToActor();
                 }
 
+                if (! $this->customerCareWindowIsOpen($tenant, $conversation)) {
+                    throw ConversationReplyForbiddenException::customerCareWindowExpired();
+                }
+
                 return $this->createOutbound(
                     $tenant,
                     $conversation,
@@ -476,6 +480,19 @@ final class MessageService
         }
 
         return $conversation;
+    }
+
+    private function customerCareWindowIsOpen(Tenant $tenant, Conversation $conversation): bool
+    {
+        $windowHours = max(1, (int) config('whatsapp.customer_care_window_hours', 24));
+
+        return Message::query()
+            ->withoutTenantScope()
+            ->where('tenant_id', $tenant->id)
+            ->where('conversation_id', $conversation->id)
+            ->where('direction', MessageDirection::Inbound->value)
+            ->where('created_at', '>=', now()->subHours($windowHours))
+            ->exists();
     }
 
     private function findConversationForTenant(Tenant $tenant, string $conversationId): Conversation

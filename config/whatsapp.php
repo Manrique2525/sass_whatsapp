@@ -45,4 +45,6 @@ return [
     | implementan en la fase de mensajería (FASE 9).
     */
     'max_attempts' => (int) env('WHATSAPP_MAX_ATTEMPTS', 3),
+
+    'customer_care_window_hours' => (int) env('WHATSAPP_CUSTOMER_CARE_WINDOW_HOURS', 24),
 ];

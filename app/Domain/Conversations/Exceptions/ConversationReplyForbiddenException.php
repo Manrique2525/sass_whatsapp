@@ -44,4 +44,13 @@ final class ConversationReplyForbiddenException extends DomainException
             'La conversación está siendo modificada; intente nuevamente.',
         );
     }
+
+    public static function customerCareWindowExpired(): self
+    {
+        return new self(
+            self::ERROR_CODE,
+            self::HTTP_STATUS,
+            'La ventana de atención de WhatsApp de 24 horas ha expirado; use una plantilla aprobada.',
+        );
+    }
 }

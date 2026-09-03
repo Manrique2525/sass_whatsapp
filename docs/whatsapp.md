@@ -225,9 +225,13 @@ ProcessIncomingWhatsAppMessage
 - Estados posteriores vía webhook de status: `delivered` → `read` (por `statuses[].id` compuesto,
   actualizando el mensaje por `provider_message_id`). `failed` → marca `failed` + `failed_at`
   (detalle del error en el attempt), y la conversación pasa a `pending` con aviso a agentes.
-- Fallo → reintento con backoff `[10,30,60]` (cola `retry`, registrado en `message_send_attempts`),
-  `failed` tras N intentos (`WHATSAPP_MAX_ATTEMPTS`, `SendWhatsAppMessage::tries()`); fallo
-  permanente (4xx) → `failed` sin reintento.
+- Fallo transitorio conocido → reintento con backoff `[10,30,60]` (cola `retry`, registrado en
+  `message_send_attempts`), `failed` tras N intentos (`WHATSAPP_MAX_ATTEMPTS`);
+  `Retry-After` de 429 se respeta hasta 1 hora. Fallo permanente (4xx) → `failed` sin reintento.
+- Una pérdida de transporte o respuesta exitosa sin `messages[].id` es **ambigua**: el mensaje
+  permanece `sending`, el intento se registra con `classification=ambiguous`, y el job no lo
+  reenvía automáticamente porque Meta pudo haberlo aceptado. `RetryAmbiguousWhatsAppMessage`
+  permite un replay explícito de operación y vuelve a pasar por el CAS y los límites del tenant.
 - `markAsRead` se dispara cuando un agente abre la conversación (usa el phone id del tenant).
 
 ## 7. Concurrencia en la conversación
@@ -240,7 +244,9 @@ Esto previene: doble ejecución de flow, respuestas duplicadas y carreras en `va
 
 ## 8. Ventana de 24h y templates
 
-- Mensaje del cliente abre ventana de 24h → texto libre, `interactive`, media OK.
+- Mensaje del cliente abre ventana de 24h → texto libre, `interactive`, media OK. La API de
+  respuesta humana rechaza texto libre si no existe un inbound del mismo tenant/conversación
+  dentro de esa ventana.
 - Fuera de ventana solo `template` (aprobado en el WABA del tenant). El engine decide: si la
   conversación está fuera de ventana, envía template (nombre configurado por el tenant) en lugar
   de texto libre.
@@ -271,6 +277,7 @@ WHATSAPP_TIMEOUT=10               # request total máximo en segundos
 WHATSAPP_APP_SECRET=...          # App Secret de la app (firma de webhooks, global)
 WHATSAPP_VERIFY_TOKEN=...        # verify token del webhook (global)
 WHATSAPP_MAX_ATTEMPTS=3          # reintentos de envío (FASE 9)
+WHATSAPP_CUSTOMER_CARE_WINDOW_HOURS=24
 ```
 El access token de cada WABA y el phone id viven en DB (cifrados); NO en `.env`. La URL del
 webhook a registrar en Meta es `https://<dominio>/api/webhooks/whatsapp`.
