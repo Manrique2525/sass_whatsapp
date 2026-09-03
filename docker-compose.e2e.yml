@@ -7,7 +7,7 @@ name: whatsapp-saas-e2e
 #   - Redis índice lógico 15 (solo sus llaves)
 #   - almacenamiento local aislado (nunca MinIO compartido)
 #   - APP_ENV=e2e  (activa guard + fakes deterministas)
-#   - servidor HTTP php artisan serve en el puerto 8082 (sin nginx)
+#   - servidor HTTP nginx en el puerto 8082 hacia PHP-FPM
 #
 # Uso:
 #   docker compose -f docker-compose.e2e.yml up -d
@@ -59,27 +59,19 @@ services:
     pull_policy: build
     restart: unless-stopped
     working_dir: /var/www/html
-    # El entrypoint `exec "$@"` lanza el comando indicado (php artisan serve).
-    # `--no-reload` es OBLIGATORIO: evita que ServeCommand recorte las variables
-    # de entorno (excepto un whitelist) que no provengan de .env, haciendo que
-    # DB_HOST/REDIS_HOST del compose lleguen al proceso del servidor PHP.
-    command: ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8082", "--no-reload"]
-    ports:
-      - "8082:8082"
+    command: ["php-fpm", "-F"]
     volumes:
       - .:/var/www/html
       # Volumen nombrado compartido solo por el proyecto E2E; no depende del host.
       - e2e_storage:/var/www/html/storage/app
-      # Activa OPcache para el PHP built-in server (SAPI CLI) y acelera las
-      # requests del entorno E2E. Carga después de opcache.ini (prefijo zz-).
+      # Activa OPcache para PHP-FPM y acelera las requests del entorno E2E.
+      # Carga después de opcache.ini (prefijo zz-).
       - ./docker/php/e2e-opcache.ini:/usr/local/etc/php/conf.d/zz-e2e-opcache.ini:ro
+      - ./docker/php/e2e-www.conf:/usr/local/etc/php-fpm.d/www.conf:ro
     environment:
       APP_ENV: e2e
       APP_DEBUG: "true"
       APP_URL: http://localhost:8082
-      # Permite requests HTTP concurrentes durante los journeys que mantienen
-      # autenticación Reverb abierta mientras consultan el inbox.
-      PHP_CLI_SERVER_WORKERS: "4"
       DB_CONNECTION: pgsql
       DB_HOST: postgres
       DB_PORT: "5432"
@@ -131,7 +123,7 @@ services:
       reverb:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "php", "artisan", "about", "--only=environment"]
+      test: ["CMD", "php", "healthcheck.php"]
       interval: 15s
       timeout: 30s
       retries: 5
@@ -139,6 +131,26 @@ services:
     networks:
       - e2e
       - e2e-realtime
+
+  e2e-nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "8082:80"
+    volumes:
+      - .:/var/www/html:ro
+      - ./docker/nginx/e2e.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      e2e-app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/health | grep -q '\"status\":\"ok\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - e2e
 
   reverb:
     build:
@@ -255,7 +267,7 @@ services:
       reverb:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "php", "artisan", "about", "--only=environment"]
+      test: ["CMD-SHELL", "pgrep -f '[a]rtisan queue:work' >/dev/null"]
       interval: 15s
       timeout: 30s
       retries: 5

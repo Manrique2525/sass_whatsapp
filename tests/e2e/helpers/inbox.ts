@@ -60,7 +60,7 @@ export async function sendReply(page: Page, body: string): Promise<{ id: string 
     const response = await responsePromise;
     const payload = await response.json();
     expect(response.status(), JSON.stringify(payload)).toBe(201);
-    await expect(page.getByText(body, { exact: true })).toBeVisible();
+    await expect(page.locator('section').nth(1).getByText(body, { exact: true }).last()).toBeVisible();
 
     return payload.created_message;
 }

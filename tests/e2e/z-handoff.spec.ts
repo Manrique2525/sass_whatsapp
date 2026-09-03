@@ -26,6 +26,15 @@ test.describe('Human Handoff E2E-U2', () => {
         const body = 'Respuesta E2E handoff';
         await sendReply(page, body);
 
+        await expect.poll(async () => {
+            const response = await apiGet(page, `/api/v1/tenants/${TENANT_A_ID}/conversations/${CONVERSATION_HANDOFF_ID}/messages`);
+            expect(response.status()).toBe(200);
+            const payload = await response.json();
+            const message = payload.messages.find((candidate: { body: string }) => candidate.body === body);
+
+            return message?.status;
+        }, { timeout: 30_000, intervals: [500, 1_000, 2_000] }).toBe('sent');
+
         const messages = await apiGet(page, `/api/v1/tenants/${TENANT_A_ID}/conversations/${CONVERSATION_HANDOFF_ID}/messages`);
         expect(messages.status()).toBe(200);
         const payload = await messages.json();

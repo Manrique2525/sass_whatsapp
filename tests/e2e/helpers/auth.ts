@@ -26,7 +26,7 @@ export async function pollHealth(): Promise<void> {
 
 /** Realiza el login por UI (formulario Inertia) usando el email dado. */
 export async function loginViaUi(page: Page, email: string, password = PASSWORD): Promise<void> {
-    await page.goto('/login');
+    await page.goto('/login', { timeout: 60_000, waitUntil: 'domcontentloaded' });
     await page.getByLabel('Email').fill(email);
     await page.getByLabel('Contraseña').fill(password);
     await page.getByRole('button', { name: 'Iniciar sesión' }).click();
@@ -34,7 +34,7 @@ export async function loginViaUi(page: Page, email: string, password = PASSWORD)
 
 /** Espera a que la navegación llegue al dashboard (tras el login). */
 export async function expectDashboard(page: Page): Promise<void> {
-    await page.waitForURL('**/dashboard', { timeout: 60_000 });
+    await page.waitForURL('**/dashboard', { timeout: 60_000, waitUntil: 'commit' });
 }
 
 /**

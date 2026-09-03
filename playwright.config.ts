@@ -29,13 +29,9 @@ export default defineConfig({
         trace: 'retain-on-failure',
         screenshot: 'only-on-failure',
         video: 'off',
-        // El entorno E2E sirve con `php artisan serve` (PHP built-in server,
-        // SAPI CLI). Medido: cada request tarda 2-10s porque la OPcache CLI no
-        // persiste entre los workers `php -S` del pool, así que cada request
-        // recompila/bootstrap Laravel. Un login completo son 22s (cálido) y
-        // hasta 45s bajo carga (global-setup hace 5 logins). El 60s de
-        // navegación absorbe esa latencia determinista (fase A/E), NO flakiness.
-        // `expect.timeout` se mantiene en 15s: las aserciones post-carga son rápidas.
+        // E2E sirve por Nginx hacia PHP-FPM para admitir varias solicitudes
+        // simultaneas durante los journeys con varios contextos Reverb.
+        // `expect.timeout` se mantiene en 15s: las aserciones post-carga son rapidas.
         navigationTimeout: 60_000,
         expect: {
             timeout: 15_000,
