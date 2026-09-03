@@ -339,6 +339,7 @@ test('HANDOFF-FINAL-09: sent_by_user_id del frontend es ignorado', function (): 
         'status' => ConversationStatus::Open,
         'bot_paused' => true,
     ]);
+    make_inbound_message($tenant, 'Customer message', (string) $contact->phone);
 
     // Create assignment for the agent
     TenantContext::setId($tenant->id);
