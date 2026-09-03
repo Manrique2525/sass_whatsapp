@@ -119,7 +119,26 @@ export function mergeIncomingMessage(current: Message[], incoming: Message): Mes
         return current;
     }
 
-    return [...current, incoming].sort((a, b) => a.created_at.localeCompare(b.created_at));
+    return [...current, incoming].sort(compareMessagesChronologically);
+}
+
+/**
+ * Orden total determinista de mensajes (FASE 32 U1).
+ *
+ * Orden cronológico ASC por `created_at`; si dos mensajes comparten el mismo
+ * timestamp (segundo en la base de datos), se desempata por `id` (UUIDv7,
+ * monótono en el tiempo) para que el mismo conjunto de mensajes produzca
+ * SIEMPRE la misma secuencia — tanto en reload (backend `ORDER BY created_at,
+ * id`) como en cada merge realtime. No representa orden de inserción en la DB.
+ */
+export function compareMessagesChronologically(a: Message, b: Message): number {
+    const byCreatedAt = a.created_at.localeCompare(b.created_at);
+
+    if (byCreatedAt !== 0) {
+        return byCreatedAt;
+    }
+
+    return a.id.localeCompare(b.id);
 }
 
 export function applyMessageUpdate(current: Message[], updated: Message): Message[] {

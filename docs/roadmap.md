@@ -3307,9 +3307,11 @@ U2 no modifica reconciliación outbound, ventana de 24 horas, media binaria, tem
   asunción latente en `FlowVariablesTest` (selección por `.last()`). Reconciliado SI seleccionar el mensaje esperado por
   contenido (helper `flow_outbound_body`/`flow_outbound_body_containing`) manteniendo asserts estrictos. Verificado
   determinista (12/12 y 5/5 corridas; suite completa verde).
-- `FOLLOW-UP — GLOBAL MESSAGE ORDERING`: el inbox de producción ordena solo por `created_at` sin tie-breaker
-  (`MessageService::indexForUser`) y el reproceso desordenado del sweeper (`WhatsAppReprocessWebhookEvents`) comparten el
-  mismo riesgo en PostgreSQL; NO se tocan en U5.
+- `FOLLOW-UP — GLOBAL MESSAGE ORDERING`: el inbox de producción ordenaba solo por `created_at` sin tie-breaker
+  (`MessageService::indexForUser`). **RESUELTO en FASE 32 U1**: se aplica el contrato de orden determinista
+  `ORDER BY created_at, id` en `MessageService::indexForUser` y `ConversationService::findOrCreateActiveForContact`,
+  con el mismo eje en el frontend (reload == realtime). El reproceso del sweeper (`WhatsAppReprocessWebhookEvents`)
+  sigue ordenando solo por `created_at` y queda como follow-up P2 separado. Ver ADR-123.
 
 ### U6 - Operations, Observability & Production Readiness · COMPLETADA LOCALMENTE
 

@@ -3,6 +3,7 @@ import type { Message } from './messageTypes';
 import {
     applyMessageUpdate,
     buildMessageQuery,
+    compareMessagesChronologically,
     dayKey,
     formatMessageTimestamp,
     groupMessagesByDay,
@@ -140,6 +141,95 @@ describe('mergeIncomingMessage', () => {
         const merged = mergeIncomingMessage([base], incoming);
 
         expect(merged.map((m) => m.id)).toEqual(['b', 'a']);
+    });
+
+    it('desempata por id (UUIDv7) cuando created_at es idéntico', () => {
+        const sameTs = '2026-08-14T12:00:00.000000Z';
+        const olderId = makeMessage({ id: '018f6b20-0000-7000-8000-000000000001', created_at: sameTs });
+        const newerId = makeMessage({ id: '0192b3c4-0000-7000-8000-000000000002', created_at: sameTs });
+
+        const merged = mergeIncomingMessage([newerId], olderId);
+
+        expect(merged.map((m) => m.id)).toEqual([
+            '018f6b20-0000-7000-8000-000000000001',
+            '0192b3c4-0000-7000-8000-000000000002',
+        ]);
+    });
+
+    it('produce la misma secuencia final ante cualquier orden de llegada', () => {
+        const sameTs = '2026-08-14T12:00:00.000000Z';
+        const ids = [
+            '018f6b20-0000-7000-8000-000000000001',
+            '0192b3c4-0000-7000-8000-000000000002',
+            '0193a5d6-0000-7000-8000-000000000003',
+        ];
+        const expected = [...ids].sort();
+
+        const permutations: string[][] = [
+            ids,
+            [ids[1], ids[0], ids[2]],
+            [ids[2], ids[0], ids[1]],
+            [ids[1], ids[2], ids[0]],
+            [ids[0], ids[2], ids[1]],
+            [ids[2], ids[1], ids[0]],
+        ];
+
+        for (const order of permutations) {
+            let current: Message[] = [];
+            for (const id of order) {
+                current = mergeIncomingMessage(current, makeMessage({ id, created_at: sameTs }));
+            }
+            expect(current.map((m) => m.id)).toEqual(expected);
+        }
+    });
+});
+
+describe('compareMessagesChronologically', () => {
+    it('ordena por created_at antes que por id', () => {
+        const earlier = makeMessage({ id: 'z', created_at: '2026-08-14T11:00:00.000000Z' });
+        const later = makeMessage({ id: 'a', created_at: '2026-08-14T12:00:00.000000Z' });
+
+        const sorted = [later, earlier].sort(compareMessagesChronologically);
+
+        expect(sorted.map((m) => m.id)).toEqual(['z', 'a']);
+    });
+
+    it('usa id como tie-breaker determinista cuando created_at empata', () => {
+        const sameTs = '2026-08-14T12:00:00.000000Z';
+        const a = makeMessage({ id: '0192b3c4-0000-7000-8000-000000000002', created_at: sameTs });
+        const b = makeMessage({ id: '018f6b20-0000-7000-8000-000000000001', created_at: sameTs });
+
+        expect(compareMessagesChronologically(a, b)).toBeGreaterThan(0);
+        expect(compareMessagesChronologically(b, a)).toBeLessThan(0);
+
+        const sorted = [a, b].sort(compareMessagesChronologically);
+        expect(sorted.map((m) => m.id)).toEqual([
+            '018f6b20-0000-7000-8000-000000000001',
+            '0192b3c4-0000-7000-8000-000000000002',
+        ]);
+    });
+
+    it('es consistente con reload y realtime (mismo orden final)', () => {
+        const sameTs = '2026-08-14T12:00:00.000000Z';
+        const messages = [
+            makeMessage({ id: '0193a5d6-0000-7000-8000-000000000003', created_at: sameTs }),
+            makeMessage({ id: '018f6b20-0000-7000-8000-000000000001', created_at: sameTs }),
+            makeMessage({ id: '0192b3c4-0000-7000-8000-000000000002', created_at: sameTs }),
+        ];
+
+        // Equivalente al resultado que devolvería el backend ORDER BY created_at, id
+        // tras invertir la página DESC.
+        const reloadLike = [...messages]
+            .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id))
+            .reverse();
+
+        // Realtime: merge incremental.
+        let realtimeLike: Message[] = [];
+        for (const message of messages) {
+            realtimeLike = mergeIncomingMessage(realtimeLike, message);
+        }
+
+        expect(realtimeLike.map((m) => m.id)).toEqual(reloadLike.map((m) => m.id));
     });
 });
 

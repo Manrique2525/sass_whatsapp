@@ -402,6 +402,7 @@ final class ConversationService
             ->where('tenant_id', $tenant->id)
             ->where('contact_id', $contactId)
             ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->first();
 
         if ($conversation !== null) {

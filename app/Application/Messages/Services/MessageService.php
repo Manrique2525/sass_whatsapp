@@ -438,6 +438,7 @@ final class MessageService
             ->where('tenant_id', $tenant->id)
             ->where('conversation_id', $conversation->id)
             ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->paginate($filters['per_page'] ?? 30);
     }
 

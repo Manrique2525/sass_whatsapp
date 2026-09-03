@@ -116,4 +116,62 @@ test.describe('Realtime E2E-U3', () => {
             await Promise.all([agentContext.close(), ownerContext.close(), tenantBContext.close()]);
         }
     });
+
+    test('mantiene el mismo orden de mensajes en realtime y reload (contrato determinista)', async ({ browser }) => {
+        test.setTimeout(180_000);
+
+        const ownerContext = await browser.newContext({
+            baseURL,
+            storageState: `tests/e2e/.auth/${USERS.ownerA.storageKey}.json`,
+        });
+        const observerContext = await browser.newContext({
+            baseURL,
+            storageState: `tests/e2e/.auth/${USERS.agentA.storageKey}.json`,
+        });
+        const ownerPage = await ownerContext.newPage();
+        const observerPage = await observerContext.newPage();
+        const observerRealtime = observeReverb(observerPage);
+
+        const bodyA = `ord-a-${Date.now()}`;
+        const bodyB = `ord-b-${Date.now()}`;
+
+        try {
+            await Promise.all([openInbox(ownerPage), openInbox(observerPage)]);
+            await observerRealtime.waitUntilConnected();
+
+            await openConversation(observerPage, 'Luna Realtime');
+            await openConversation(ownerPage, 'Luna Realtime');
+
+            // Dos mensajes near-simultáneos enviados por el owner (puede enviar sin
+            // assignment previo). El observador los recibe SOLO por realtime.
+            const a = await sendReply(ownerPage, bodyA);
+            const b = await sendReply(ownerPage, bodyB);
+
+            // Origen de verdad: orden del backend (ORDER BY created_at DESC, id DESC:
+            // la API devuelve nuevo-primero; el DOM del chat pinta viejo-arriba).
+            const messagesRes = await ownerPage.request.get(
+                `/api/v1/tenants/${TENANT_A_ID}/conversations/${CONVERSATION_REALTIME_ID}/messages?per_page=100`,
+                { headers: { Origin: baseURL, Accept: 'application/json' } },
+            );
+            expect(messagesRes.status()).toBe(200);
+            const ids = (await messagesRes.json()).messages.map((message: { id: string }) => message.id);
+            const backendNewerId = ids.indexOf(a.id) < ids.indexOf(b.id) ? a.id : b.id;
+
+            // Espera a que ambos lleguen en vivo por realtime (convergencia).
+            await expect(observerPage.getByText(bodyA, { exact: true }).last()).toBeVisible({ timeout: 30_000 });
+            await expect(observerPage.getByText(bodyB, { exact: true }).last()).toBeVisible({ timeout: 30_000 });
+
+            // DOM: índice mayor = más abajo = más reciente.
+            const texts = await observerPage
+                .locator('section')
+                .nth(1)
+                .locator('p.whitespace-pre-wrap')
+                .allInnerTexts();
+            const liveNewerId = texts.indexOf(bodyA) > texts.indexOf(bodyB) ? a.id : b.id;
+
+            expect(liveNewerId).toBe(backendNewerId);
+        } finally {
+            await Promise.all([ownerContext.close(), observerContext.close()]);
+        }
+    });
 });

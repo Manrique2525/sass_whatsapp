@@ -19,6 +19,7 @@ use App\Events\MessageStatusUpdated;
 use App\Infrastructure\Tenancy\TenantContext;
 use App\Jobs\SendWhatsAppMessage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 use Tests\Fakes\FakeCapacityGuard;
@@ -53,6 +54,33 @@ function make_message(Tenant $tenant, Conversation $conversation, array $attribu
             'body' => 'Hola',
             'delivered_at' => now(),
         ], $attributes));
+    } finally {
+        TenantContext::clear();
+    }
+}
+
+/**
+ * Helper LOCAL: crea un mensaje forzando `created_at` idéntico al valor dado.
+ * `Message::query()->create()` NO persiste un `created_at` explícito porque no
+ * está en `$fillable` (mass assignment lo descarta y HasTimestamps lo sobreescribe
+ * con now()); por eso se fija sobre la instancia (queda "dirty") antes de guardar.
+ */
+function make_tied_message(Tenant $tenant, Conversation $conversation, Carbon $createdAt, string $body): Message
+{
+    TenantContext::setId($tenant->id);
+
+    try {
+        $message = new Message([
+            'conversation_id' => $conversation->id,
+            'direction' => 'inbound',
+            'type' => 'text',
+            'status' => 'delivered',
+            'body' => $body,
+        ]);
+        $message->created_at = $createdAt;
+        $message->save();
+
+        return $message;
     } finally {
         TenantContext::clear();
     }
@@ -123,6 +151,98 @@ test('MSG-API-3: index respeta per_page acotado a 100 y pagina', function (): vo
         ->getJson(message_url($tenant, $conversation->id).'?per_page=500')
         ->assertStatus(422)
         ->assertJsonValidationErrors('per_page');
+});
+
+test('MSG-API-21: index desempata por id cuando created_at es idéntico (orden total determinista)', function (): void {
+    $tenant = Tenant::factory()->create();
+    $owner = User::factory()->create();
+    make_tenant_member($owner, $tenant, 'owner');
+
+    $contact = make_contact($tenant);
+    $conversation = make_conversation($tenant, $contact);
+
+    $sameTs = Carbon::yesterday()->startOfDay();
+    for ($i = 0; $i < 10; $i++) {
+        make_tied_message($tenant, $conversation, $sameTs, 'Mensaje '.$i);
+    }
+
+    // Sanidad: el forced created_at realmente persistió como tie (1 único valor).
+    $createdAts = [];
+    foreach (DB::table('messages')->where('conversation_id', $conversation->id)->get('created_at') as $row) {
+        $createdAts[] = $row->created_at;
+    }
+    expect(array_unique($createdAts))->toHaveCount(1);
+
+    // Orden esperado: created_at DESC, id DESC (los ids UUIDv7 desempatan).
+    $expected = [];
+    foreach (Message::query()
+        ->withoutTenantScope()
+        ->where('conversation_id', $conversation->id)
+        ->orderByDesc('created_at')
+        ->orderByDesc('id')
+        ->get() as $message) {
+        $expected[] = $message->id;
+    }
+
+    $first = $this->actingAs($owner)
+        ->getJson(message_url($tenant, $conversation->id))
+        ->assertOk()
+        ->assertJsonPath('meta.total', 10);
+    $second = $this->actingAs($owner)
+        ->getJson(message_url($tenant, $conversation->id))
+        ->assertOk();
+
+    $firstIds = [];
+    foreach ($first->json('messages') as $message) {
+        $firstIds[] = $message['id'];
+    }
+    $secondIds = [];
+    foreach ($second->json('messages') as $message) {
+        $secondIds[] = $message['id'];
+    }
+
+    expect($firstIds)->toHaveCount(10);
+    expect($firstIds)->toEqual($expected);
+    expect($firstIds)->toEqual($secondIds);
+});
+
+test('MSG-API-22: ties de created_at no duplican ni pierden mensajes al cruzar un límite de página', function (): void {
+    $tenant = Tenant::factory()->create();
+    $owner = User::factory()->create();
+    make_tenant_member($owner, $tenant, 'owner');
+
+    $contact = make_contact($tenant);
+    $conversation = make_conversation($tenant, $contact);
+
+    $sameTs = Carbon::yesterday()->startOfDay();
+    for ($i = 0; $i < 40; $i++) {
+        make_tied_message($tenant, $conversation, $sameTs, 'Mensaje '.$i);
+    }
+
+    $acting = $this->actingAs($owner);
+    $idsFor = function (string $page) use ($acting, $tenant, $conversation): array {
+        $response = $acting
+            ->getJson(message_url($tenant, $conversation->id).'?per_page=30&page='.$page)
+            ->assertOk();
+
+        $ids = [];
+        foreach ($response->json('messages') as $message) {
+            $ids[] = $message['id'];
+        }
+
+        return $ids;
+    };
+
+    $idsPage1 = $idsFor('1');
+    $idsPage2 = $idsFor('2');
+
+    expect($idsPage1)->toHaveCount(30);
+    expect($idsPage2)->toHaveCount(10);
+    expect(array_unique(array_merge($idsPage1, $idsPage2)))->toHaveCount(40);
+
+    // Re-ejecutar: composición y orden idénticos en cada página.
+    expect($idsFor('1'))->toEqual($idsPage1);
+    expect($idsFor('2'))->toEqual($idsPage2);
 });
 
 test('MSG-API-4: CRITICO — un usuario de A jamás lista mensajes de una conversación de B (404)', function (): void {

@@ -3711,3 +3711,34 @@ una pantalla de upload/search en el frontend.
   - El replay nunca re-encola eventos procesados y un `failed` cuyo `phone_number_id` ya no existe re-falla con `unknown_phone_number_id`
     sin producir retry storm.
   - Rotación de tokens sin dual-secret simultáneo: exige ventana de mantenimiento coordinada (ver `docs/runbooks.md` §4).
+
+## ADR-123 - Deterministic message ordering contract (FASE 32 U1)
+
+- **Estado**: Aceptado - FASE 32 U1 (local)
+- **Contexto**: FASE 31 U5 documentó que `created_at` no es una clave de orden total en la base de datos: múltiples
+  mensajes de una conversación (salientes de flujo en lote, near-simultáneos) comparten el mismo `created_at` (la
+  columna persiste con precisión de segundo). Un `ORDER BY created_at` con ties NO es determinista: el límite entre
+  páginas puede duplicar o perder mensajes al paginar, el merge realtime puede insertar en un orden distinto al del
+  reload, y la selección de "conversación activa" puede variar entre ejecuciones. PostgreSQL no garantiza un orden de
+  aparición estable sin un tie-breaker explícito.
+- **Decisión**:
+  1. **Orden total determinista `ORDER BY created_at, id`**: todo listado/de-selección de conversaciones o mensajes usa
+     `created_at` como clave cronológica visible y `id` (UUIDv7) como tie-breaker, con direcciones consistentes
+     (ASC ASC ascendente cronológico; DESC DESC newest-first). Aplicado en este U1 a `MessageService::indexForUser`
+     y `ConversationService::findOrCreateActiveForContact`.
+  2. **Frontend = mismo contrato**: el inbox ordena por el mismo eje `created_at` + `id` (`compareMessagesChronologically`
+     en `messageUtils.ts`) tanto al hacer reload (respuesta del backend) como en cada merge realtime, garantizando que la
+     misma secuencia final se alcance ante cualquier orden de llegada (dedupe por `id`).
+  3. **`created_at`/`id` NO representan secuencia de inserción en DB**: son un orden estable, no una garantía de
+     orden físico. No se introdujo ninguna columna `message_sequence`/bigint, ni estrategias de UUID alternativas, ni
+     migración de cursor/keyset: el cambio es puramente de contrato/query, sin alteración de esquema.
+  4. **Sin over-engineering**: se descarta keyset pagination y un índice opcional
+     `(tenant_id, conversation_id, created_at, id)` como mejoras futuras no necesarias para el contrato actual.
+- **Consecuencias**:
+  - La paginación de `GET messages` es estable incluso cuando decenas de mensajes comparten `created_at`: ninguna página
+    duplica ni pierde mensajes (los ids UUIDv7 desempatan de forma total y reproducible).
+  - El reload y el realtime convergen a la misma secuencia; el orden visual es cronológico ASC consistente.
+  - El reproceso de webhooks (`WhatsAppReprocessWebhookEvents`) que aún ordena solo por `created_at` queda como follow-up
+    P2 separado (no forma parte de este U1 ni se toca aquí).
+  - Tests añadidos: feature (`MSG-API-21/22`, `CONV-27`), PostgreSQL canónico (`MESSAGE-ORDER-PG-01`) y frontend
+    (`compareMessagesChronologically`/`mergeIncomingMessage`).

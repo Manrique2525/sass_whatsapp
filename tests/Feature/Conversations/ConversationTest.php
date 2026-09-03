@@ -12,6 +12,7 @@ use App\Domain\Users\Enums\UserRole;
 use App\Domain\Users\Models\User;
 use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -629,6 +630,59 @@ test('CONV-24: el soft delete oculta la conversación y findOrCreateActiveForCon
 
     expect($again->id)->toBe($recreated->id);
 
+    $this->assertDatabaseCount('conversations', 2);
+    expect(TenantContext::id())->toBeNull();
+});
+
+test('CONV-27: findOrCreateActiveForContact desempata por id con created_at idéntico (selección determinista)', function (): void {
+    $tenant = Tenant::factory()->create();
+    $contact = make_contact($tenant);
+    $service = app(ConversationService::class);
+
+    $sameTs = Carbon::yesterday()->startOfDay();
+
+    // Dos conversaciones activas del mismo contacto con created_at idéntico.
+    // Se fuerza `created_at` sobre la instancia (no es mass-assignable en create()).
+    TenantContext::setId($tenant->id);
+    $first = new Conversation(['contact_id' => $contact->id, 'status' => 'open']);
+    $first->created_at = $sameTs;
+    $first->save();
+    $second = new Conversation(['contact_id' => $contact->id, 'status' => 'open']);
+    $second->created_at = $sameTs;
+    $second->save();
+    TenantContext::clear();
+
+    // Sanidad: forzó un tie real (1 único created_at entre las dos).
+    $sameAts = [];
+    foreach (Conversation::query()
+        ->withoutTenantScope()
+        ->where('tenant_id', $tenant->id)
+        ->where('contact_id', $contact->id)
+        ->get('created_at') as $conversation) {
+        $sameAts[] = $conversation->created_at;
+    }
+    expect(array_unique($sameAts))->toHaveCount(1);
+
+    // El desempate esperado: created_at DESC, id DESC.
+    $expected = Conversation::query()
+        ->withoutTenantScope()
+        ->where('tenant_id', $tenant->id)
+        ->where('contact_id', $contact->id)
+        ->orderByDesc('created_at')
+        ->orderByDesc('id')
+        ->first();
+
+    expect($expected->id)->not->toBeNull();
+
+    $selected = $service->findOrCreateActiveForContact($tenant, $contact->id);
+
+    expect($selected->id)->toBe($expected->id);
+
+    // Re-ejecutar: selección idéntica (determinista).
+    $again = $service->findOrCreateActiveForContact($tenant, $contact->id);
+    expect($again->id)->toBe($selected->id);
+
+    // Ambas conversaciones conviven; el servicio solo elige, nunca crea otra.
     $this->assertDatabaseCount('conversations', 2);
     expect(TenantContext::id())->toBeNull();
 });
