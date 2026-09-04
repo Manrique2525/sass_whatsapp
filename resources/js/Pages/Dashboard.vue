@@ -5,6 +5,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import NotificationPreferenceToggle from '@/Components/Notifications/NotificationPreferenceToggle.vue';
 import { fetchAnalyticsOverview } from '@/features/analytics/analyticsApi';
 import { fetchKnowledgeBases } from '@/features/knowledge/knowledgeApi';
+import { trackMarketingEvent } from '@/features/marketing/marketingAnalytics';
 
 const page = usePage();
 const user = page.props.auth.user;
@@ -52,7 +53,10 @@ const load = async (): Promise<void> => {
     loading.value = false;
 };
 
-onMounted(load);
+onMounted(() => {
+    trackMarketingEvent('dashboard_viewed', {}, { once: true });
+    load();
+});
 </script>
 
 <template>
@@ -93,7 +97,7 @@ onMounted(load);
             <section class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
                 <h3 class="font-semibold text-zinc-900">Primeros pasos</h3>
                 <div class="mt-4 space-y-3 text-sm">
-                    <Link v-if="can('whatsapp.view')" href="/settings/whatsapp" class="flex items-center justify-between rounded-lg bg-zinc-50 p-3 hover:bg-zinc-100"><span>Conectar WhatsApp</span><span :class="whatsappConnected ? 'text-emerald-700' : 'text-amber-700'">{{ whatsappConnected ? 'Conectado' : 'Revisar' }}</span></Link>
+                    <Link v-if="can('whatsapp.view')" href="/settings/whatsapp" class="flex items-center justify-between rounded-lg bg-zinc-50 p-3 hover:bg-zinc-100" @click="trackMarketingEvent('whatsapp_connect_clicked')"><span>Conectar WhatsApp</span><span :class="whatsappConnected ? 'text-emerald-700' : 'text-amber-700'">{{ whatsappConnected ? 'Conectado' : 'Revisar' }}</span></Link>
                     <Link v-if="can('flows.view')" href="/settings/flows" class="flex items-center justify-between rounded-lg bg-zinc-50 p-3 hover:bg-zinc-100"><span>Publicar tu primer flujo</span><span class="text-zinc-500">Ir a flujos →</span></Link>
                     <Link v-if="can('knowledge.view')" href="/settings/knowledge" class="flex items-center justify-between rounded-lg bg-zinc-50 p-3 hover:bg-zinc-100"><span>Preparar respuestas con IA</span><span class="text-zinc-500">{{ counts.knowledge }} bases</span></Link>
                 </div>

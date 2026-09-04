@@ -4,6 +4,7 @@ import { Link, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { fetchCurrentSubscription } from '@/features/billing/billingApi';
 import type { Subscription } from '@/features/billing/billingTypes';
+import { trackMarketingEvent } from '@/features/marketing/marketingAnalytics';
 
 const page = usePage();
 const user = page.props.auth.user;
@@ -42,7 +43,10 @@ const load = async (): Promise<void> => {
 
 const workspaceReady = computed(() => currentTenant.value !== undefined);
 
-onMounted(load);
+onMounted(() => {
+  trackMarketingEvent('onboarding_viewed', {}, { once: true });
+  load();
+});
 </script>
 
 <template>
@@ -104,6 +108,7 @@ onMounted(load);
                         v-if="canManageWhatsApp"
                         href="/settings/whatsapp"
                         class="rounded-md bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                        @click="trackMarketingEvent('whatsapp_connect_clicked')"
                     >
                         Conectar WhatsApp
                     </Link>

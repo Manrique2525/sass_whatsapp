@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global) · FASE 32 COMPLETADA/PUBLICADA (U1: deterministic message ordering) · FASE 33 EN PROGRESO (U1: self-service provisioning completa y validada localmente)**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global) · FASE 32 COMPLETADA/PUBLICADA (U1: deterministic message ordering) · FASE 33 COMPLETE + VALIDATED LOCAL (U1-U6; pendiente publicación explícita)**.
 
 ## Fases
 
@@ -3405,4 +3405,13 @@ a clientes: el push es publicación de fuente únicamente.
 - **Branding**: `APP_NAME` real sigue siendo `WhatsApp SaaS`. No existe asset de marca válido para reemplazar `public/favicon.ico` vacío; favicon queda diferido como **BRAND ASSET REQUIRED**.
 - **Decisiones diferidas**: no se añadieron aliases de anchors en inglés por bajo valor actual. La discoverability de dashboard, Knowledge, Tags, Templates y Media queda para U5.
 - **Validación U4**: backend 2595 passed / 15 skipped; Vitest 578 passed; typecheck PASS; build PASS; PHPStan PASS; Pint PASS; diff-check PASS; full E2E 37 passed con setup fresco, 1 worker y 0 retries; cola E2E limpia.
-- **Estado**: U1 **COMPLETE + VALIDATED LOCAL**. U2 **COMPLETE + VALIDATED LOCAL**. U3 **COMPLETE + VALIDATED LOCAL**. U4 **COMPLETE + VALIDATED LOCAL**. U5 **COMPLETE + VALIDATED LOCAL**: dashboard operativo, navegación autenticada por permisos, responsive mobile, UI inicial de Knowledge, cobertura de roles y E2E completo validados localmente. No implica commit, push ni cierre de FASE 33. U6 **NOT STARTED**.
+- **Estado**: U1 **COMPLETE + VALIDATED LOCAL**. U2 **COMPLETE + VALIDATED LOCAL**. U3 **COMPLETE + VALIDATED LOCAL**. U4 **COMPLETE + VALIDATED LOCAL**. U5 **COMPLETE + VALIDATED LOCAL**: dashboard operativo, navegación autenticada por permisos, responsive mobile, UI inicial de Knowledge, cobertura de roles y E2E completo validados localmente. U6 **COMPLETE + VALIDATED LOCAL**: funnel público medible, tracking provider-agnostic privacy-first, auditoría CRO/SEO/UX y cierre local. FASE 33 queda **COMPLETE + VALIDATED LOCAL**; no implica publicación remota.
+
+### U6 — Marketing analytics, CRO y auditoría final · COMPLETE + VALIDATED LOCAL
+
+- **Tracking**: `trackMarketingEvent` define nueve eventos semánticos estables para landing, registro, onboarding y producto. El provider es inyectable para una futura integración, pero no hay proveedor externo activo ni llamadas de red por defecto.
+- **Privacidad y resiliencia**: sólo se permiten `location` y `destination` como propiedades; no se envían email, nombre, teléfono, password, tenant ID, IDs privados, tokens ni contenido. Los errores del tracker se ignoran y nunca bloquean navegación o acciones.
+- **Funnel**: Landing → CTA → Register → registro completado → verificación → onboarding → CTA WhatsApp → dashboard. Sin tráfico de producción, la tasa de conversión permanece **BASELINE UNAVAILABLE**.
+- **CRO/auditoría**: se conserva un CTA primario para visitantes (`Empezar gratis`) y autenticados (`Ir al panel`), el plan Free muestra límites reales y exclusión de IA, y onboarding mantiene `Conectar WhatsApp` como siguiente acción principal.
+- **Estado de marketing**: no hay planes pagos, precios, testimonios, logos, ratings ni métricas comerciales inventadas. Seguridad, roles, aislamiento, credenciales cifradas, auditoría y webhooks se presentan sólo con respaldo del producto.
+- **P2 no bloqueantes**: asset real de favicon/marca, integración de proveedor externo o A/B testing, pricing pago, social proof y optimización futura del chunk dashboard grande.

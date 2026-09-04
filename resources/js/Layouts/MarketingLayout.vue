@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { Head, Link, usePage } from '@inertiajs/vue3';
+import { trackMarketingEvent } from '@/features/marketing/marketingAnalytics';
 
 const page = usePage();
 const menuOpen = ref(false);
@@ -38,6 +39,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleMenuKeydown));
 
 const toggleMenu = (): void => {
     menuOpen.value = !menuOpen.value;
+};
+
+const trackCta = (location: 'navbar', destination: 'register' | 'dashboard'): void => {
+    trackMarketingEvent('landing_cta_clicked', { location, destination });
 };
 </script>
 
@@ -84,10 +89,10 @@ const toggleMenu = (): void => {
                 </div>
 
                 <div class="hidden items-center gap-5 lg:flex">
-                    <Link v-if="page.props.auth.user" href="/dashboard" class="marketing-button marketing-button--small">Ir al panel <span aria-hidden="true">↗</span></Link>
+                    <Link v-if="page.props.auth.user" href="/dashboard" class="marketing-button marketing-button--small" @click="trackCta('navbar', 'dashboard')">Ir al panel <span aria-hidden="true">↗</span></Link>
                     <template v-else>
                         <Link href="/login" class="marketing-login">Iniciar sesión</Link>
-                        <Link href="/register" class="marketing-button marketing-button--small">Empezar gratis <span aria-hidden="true">↗</span></Link>
+                        <Link href="/register" class="marketing-button marketing-button--small" @click="trackCta('navbar', 'register')">Empezar gratis <span aria-hidden="true">↗</span></Link>
                     </template>
                 </div>
             </nav>
@@ -100,10 +105,10 @@ const toggleMenu = (): void => {
                     <a href="#seguridad" class="marketing-mobile-link" @click="closeMenu(false)">Seguridad</a>
                     <a href="#faq" class="marketing-mobile-link" @click="closeMenu(false)">FAQ</a>
                     <div class="mt-2 flex items-center gap-4 border-t border-[#dce5dd] pt-4">
-                        <Link v-if="page.props.auth.user" href="/dashboard" class="marketing-button marketing-button--small" @click="closeMenu(false)">Ir al panel <span aria-hidden="true">↗</span></Link>
+                        <Link v-if="page.props.auth.user" href="/dashboard" class="marketing-button marketing-button--small" @click="closeMenu(false); trackCta('navbar', 'dashboard')">Ir al panel <span aria-hidden="true">↗</span></Link>
                         <template v-else>
                             <Link href="/login" class="marketing-login" @click="closeMenu(false)">Iniciar sesión</Link>
-                            <Link href="/register" class="marketing-button marketing-button--small" @click="closeMenu(false)">Empezar gratis <span aria-hidden="true">↗</span></Link>
+                            <Link href="/register" class="marketing-button marketing-button--small" @click="closeMenu(false); trackCta('navbar', 'register')">Empezar gratis <span aria-hidden="true">↗</span></Link>
                         </template>
                     </div>
                 </div>

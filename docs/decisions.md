@@ -3801,3 +3801,21 @@ una pantalla de upload/search en el frontend.
   - La página pública queda disponible para visitantes y usuarios autenticados sin alterar sus permisos.
   - El bundle no incorpora dependencias de motion; el comportamiento puede evolucionar dentro del sistema Vue existente.
   - La cobertura incluye render Inertia, CTA principal, navegación mobile, typecheck, build y Playwright.
+
+## ADR-127 - Provider-agnostic, privacy-first marketing event tracking (FASE 33 U6)
+
+- **Estado**: Aceptado - FASE 33 U6 (local)
+- **Contexto**: el funnel público necesita eventos mínimos para medir descubrimiento y conversión, pero todavía no existe una
+  decisión de proveedor externo, política de cookies o tráfico de producción que justifique acoplar el producto a una plataforma.
+- **Decisión**:
+  1. `trackMarketingEvent` mantiene una taxonomía pequeña y estable para landing, registro, onboarding y dashboard.
+  2. El provider se inyecta detrás de una interfaz mínima y permanece `noop` por defecto; U6 no instala ni activa Google Analytics,
+     GTM, Meta Pixel, Plausible, PostHog u otro proveedor.
+  3. Las propiedades se filtran mediante allowlist (`location` y `destination`); no se envían PII, secretos, IDs de tenant ni
+     contenido de producto. El tracker captura fallos para que la navegación y los formularios sigan funcionando.
+  4. No se crea almacenamiento persistente ni migración para marketing events. La conversión de producción queda sin baseline hasta
+     que exista tráfico real y una decisión posterior de proveedor/consentimiento.
+- **Consecuencias**:
+  - El funnel queda instrumentado sin red externa, cookies no esenciales ni coste de bundle relevante.
+  - Una integración futura puede implementarse detrás del provider y de una revisión explícita de privacidad/consentimiento.
+  - La métrica local sólo demuestra emisión segura de eventos, no tasas de conversión reales.

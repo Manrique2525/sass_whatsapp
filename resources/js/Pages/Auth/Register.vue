@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Link, useForm } from '@inertiajs/vue3';
 import AuthLayout from '@/Layouts/AuthLayout.vue';
+import { onMounted, ref } from 'vue';
+import { trackMarketingEvent } from '@/features/marketing/marketingAnalytics';
 
 const form = useForm({
     name: '',
@@ -8,9 +10,18 @@ const form = useForm({
     password: '',
     password_confirmation: '',
 });
+const registrationStarted = ref(false);
+
+onMounted(() => trackMarketingEvent('register_viewed', {}, { once: true }));
 
 const submit = (): void => {
-    form.post('/register');
+    if (!registrationStarted.value) {
+        registrationStarted.value = true;
+        trackMarketingEvent('registration_started', {}, { once: true });
+    }
+    form.post('/register', {
+        onSuccess: () => trackMarketingEvent('registration_completed', {}, { once: true }),
+    });
 };
 </script>
 

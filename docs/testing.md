@@ -2227,3 +2227,21 @@ Esto NO es un wait-condition flaky ni carga de assets (assets ~0.1–0.5ms).
   build PASS, `git diff --check` PASS, E2E completo **39 passed / 0 failed** con setup fresco, `workers=1` y `retries=0`.
 - El setup E2E ajusta permisos del directorio `storage/app/private` después del smoke test, porque setup corre como root y
   PHP-FPM/worker como `www-data`; así el upload Knowledge funciona también sobre un volumen recién creado.
+
+## FASE 33 U6 — Marketing analytics, CRO y auditoría final (VALIDADA LOCALMENTE)
+
+- Se añadió `trackMarketingEvent` como abstracción provider-agnostic y desactivada por defecto. No se instaló Google Analytics,
+  GTM, Meta Pixel, Plausible, PostHog ni otro proveedor externo; no hay cookies no esenciales ni llamadas de analytics en E2E.
+- Taxonomía estable: `landing_view`, `landing_cta_clicked`, `pricing_or_plan_viewed`, `register_viewed`,
+  `registration_started`, `registration_completed`, `onboarding_viewed`, `whatsapp_connect_clicked` y `dashboard_viewed`.
+- El payload tiene allowlist de `location` y `destination`; se excluyen explícitamente email, nombre, teléfono, password,
+  `tenant_id`, tokens, IDs privados y contenido de mensajes. El tracker es fail-safe y no usa `preventDefault`.
+- Funnel observable: Landing → CTA → Register → registro completado → verificación → onboarding → CTA WhatsApp → dashboard.
+  No existe tráfico de producción suficiente para calcular una tasa; baseline de conversión: **UNAVAILABLE**.
+- Auditoría CRO: `Empezar gratis` para visitantes, `Ir al panel` para autenticados, límites Free reales, IA no incluida en Free,
+  explicación de verificación y `Conectar WhatsApp` como acción principal de onboarding.
+- Auditoría final: sin precios pagos, testimonios, logos, ratings, porcentajes comerciales ni claims de certificación. Favicon real
+  permanece diferido como `BRAND ASSET REQUIRED`; no se añadió cookie banner porque no existe proveedor externo activo.
+- Tests focales de tracking cubren taxonomy, CTA seguro, once-only, eventos de registro/onboarding/WhatsApp, no-op y fallo del provider.
+- Validación final U6: Pest **2597 passed / 15 skipped**, Vitest **592 passed**, Playwright **39 passed / 0 failed** con
+  setup E2E fresco, `workers=1` y `retries=0`; typecheck, build, PHPStan, Pint y `git diff --check` PASS.
