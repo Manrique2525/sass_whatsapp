@@ -23,3 +23,22 @@ export interface KnowledgeBaseListResponse {
         total: number;
     };
 }
+
+export interface KnowledgeDocument {
+    id: string;
+    knowledge_base_id: string;
+    original_filename: string;
+    mime_type: string;
+    file_size: number;
+    status: string;
+    chunk_count: number | null;
+    total_tokens: number | null;
+    processed_at: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface KnowledgeDocumentListResponse {
+    documents: KnowledgeDocument[];
+    meta: KnowledgeBaseListResponse['meta'];
+}

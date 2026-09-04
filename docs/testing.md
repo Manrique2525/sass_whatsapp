@@ -2210,3 +2210,20 @@ Esto NO es un wait-condition flaky ni carga de assets (assets ~0.1–0.5ms).
   la suite existente. La validación final U4 fue: backend **2595 passed / 15 skipped**, Vitest **578 passed**, full E2E
   **37 passed / 0 failed** con setup fresco, `workers=1` y `retries=0`; cola limpia (`failed=0`, `pending=0`,
   `reserved=0`, `delayed=0`).
+## FASE 33 U5 — Dashboard, navegación y discoverability (VALIDADA LOCALMENTE)
+
+- La navegación autenticada muestra sólo módulos permitidos por `page.props.auth.permissions`, marca la ruta activa y
+  ofrece un menú mobile con `aria-expanded`, `aria-controls`, cierre al navegar y Escape.
+- El dashboard consume endpoints existentes para KPIs, estado de WhatsApp, analytics y Knowledge; no duplica la página
+  completa de Analytics ni presenta métricas hardcodeadas.
+- Knowledge tiene una ruta Inertia operativa para listar bases, crear bases y subir documentos usando los endpoints tenant-safe
+  existentes. Las acciones de gestión sólo se muestran con `knowledge.manage`.
+- Matriz de discoverability: Dashboard (AppLayout, todos los roles autenticados), Inbox (AppLayout, todos los roles),
+  Flow Builder (AppLayout, owner/admin), Knowledge (AppLayout y CTA del dashboard, owner/admin para gestión, agent sólo
+  lectura), Billing (AppLayout, owner/admin), WhatsApp (AppLayout, owner/admin) y Users (AppLayout, owner/admin).
+- Tags no tiene UI dedicada en esta fase; Templates se administran mediante la integración/catálogo de WhatsApp existente;
+  Media se visualiza dentro de los mensajes de Inbox. No se añadieron enlaces engañosos ni módulos placeholder.
+- Validación local: Pest **2597 passed / 15 skipped**, Vitest **586 passed**, PHPStan PASS, Pint PASS, typecheck PASS,
+  build PASS, `git diff --check` PASS, E2E completo **39 passed / 0 failed** con setup fresco, `workers=1` y `retries=0`.
+- El setup E2E ajusta permisos del directorio `storage/app/private` después del smoke test, porque setup corre como root y
+  PHP-FPM/worker como `www-data`; así el upload Knowledge funciona también sobre un volumen recién creado.

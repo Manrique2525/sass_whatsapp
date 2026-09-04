@@ -1,10 +1,8 @@
-import type { KnowledgeBaseListResponse } from './knowledgeTypes';
+import type { KnowledgeBase, KnowledgeBaseListResponse, KnowledgeDocumentListResponse } from './knowledgeTypes';
 
 /**
- * Cliente API mínimo de Knowledge Base (FASE 17 U3.5).
- *
- * Solo listado para el selector del AI node. NO incluye CRUD completo,
- * upload de documentos ni gestión.
+ * Cliente API de Knowledge Base para el selector del AI node y la gestión
+ * operativa del workspace.
  */
 
 function normalizeError(err: unknown, fallbackMessage: string): { status: number; code: string; message: string } {
@@ -35,4 +33,20 @@ export async function fetchKnowledgeBases(tenantId: string, params?: { search?: 
     } catch (err) {
         throw normalizeError(err, 'No se pudieron cargar las bases de conocimiento.');
     }
+}
+
+export async function createKnowledgeBase(tenantId: string, payload: { name: string; description?: string }): Promise<KnowledgeBase> {
+    const res = await window.axios.post(`/api/v1/tenants/${tenantId}/knowledge-bases`, payload);
+    return res.data.knowledge_base as KnowledgeBase;
+}
+
+export async function fetchKnowledgeDocuments(tenantId: string, knowledgeBaseId: string): Promise<KnowledgeDocumentListResponse> {
+    const res = await window.axios.get(`/api/v1/tenants/${tenantId}/knowledge-bases/${knowledgeBaseId}/documents`);
+    return res.data as KnowledgeDocumentListResponse;
+}
+
+export async function uploadKnowledgeDocument(tenantId: string, knowledgeBaseId: string, file: File): Promise<void> {
+    const formData = new FormData();
+    formData.append('file', file);
+    await window.axios.post(`/api/v1/tenants/${tenantId}/knowledge-bases/${knowledgeBaseId}/documents`, formData);
 }

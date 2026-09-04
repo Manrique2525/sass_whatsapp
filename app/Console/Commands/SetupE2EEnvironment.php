@@ -318,6 +318,12 @@ final class SetupE2EEnvironment extends Command
             throw new \RuntimeException('Storage E2E: el archivo de smoke no pudo eliminarse.');
         }
 
+        // The setup command runs as root while PHP-FPM runs as www-data.
+        $privateRoot = storage_path('app/private');
+        if (is_dir($privateRoot) && ! chmod($privateRoot, 0775)) {
+            throw new \RuntimeException('Storage E2E: no se pudieron ajustar los permisos del directorio privado.');
+        }
+
         $this->info(sprintf('Storage E2E: disco local compartido "%s" con read/write/delete verificados.', $disk));
     }
 }

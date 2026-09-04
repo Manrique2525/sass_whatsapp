@@ -24,6 +24,7 @@ use App\Http\Controllers\Settings\ConversationsController;
 use App\Http\Controllers\Settings\FaqSettingsController;
 use App\Http\Controllers\Settings\FlowEditorSettingsController;
 use App\Http\Controllers\Settings\FlowsSettingsController;
+use App\Http\Controllers\Settings\KnowledgeSettingsController;
 use App\Http\Controllers\Settings\LeadSettingsController;
 use App\Http\Controllers\Settings\UserSettingsController;
 use App\Http\Controllers\Settings\WhatsAppSettingsController;
@@ -119,6 +120,10 @@ Route::middleware('auth')->group(function (): void {
     Route::get('settings/leads', [LeadSettingsController::class, 'show'])
         ->middleware(['verified', 'tenant'])
         ->name('settings.leads');
+
+    Route::get('settings/knowledge', [KnowledgeSettingsController::class, 'show'])
+        ->middleware(['verified', 'tenant'])
+        ->name('settings.knowledge');
 
     Route::get('settings/analytics', [AnalyticsSettingsController::class, 'show'])
         ->middleware(['verified', 'tenant'])
