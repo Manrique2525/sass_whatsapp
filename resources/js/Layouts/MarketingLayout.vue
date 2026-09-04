@@ -6,6 +6,11 @@ const page = usePage();
 const menuOpen = ref(false);
 const appName = 'WhatsApp SaaS';
 
+withDefaults(defineProps<{ pageTitle?: string; pageDescription?: string }>(), {
+    pageTitle: 'Plataforma de automatización para WhatsApp',
+    pageDescription: 'Automatiza conversaciones, organiza a tu equipo y convierte más clientes con un inbox compartido, flujos, IA y analytics para WhatsApp Business.',
+});
+
 const closeMenu = (): void => {
     menuOpen.value = false;
 };
@@ -13,11 +18,8 @@ const closeMenu = (): void => {
 
 <template>
     <Head>
-        <title>Plataforma de automatización para WhatsApp | {{ appName }}</title>
-        <meta
-            name="description"
-            content="Automatiza conversaciones, organiza a tu equipo y convierte más clientes con un inbox compartido, flujos, IA y analytics para WhatsApp Business."
-        />
+        <title>{{ pageTitle }}</title>
+        <meta name="description" :content="pageDescription" />
         <meta property="og:title" content="Automatiza WhatsApp. Atiende mejor." />
         <meta
             property="og:description"
@@ -49,28 +51,34 @@ const closeMenu = (): void => {
 
                 <div id="marketing-menu" class="hidden items-center gap-8 lg:flex">
                     <a href="#funciones" class="marketing-nav-link">Funciones</a>
+                    <a href="#plan" class="marketing-nav-link">Plan</a>
                     <a href="#como-funciona" class="marketing-nav-link">Cómo funciona</a>
                     <a href="#seguridad" class="marketing-nav-link">Seguridad</a>
                     <a href="#faq" class="marketing-nav-link">FAQ</a>
                 </div>
 
                 <div class="hidden items-center gap-5 lg:flex">
-                    <Link v-if="page.props.auth.user" href="/dashboard" class="marketing-login">Ir al panel</Link>
-                    <Link v-else href="/login" class="marketing-login">Iniciar sesión</Link>
-                    <Link href="/register" class="marketing-button marketing-button--small">Empezar gratis <span aria-hidden="true">↗</span></Link>
+                    <Link v-if="page.props.auth.user" href="/dashboard" class="marketing-button marketing-button--small">Ir al panel <span aria-hidden="true">↗</span></Link>
+                    <template v-else>
+                        <Link href="/login" class="marketing-login">Iniciar sesión</Link>
+                        <Link href="/register" class="marketing-button marketing-button--small">Empezar gratis <span aria-hidden="true">↗</span></Link>
+                    </template>
                 </div>
             </nav>
 
             <div v-if="menuOpen" data-testid="marketing-mobile-menu" class="border-t border-[#dce5dd] bg-[#f7f8f3] px-5 py-5 lg:hidden">
                 <div class="mx-auto flex max-w-7xl flex-col gap-4">
                     <a href="#funciones" class="marketing-mobile-link" @click="closeMenu">Funciones</a>
+                    <a href="#plan" class="marketing-mobile-link" @click="closeMenu">Plan</a>
                     <a href="#como-funciona" class="marketing-mobile-link" @click="closeMenu">Cómo funciona</a>
                     <a href="#seguridad" class="marketing-mobile-link" @click="closeMenu">Seguridad</a>
                     <a href="#faq" class="marketing-mobile-link" @click="closeMenu">FAQ</a>
                     <div class="mt-2 flex items-center gap-4 border-t border-[#dce5dd] pt-4">
-                        <Link v-if="page.props.auth.user" href="/dashboard" class="marketing-login" @click="closeMenu">Ir al panel</Link>
-                        <Link v-else href="/login" class="marketing-login" @click="closeMenu">Iniciar sesión</Link>
-                        <Link href="/register" class="marketing-button marketing-button--small" @click="closeMenu">Empezar gratis <span aria-hidden="true">↗</span></Link>
+                        <Link v-if="page.props.auth.user" href="/dashboard" class="marketing-button marketing-button--small" @click="closeMenu">Ir al panel <span aria-hidden="true">↗</span></Link>
+                        <template v-else>
+                            <Link href="/login" class="marketing-login" @click="closeMenu">Iniciar sesión</Link>
+                            <Link href="/register" class="marketing-button marketing-button--small" @click="closeMenu">Empezar gratis <span aria-hidden="true">↗</span></Link>
+                        </template>
                     </div>
                 </div>
             </div>
@@ -89,8 +97,13 @@ const closeMenu = (): void => {
                     </div>
                     <p class="mt-3 max-w-sm text-sm leading-6 text-[#64756d]">Conversaciones más claras. Equipos más rápidos. Negocios que no dejan oportunidades en visto.</p>
                 </div>
-                <p class="text-sm text-[#64756d]">© {{ new Date().getFullYear() }} {{ appName }}. Hecho para equipos que atienden por WhatsApp.</p>
+                <div class="grid gap-6 text-sm sm:grid-cols-3 sm:gap-10">
+                    <div><p class="font-semibold text-[#10261f]">Producto</p><div class="mt-3 grid gap-2 text-[#64756d]"><a href="#funciones" class="hover:text-[#0b8f5a]">Funciones</a><a href="#seguridad" class="hover:text-[#0b8f5a]">Seguridad</a><a href="#faq" class="hover:text-[#0b8f5a]">FAQ</a></div></div>
+                    <div><p class="font-semibold text-[#10261f]">Cuenta</p><div class="mt-3 grid gap-2 text-[#64756d]"><Link v-if="page.props.auth.user" href="/dashboard" class="hover:text-[#0b8f5a]">Ir al panel</Link><template v-else><Link href="/register" class="hover:text-[#0b8f5a]">Crear cuenta</Link><Link href="/login" class="hover:text-[#0b8f5a]">Iniciar sesión</Link></template></div></div>
+                    <div><p class="font-semibold text-[#10261f]">Legal</p><div class="mt-3 grid gap-2 text-[#64756d]"><Link href="/privacy" class="hover:text-[#0b8f5a]">Privacidad</Link><Link href="/terms" class="hover:text-[#0b8f5a]">Términos</Link></div></div>
+                </div>
             </div>
+            <div class="mx-auto max-w-7xl px-5 pb-8 sm:px-8 lg:px-10"><p class="text-sm text-[#64756d]">© {{ new Date().getFullYear() }} {{ appName }}. Hecho para equipos que atienden por WhatsApp.</p></div>
         </footer>
     </div>
 </template>

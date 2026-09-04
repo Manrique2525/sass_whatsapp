@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useForm } from '@inertiajs/vue3';
+import { Link, useForm } from '@inertiajs/vue3';
 import AuthLayout from '@/Layouts/AuthLayout.vue';
 
 const form = useForm({
@@ -15,7 +15,13 @@ const submit = (): void => {
 </script>
 
 <template>
-    <AuthLayout title="Crear cuenta">
+    <AuthLayout title="Crea tu espacio de trabajo">
+        <p class="mb-6 text-center text-sm leading-6 text-zinc-600">
+            Empieza gratis y configura tu espacio de trabajo.
+        </p>
+        <div class="mb-6 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-center text-xs leading-5 text-emerald-900">
+            Tu cuenta incluye un workspace y el plan Free. Después podrás conectar tu WhatsApp Business.
+        </div>
         <form class="space-y-4" @submit.prevent="submit">
             <div>
                 <label for="name" class="mb-1 block text-sm font-medium text-zinc-700">Nombre</label>
@@ -76,13 +82,16 @@ const submit = (): void => {
                 :disabled="form.processing"
                 class="w-full rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
             >
-                Registrarse
+                Crear mi espacio
             </button>
         </form>
 
         <p class="mt-6 text-center text-sm text-zinc-600">
             ¿Ya tienes cuenta?
             <a href="/login" class="font-medium text-emerald-700 hover:underline">Inicia sesión</a>
+        </p>
+        <p class="mt-3 text-center text-sm">
+            <Link href="/" class="font-medium text-zinc-600 hover:text-emerald-700 hover:underline">Volver a la página principal</Link>
         </p>
     </AuthLayout>
 </template>

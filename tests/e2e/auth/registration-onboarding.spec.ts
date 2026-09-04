@@ -10,7 +10,7 @@ test.describe('Registro self-service (E2E-ONB-CLOSE)', () => {
         await page.getByLabel('Email').fill(email);
         await page.getByLabel('Contraseña', { exact: true }).fill('e2e-password');
         await page.getByLabel('Confirmar contraseña').fill('e2e-password');
-        await page.getByRole('button', { name: 'Registrarse' }).click();
+        await page.getByRole('button', { name: 'Crear mi espacio' }).click();
 
         await page.waitForURL('**/verify-email', { timeout: 60_000, waitUntil: 'commit' });
         await expect(page.getByText('Te hemos enviado un enlace de verificación.')).toBeVisible();

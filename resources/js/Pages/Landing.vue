@@ -1,7 +1,32 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
 import MarketingLayout from '@/Layouts/MarketingLayout.vue';
 import Reveal from '@/Components/Marketing/Reveal.vue';
+
+interface FreePlan {
+    name: string;
+    slug: string;
+    limits: {
+        messages: number | null;
+        contacts: number | null;
+        flowExecutions: number | null;
+        users: number | null;
+        knowledgeDocuments: number | null;
+    };
+    aiIncluded: boolean;
+}
+
+const props = defineProps<{ freePlan: FreePlan }>();
+const page = usePage();
+const isAuthenticated = computed(() => Boolean(page.props.auth.user));
+const planLimitItems = computed(() => [
+    { limit: props.freePlan.limits.messages, label: 'mensajes' },
+    { limit: props.freePlan.limits.contacts, label: 'contactos' },
+    { limit: props.freePlan.limits.flowExecutions, label: 'ejecuciones de flows' },
+    { limit: props.freePlan.limits.users, label: 'usuarios' },
+    { limit: props.freePlan.limits.knowledgeDocuments, label: 'documentos de conocimiento' },
+]);
 
 const benefits = [
     { number: '01', title: 'Responde más rápido', copy: 'Todo el contexto de cada conversación, listo para que tu equipo actúe sin buscar en cinco herramientas.' },
@@ -12,6 +37,9 @@ const benefits = [
 const useCases = ['Ventas', 'Atención al cliente', 'Ecommerce', 'Clínicas', 'Inmobiliarias', 'Restaurantes', 'Agencias', 'Servicios'];
 
 const faqs = [
+    ['¿Puedo empezar gratis?', 'Sí. El plan Free te permite comenzar a organizar tu atención sin añadir datos de pago.'],
+    ['¿Necesito tarjeta?', 'No. Puedes crear tu cuenta y comenzar con el plan Free sin introducir una tarjeta.'],
+    ['¿La IA está incluida en el plan gratuito?', 'No. La IA no está incluida en el plan Free; el plan gratuito se centra en inbox, automatizaciones, contactos y conocimiento básico.'],
     ['¿Funciona con WhatsApp Business?', 'Sí. Conecta tu WhatsApp Business mediante la integración oficial de WhatsApp Business Cloud API.'],
     ['¿Puedo tener varios agentes?', 'Sí. El inbox compartido permite que tu equipo atienda conversaciones con roles y permisos por negocio.'],
     ['¿Puedo automatizar respuestas?', 'Sí. Crea flujos visuales con condiciones, respuestas, FAQs e IA sin tener que programar.'],
@@ -44,14 +72,17 @@ const faqs = [
                             Centraliza a todo tu equipo en un inbox compartido, automatiza respuestas con flujos e IA y da seguimiento a cada oportunidad desde una sola plataforma.
                         </p>
                         <div class="mt-9 flex flex-wrap items-center gap-4">
-                            <Link href="/register" class="inline-flex items-center gap-3 rounded-full bg-[#b7f36b] px-6 py-3.5 text-sm font-bold text-[#10261f] shadow-[0_12px_30px_rgba(183,243,107,0.18)] transition hover:-translate-y-0.5 hover:bg-[#c9fa8c] focus:outline-none focus:ring-2 focus:ring-[#b7f36b] focus:ring-offset-2 focus:ring-offset-[#10261f]">
+                            <Link v-if="isAuthenticated" href="/dashboard" class="inline-flex items-center gap-3 rounded-full bg-[#b7f36b] px-6 py-3.5 text-sm font-bold text-[#10261f] shadow-[0_12px_30px_rgba(183,243,107,0.18)] transition hover:-translate-y-0.5 hover:bg-[#c9fa8c] focus:outline-none focus:ring-2 focus:ring-[#b7f36b] focus:ring-offset-2 focus:ring-offset-[#10261f]">
+                                Ir al panel <span aria-hidden="true">↗</span>
+                            </Link>
+                            <Link v-else href="/register" class="inline-flex items-center gap-3 rounded-full bg-[#b7f36b] px-6 py-3.5 text-sm font-bold text-[#10261f] shadow-[0_12px_30px_rgba(183,243,107,0.18)] transition hover:-translate-y-0.5 hover:bg-[#c9fa8c] focus:outline-none focus:ring-2 focus:ring-[#b7f36b] focus:ring-offset-2 focus:ring-offset-[#10261f]">
                                 Empezar gratis <span aria-hidden="true">↗</span>
                             </Link>
                             <a href="#producto" class="inline-flex items-center gap-2 rounded-full border border-white/20 px-6 py-3.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:border-white/50 focus:outline-none focus:ring-2 focus:ring-white">
                                 Ver cómo funciona <span aria-hidden="true">↓</span>
                             </a>
                         </div>
-                        <p class="mt-5 text-xs text-[#91a69a]">Plan gratuito para empezar. Sin promesas de prueba temporal.</p>
+                        <p class="mt-5 text-xs text-[#91a69a]">Plan gratuito para empezar. Sin tarjeta ni promesas de prueba temporal.</p>
                     </div>
                 </Reveal>
 
@@ -106,13 +137,15 @@ const faqs = [
 
         <section class="bg-[#f7f8f3] py-20 sm:py-28"><div class="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10"><Reveal><p class="eyebrow">Para equipos con conversaciones reales</p><h2 class="section-title max-w-3xl">Una base flexible para tu forma de trabajar.</h2></Reveal><div class="mt-12 flex flex-wrap gap-3"><span v-for="useCase in useCases" :key="useCase" class="rounded-full border border-[#cbd8cf] px-5 py-3 text-sm font-medium text-[#33483e] transition hover:-translate-y-0.5 hover:border-[#0b8f5a] hover:bg-white">{{ useCase }}</span></div></div></section>
 
+        <section id="plan" class="bg-[#10261f] py-20 text-white sm:py-28"><div class="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10"><div class="grid gap-12 lg:grid-cols-[0.75fr_1.25fr] lg:items-center"><Reveal><div><p class="eyebrow eyebrow--dark">Un comienzo claro</p><h2 class="section-title section-title--dark">Empieza gratis, con límites transparentes.</h2><p class="mt-5 max-w-md text-base leading-7 text-[#a9beb0]">Un plan para comenzar a organizar y automatizar tu atención por WhatsApp, sin añadir complejidad desde el primer día.</p></div></Reveal><Reveal :delay="120"><article class="rounded-[1.75rem] border border-[#b7f36b]/40 bg-[#f7f8f3] p-7 text-[#10261f] shadow-[0_25px_70px_rgba(0,0,0,0.18)] sm:p-9"><div class="flex flex-wrap items-start justify-between gap-4"><div><span class="inline-flex rounded-full bg-[#e0f2c9] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[#4b7d34]">Plan gratuito</span><h3 class="mt-4 text-3xl font-semibold tracking-[-0.04em]">{{ props.freePlan.name }}</h3></div><span class="text-sm font-semibold text-[#0b8f5a]">Para comenzar</span></div><p class="mt-4 max-w-lg text-sm leading-6 text-[#64756d]">Organiza tu equipo y tus primeras conversaciones con los límites reales del plan.</p><ul class="mt-7 grid gap-3 sm:grid-cols-2" aria-label="Límites del plan Free"><li v-for="item in planLimitItems" :key="item.label" class="flex items-baseline gap-2 rounded-xl bg-[#eef3ed] px-3 py-2.5 text-sm"><span class="font-bold">Hasta {{ item.limit }}</span><span class="text-[#64756d]">{{ item.label }}</span></li></ul><p class="mt-5 rounded-xl border border-[#ead8a7] bg-[#fff8df] px-3 py-2.5 text-xs leading-5 text-[#765d25]">La IA no está incluida en el plan Free.</p><Link v-if="isAuthenticated" href="/dashboard" class="marketing-button mt-7 w-full">Ir al panel <span aria-hidden="true">↗</span></Link><Link v-else href="/register" class="marketing-button mt-7 w-full">Empezar gratis <span aria-hidden="true">↗</span></Link></article></Reveal></div></div></section>
+
         <section id="seguridad" class="border-y border-[#dce5dd] bg-[#eef3ed] py-20 sm:py-28"><div class="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10"><div class="grid gap-12 lg:grid-cols-[0.8fr_1.2fr] lg:items-start"><Reveal><div><p class="eyebrow">Diseñado para confiar</p><h2 class="section-title">Tu negocio merece control, no cajas negras.</h2></div></Reveal><Reveal :delay="120"><div class="grid gap-x-8 gap-y-10 sm:grid-cols-2"><div><span class="trust-icon">↗</span><h3 class="mt-4 font-semibold">Datos aislados por negocio</h3><p class="mt-2 text-sm leading-6 text-[#64756d]">Cada espacio mantiene sus conversaciones y recursos separados.</p></div><div><span class="trust-icon">⌁</span><h3 class="mt-4 font-semibold">Roles y permisos</h3><p class="mt-2 text-sm leading-6 text-[#64756d]">Define qué puede ver y hacer cada persona de tu equipo.</p></div><div><span class="trust-icon">◈</span><h3 class="mt-4 font-semibold">Tokens cifrados</h3><p class="mt-2 text-sm leading-6 text-[#64756d]">Las credenciales de integraciones se protegen en el servidor.</p></div><div><span class="trust-icon">✓</span><h3 class="mt-4 font-semibold">Auditoría y webhooks seguros</h3><p class="mt-2 text-sm leading-6 text-[#64756d]">Trazabilidad de acciones y validaciones para eventos entrantes.</p></div></div></Reveal></div></div></section>
 
-        <section class="bg-[#e0f2c9] py-16 sm:py-20"><div class="mx-auto flex max-w-7xl flex-col gap-8 px-5 sm:px-8 md:flex-row md:items-center md:justify-between lg:px-10"><Reveal><div><p class="eyebrow text-[#4b7d34]">Empieza sin complicarte</p><h2 class="mt-3 text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">Un plan gratuito para dar el primer paso.</h2><p class="mt-3 max-w-xl text-sm leading-6 text-[#4b6548]">Crea tu espacio, organiza tu equipo y descubre una forma más clara de atender por WhatsApp.</p></div></Reveal><Reveal :delay="100"><Link href="/register" class="marketing-button whitespace-nowrap">Crear cuenta gratis <span aria-hidden="true">↗</span></Link></Reveal></div></section>
+        <section class="bg-[#e0f2c9] py-16 sm:py-20"><div class="mx-auto flex max-w-7xl flex-col gap-8 px-5 sm:px-8 md:flex-row md:items-center md:justify-between lg:px-10"><Reveal><div><p class="eyebrow text-[#4b7d34]">Empieza sin complicarte</p><h2 class="mt-3 text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">Un plan gratuito para dar el primer paso.</h2><p class="mt-3 max-w-xl text-sm leading-6 text-[#4b6548]">Crea tu espacio, organiza tu equipo y descubre una forma más clara de atender por WhatsApp.</p></div></Reveal><Reveal :delay="100"><Link v-if="isAuthenticated" href="/dashboard" class="marketing-button whitespace-nowrap">Ir al panel <span aria-hidden="true">↗</span></Link><Link v-else href="/register" class="marketing-button whitespace-nowrap">Empezar gratis <span aria-hidden="true">↗</span></Link></Reveal></div></section>
 
         <section id="faq" class="bg-[#f7f8f3] py-20 sm:py-28"><div class="mx-auto max-w-3xl px-5 sm:px-8"><Reveal><p class="eyebrow">Preguntas frecuentes</p><h2 class="section-title">Lo importante, sin letra pequeña.</h2></Reveal><div class="mt-10 divide-y divide-[#dce5dd] border-y border-[#dce5dd]"><details v-for="faq in faqs" :key="faq[0]" class="group py-5"><summary class="flex cursor-pointer list-none items-center justify-between gap-5 text-base font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-[#10261f]">{{ faq[0] }}<span class="text-xl font-normal text-[#0b8f5a] transition group-open:rotate-45">+</span></summary><p class="max-w-2xl pt-3 text-sm leading-6 text-[#64756d]">{{ faq[1] }}</p></details></div></div></section>
 
-        <section class="bg-[#10261f] px-5 py-20 text-center text-white sm:px-8 sm:py-28"><Reveal><p class="eyebrow eyebrow--dark">Tu próxima conversación empieza aquí</p><h2 class="mx-auto mt-4 max-w-3xl text-4xl font-semibold tracking-[-0.055em] sm:text-6xl">Haz que cada mensaje cuente.</h2><p class="mx-auto mt-5 max-w-lg text-base leading-7 text-[#a9beb0]">Organiza tu atención, automatiza lo que puedas y deja que tu equipo se concentre en lo que importa.</p><Link href="/register" class="mt-9 inline-flex items-center gap-3 rounded-full bg-[#b7f36b] px-7 py-3.5 text-sm font-bold text-[#10261f] transition hover:-translate-y-0.5 hover:bg-[#c9fa8c] focus:outline-none focus:ring-2 focus:ring-[#b7f36b] focus:ring-offset-2 focus:ring-offset-[#10261f]">Empezar gratis <span aria-hidden="true">↗</span></Link></Reveal></section>
+        <section class="bg-[#10261f] px-5 py-20 text-center text-white sm:px-8 sm:py-28"><Reveal><p class="eyebrow eyebrow--dark">Tu próxima conversación empieza aquí</p><h2 class="mx-auto mt-4 max-w-3xl text-4xl font-semibold tracking-[-0.055em] sm:text-6xl">Haz que cada mensaje cuente.</h2><p class="mx-auto mt-5 max-w-lg text-base leading-7 text-[#a9beb0]">Organiza tu atención, automatiza lo que puedas y deja que tu equipo se concentre en lo que importa.</p><Link v-if="isAuthenticated" href="/dashboard" class="mt-9 inline-flex items-center gap-3 rounded-full bg-[#b7f36b] px-7 py-3.5 text-sm font-bold text-[#10261f] transition hover:-translate-y-0.5 hover:bg-[#c9fa8c] focus:outline-none focus:ring-2 focus:ring-[#b7f36b] focus:ring-offset-2 focus:ring-offset-[#10261f]">Ir al panel <span aria-hidden="true">↗</span></Link><Link v-else href="/register" class="mt-9 inline-flex items-center gap-3 rounded-full bg-[#b7f36b] px-7 py-3.5 text-sm font-bold text-[#10261f] transition hover:-translate-y-0.5 hover:bg-[#c9fa8c] focus:outline-none focus:ring-2 focus:ring-[#b7f36b] focus:ring-offset-2 focus:ring-offset-[#10261f]">Empezar gratis <span aria-hidden="true">↗</span></Link></Reveal></section>
     </MarketingLayout>
 </template>
 

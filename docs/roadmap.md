@@ -3385,4 +3385,14 @@ a clientes: el push es publicación de fuente únicamente.
 - **Contenido**: hero con preview del inbox, beneficios, funciones de inbox/Flow Builder/IA, leads, analytics, pasos de uso, casos de uso, seguridad, FAQ y CTA final.
 - **Motion y accesibilidad**: `Reveal.vue` centraliza entrada mediante `IntersectionObserver`; `prefers-reduced-motion` desactiva transformaciones/transiciones. El menú mobile expone estado y controles accesibles.
 - **Implementación**: `LandingController`, `MarketingLayout`, `Landing.vue` y estilos Tailwind existentes. No se instalaron dependencias ni se modificó el contrato de autenticación.
-- **Validación U2**: backend landing 2 tests / 9 assertions; Vitest 39 files / 574 passed; typecheck PASS; build PASS; Playwright landing 2 passed; Pint PASS; diff --check PASS.
+ - **Validación U2**: backend landing 2 tests / 9 assertions; Vitest 39 files / 574 passed; typecheck PASS; build PASS; Playwright landing 2 passed; Pint PASS; diff --check PASS.
+
+### U3 — Free plan, legal y conversión · COMPLETE LOCAL
+
+- **Alcance**: presentación pública del plan Free real, CTAs contextuales para visitantes/usuarios autenticados, microcopy de
+  registro, footer con navegación legal y páginas públicas `/privacy` y `/terms`.
+- **Plan Free**: se muestran 100 mensajes, 50 contactos, 10 ejecuciones de flows, 3 usuarios y 2 documentos de conocimiento.
+  La IA se declara explícitamente no incluida en Free. No se presentan planes pagos ni precios ficticios.
+- **Legal**: las páginas son una base de producto y requieren revisión legal/empresarial final antes de producción. No se
+  inventan entidad legal, domicilio, jurisdicción, email público, certificaciones ni periodos de retención concretos.
+- **Estado**: U1 **COMPLETE + VALIDATED LOCAL**. U2 **COMPLETE + VALIDATED LOCAL**. U3 **COMPLETE LOCAL**. U4 **NOT STARTED**.

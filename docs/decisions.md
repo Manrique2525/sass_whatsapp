@@ -3767,6 +3767,24 @@ una pantalla de upload/search en el frontend.
   - No se requiere cambio de esquema. La cobertura incluye provisión, estado del plan, aislamiento, rol, redirección y
     recorrido E2E de onboarding.
 
+## ADR-126 - Safe public Free plan and legal foundation (FASE 33 U3)
+
+- **Estado**: Aceptado - FASE 33 U3 (local)
+- **Contexto**: la landing necesita explicar el primer paso comercial y ofrecer fundamentos legales sin publicar precios
+  inexistentes, detalles internos de billing o afirmaciones legales no verificadas.
+- **Decisión**:
+  1. `LandingController` consulta el plan global activo `free` y expone únicamente nombre, slug, límites de prospecto y
+     el indicador de IA incluida. No expone IDs, precios Stripe, metadata de provider ni entitlements internos.
+  2. La presentación pública muestra sólo Free con límites provenientes del catálogo real. La IA se declara no incluida en
+     Free y no se crean tiers pagos.
+  3. `/privacy` y `/terms` son páginas públicas de base de producto, con lenguaje neutral sobre proveedores y arquitectura;
+     requieren revisión legal/empresarial antes del lanzamiento y no sustituyen asesoría legal.
+  4. Los CTAs dependen de la sesión: visitante a `/register`, usuario autenticado a `/dashboard`. El flujo de provisión y
+     verificación de U1 permanece sin cambios.
+- **Consecuencias**:
+  - La conversión se apoya en límites honestos y no acopla marketing a un catálogo pago futuro.
+  - La información legal puede evolucionar con revisión empresarial sin inventar jurisdicción, contacto o certificaciones.
+
 ## ADR-125 - Public marketing landing with dependency-free motion (FASE 33 U2)
 
 - **Estado**: Aceptado - FASE 33 U2 (local)

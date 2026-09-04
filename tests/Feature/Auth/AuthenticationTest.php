@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domain\Users\Models\User;
+use Database\Seeders\PlanSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -64,6 +65,8 @@ test('la sesión se regenera tras el login', function (): void {
 });
 
 test('la ruta raíz muestra la landing pública', function (): void {
+    $this->seed(PlanSeeder::class);
+
     $this->get('/')
         ->assertOk()
         ->assertInertia(fn ($page) => $page->component('Landing'));

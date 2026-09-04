@@ -2182,3 +2182,14 @@ Esto NO es un wait-condition flaky ni carga de assets (assets ~0.1–0.5ms).
 - **Hotfix productivo previo (commit separado)**: `d85751ad53b10eb2da64efc8b84ff5596b5d2195`
   `fix(inbox): lastMessage() with PK uuid in PostgreSQL (max uuid)` — solo `Conversation.php` +
   `ConversationTest.php`. Aislado de U1 (no amend/push).
+
+## FASE 33 U3 — Free plan, legal y conversión
+
+- La landing obtiene únicamente los campos públicos del plan `free`: nombre, slug, límites visibles y estado de inclusión
+  de IA. Nunca expone IDs, precios Stripe, metadata de provider ni estructuras internas de entitlements.
+- Las rutas públicas `/privacy` y `/terms` se validan sin autenticación. Son plantillas de producto, no asesoría legal, y
+  requieren revisión legal/empresarial antes de un lanzamiento público.
+- El CTA se adapta al estado de sesión: visitantes van a `/register`; usuarios autenticados ven `Ir al panel` hacia
+  `/dashboard`. El registro conserva la provisión atómica, owner, plan Free y verificación de email de U1.
+- El sitio público sólo usa cookies esenciales de sesión/CSRF según la implementación actual; no se añadió banner de cookies
+  de marketing. Esta decisión queda sujeta a revisión jurisdiccional.
