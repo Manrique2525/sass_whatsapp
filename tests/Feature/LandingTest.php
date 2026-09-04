@@ -43,3 +43,20 @@ test('las páginas legales son públicas', function (): void {
         ->assertOk()
         ->assertInertia(fn ($page) => $page->component('Legal/Terms'));
 });
+
+test('el sitemap y robots sólo publican rutas públicas', function (): void {
+    $this->get('/sitemap.xml')
+        ->assertOk()
+        ->assertHeader('Content-Type', 'application/xml; charset=UTF-8')
+        ->assertSee('<loc>'.url('/').'</loc>', false)
+        ->assertSee('<loc>'.url('/privacy').'</loc>', false)
+        ->assertSee('<loc>'.url('/terms').'</loc>', false)
+        ->assertDontSee('/dashboard');
+
+    $this->get('/robots.txt')
+        ->assertOk()
+        ->assertHeader('Content-Type', 'text/plain; charset=UTF-8')
+        ->assertSee('Allow: /')
+        ->assertSee('Sitemap: '.url('/sitemap.xml'))
+        ->assertSee('Disallow: /dashboard');
+});

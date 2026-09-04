@@ -3395,4 +3395,14 @@ a clientes: el push es publicación de fuente únicamente.
   La IA se declara explícitamente no incluida en Free. No se presentan planes pagos ni precios ficticios.
 - **Legal**: las páginas son una base de producto y requieren revisión legal/empresarial final antes de producción. No se
   inventan entidad legal, domicilio, jurisdicción, email público, certificaciones ni periodos de retención concretos.
-- **Estado**: U1 **COMPLETE + VALIDATED LOCAL**. U2 **COMPLETE + VALIDATED LOCAL**. U3 **COMPLETE LOCAL**. U4 **NOT STARTED**.
+- **Estado**: U1 **COMPLETE + VALIDATED LOCAL**. U2 **COMPLETE + VALIDATED LOCAL**. U3 **COMPLETE + VALIDATED LOCAL**. U4 **COMPLETE LOCAL**. U5 **NOT STARTED**.
+
+### U4 — SEO, accesibilidad, performance y motion polish · COMPLETE LOCAL
+
+- **SEO público**: títulos sin duplicar marca, descripción orientada a beneficio, canonical y Open Graph absolutos, Twitter metadata, JSON-LD `WebApplication` sin claims comerciales no verificables, sitemap sólo público y robots dinámico con sitemap absoluto.
+- **Accesibilidad**: menú mobile con `aria-expanded`, `aria-controls`, Escape y retorno de foco; estilos `focus-visible`; landmarks semánticos; estructura de headings conservada; anchors con espacio para navbar sticky.
+- **Motion y performance**: se conserva `Reveal.vue` con progressive enhancement y reduced motion; no se añadieron Lenis ni librerías de animación. Landing JS 25.16 kB y CSS 9.33 kB; el chunk Overview de 977.24 kB continúa siendo dashboard no relacionado.
+- **Branding**: `APP_NAME` real sigue siendo `WhatsApp SaaS`. No existe asset de marca válido para reemplazar `public/favicon.ico` vacío; favicon queda diferido como **BRAND ASSET REQUIRED**.
+- **Decisiones diferidas**: no se añadieron aliases de anchors en inglés por bajo valor actual, ni se inició discoverability de dashboard/Knowledge/Tags/Templates/Media; queda para U5.
+- **Validación U4**: backend 2595 passed / 15 skipped; Vitest 578 passed; typecheck PASS; build PASS; PHPStan PASS; Pint PASS; diff-check PASS; full E2E 37 passed con setup fresco, 1 worker y 0 retries; cola E2E limpia.
+- **Estado**: U1 **COMPLETE + VALIDATED LOCAL**. U2 **COMPLETE + VALIDATED LOCAL**. U3 **COMPLETE + VALIDATED LOCAL**. U4 **COMPLETE LOCAL**. U5 **NOT STARTED**.

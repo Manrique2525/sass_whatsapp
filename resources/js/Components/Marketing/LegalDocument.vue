@@ -10,16 +10,16 @@ defineProps<{
 
 <template>
     <MarketingLayout :page-title="title" :page-description="description">
-        <main class="pt-32 pb-20 sm:pt-40 sm:pb-28">
+        <section class="pt-32 pb-20 sm:pt-40 sm:pb-28" aria-labelledby="legal-title">
             <article class="mx-auto max-w-3xl px-5 sm:px-8">
                 <p class="eyebrow">{{ eyebrow }}</p>
-                <h1 class="mt-4 text-4xl font-semibold leading-tight tracking-[-0.05em] text-[#10261f] sm:text-6xl">{{ title }}</h1>
+                <h1 id="legal-title" class="mt-4 text-4xl font-semibold leading-tight tracking-[-0.05em] text-[#10261f] sm:text-6xl">{{ title }}</h1>
                 <p class="mt-6 text-sm leading-6 text-[#64756d]">Última actualización: 4 de septiembre de 2026</p>
                 <div class="legal-prose mt-12">
                     <slot />
                 </div>
             </article>
-        </main>
+        </section>
     </MarketingLayout>
 </template>
 

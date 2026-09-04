@@ -1,50 +1,76 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 
 const page = usePage();
 const menuOpen = ref(false);
-const appName = 'WhatsApp SaaS';
+const menuTrigger = ref<HTMLButtonElement | null>(null);
+const appName = import.meta.env.VITE_APP_NAME ?? 'WhatsApp SaaS';
 
-withDefaults(defineProps<{ pageTitle?: string; pageDescription?: string }>(), {
+const props = withDefaults(defineProps<{ pageTitle?: string; pageDescription?: string }>(), {
     pageTitle: 'Plataforma de automatización para WhatsApp',
     pageDescription: 'Automatiza conversaciones, organiza a tu equipo y convierte más clientes con un inbox compartido, flujos, IA y analytics para WhatsApp Business.',
 });
 
-const closeMenu = (): void => {
+const documentTitle = computed(() => props.pageTitle.endsWith(` | ${appName}`) ? props.pageTitle : `${props.pageTitle} | ${appName}`);
+const canonicalUrl = computed(() => {
+    if (typeof window === 'undefined') return page.url;
+
+    const url = new URL(page.url, window.location.origin);
+    url.search = '';
+    url.hash = '';
+
+    return url.toString();
+});
+
+const closeMenu = (restoreFocus = false): void => {
     menuOpen.value = false;
+
+    if (restoreFocus) menuTrigger.value?.focus();
+};
+
+const handleMenuKeydown = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape' && menuOpen.value) closeMenu(true);
+};
+
+onMounted(() => window.addEventListener('keydown', handleMenuKeydown));
+onBeforeUnmount(() => window.removeEventListener('keydown', handleMenuKeydown));
+
+const toggleMenu = (): void => {
+    menuOpen.value = !menuOpen.value;
 };
 </script>
 
 <template>
     <Head>
-        <title>{{ pageTitle }}</title>
+        <title>{{ documentTitle }}</title>
         <meta name="description" :content="pageDescription" />
-        <meta property="og:title" content="Automatiza WhatsApp. Atiende mejor." />
-        <meta
-            property="og:description"
-            content="Un inbox compartido para tu equipo, automatizaciones visuales e IA con el conocimiento de tu negocio."
-        />
+        <meta property="og:title" :content="documentTitle" />
+        <meta property="og:description" :content="pageDescription" />
         <meta property="og:type" content="website" />
-        <meta property="og:url" content="/" />
-        <link rel="canonical" href="/" />
+        <meta property="og:url" :content="canonicalUrl" />
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" :content="documentTitle" />
+        <meta name="twitter:description" :content="pageDescription" />
+        <link rel="canonical" :href="canonicalUrl" />
     </Head>
 
     <div class="marketing-shell min-h-screen overflow-hidden bg-[#f7f8f3] text-[#10261f]">
         <header class="fixed inset-x-0 top-0 z-50 border-b border-[#dce5dd]/70 bg-[#f7f8f3]/90 backdrop-blur-xl">
             <nav class="mx-auto flex h-20 max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-10" aria-label="Navegación principal">
-                <a href="#inicio" class="flex items-center gap-3" @click="closeMenu">
+                <a href="#inicio" class="flex items-center gap-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#10261f]" @click="closeMenu(false)">
                     <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-[#b7f36b] text-sm font-black text-[#10261f]">w.</span>
                     <span class="text-sm font-bold tracking-[-0.02em] text-[#10261f] sm:text-base">{{ appName }}</span>
                 </a>
 
                 <button
+                    ref="menuTrigger"
                     type="button"
-                    class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#cbd8cf] text-[#10261f] transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-[#10261f] lg:hidden"
+                    class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#cbd8cf] text-[#10261f] transition hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#10261f] lg:hidden"
                     :aria-expanded="menuOpen"
                     aria-controls="marketing-menu"
                     :aria-label="menuOpen ? 'Cerrar menú' : 'Abrir menú'"
-                    @click="menuOpen = !menuOpen"
+                    @click="toggleMenu"
                 >
                     <span class="text-lg" aria-hidden="true">{{ menuOpen ? '×' : '☰' }}</span>
                 </button>
@@ -68,16 +94,16 @@ const closeMenu = (): void => {
 
             <div v-if="menuOpen" data-testid="marketing-mobile-menu" class="border-t border-[#dce5dd] bg-[#f7f8f3] px-5 py-5 lg:hidden">
                 <div class="mx-auto flex max-w-7xl flex-col gap-4">
-                    <a href="#funciones" class="marketing-mobile-link" @click="closeMenu">Funciones</a>
-                    <a href="#plan" class="marketing-mobile-link" @click="closeMenu">Plan</a>
-                    <a href="#como-funciona" class="marketing-mobile-link" @click="closeMenu">Cómo funciona</a>
-                    <a href="#seguridad" class="marketing-mobile-link" @click="closeMenu">Seguridad</a>
-                    <a href="#faq" class="marketing-mobile-link" @click="closeMenu">FAQ</a>
+                    <a href="#funciones" class="marketing-mobile-link" @click="closeMenu(false)">Funciones</a>
+                    <a href="#plan" class="marketing-mobile-link" @click="closeMenu(false)">Plan</a>
+                    <a href="#como-funciona" class="marketing-mobile-link" @click="closeMenu(false)">Cómo funciona</a>
+                    <a href="#seguridad" class="marketing-mobile-link" @click="closeMenu(false)">Seguridad</a>
+                    <a href="#faq" class="marketing-mobile-link" @click="closeMenu(false)">FAQ</a>
                     <div class="mt-2 flex items-center gap-4 border-t border-[#dce5dd] pt-4">
-                        <Link v-if="page.props.auth.user" href="/dashboard" class="marketing-button marketing-button--small" @click="closeMenu">Ir al panel <span aria-hidden="true">↗</span></Link>
+                        <Link v-if="page.props.auth.user" href="/dashboard" class="marketing-button marketing-button--small" @click="closeMenu(false)">Ir al panel <span aria-hidden="true">↗</span></Link>
                         <template v-else>
-                            <Link href="/login" class="marketing-login" @click="closeMenu">Iniciar sesión</Link>
-                            <Link href="/register" class="marketing-button marketing-button--small" @click="closeMenu">Empezar gratis <span aria-hidden="true">↗</span></Link>
+                            <Link href="/login" class="marketing-login" @click="closeMenu(false)">Iniciar sesión</Link>
+                            <Link href="/register" class="marketing-button marketing-button--small" @click="closeMenu(false)">Empezar gratis <span aria-hidden="true">↗</span></Link>
                         </template>
                     </div>
                 </div>

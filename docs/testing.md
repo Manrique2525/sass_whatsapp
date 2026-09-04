@@ -2193,3 +2193,20 @@ Esto NO es un wait-condition flaky ni carga de assets (assets ~0.1–0.5ms).
   `/dashboard`. El registro conserva la provisión atómica, owner, plan Free y verificación de email de U1.
 - El sitio público sólo usa cookies esenciales de sesión/CSRF según la implementación actual; no se añadió banner de cookies
   de marketing. Esta decisión queda sujeta a revisión jurisdiccional.
+
+## FASE 33 U4 — SEO, accesibilidad, performance y motion polish
+
+- SEO público: canonical, `og:url` y sitemap se generan con URLs absolutas desde la URL/configuración de la aplicación; no
+  se incluyen rutas privadas. `/robots.txt` referencia `/sitemap.xml` con URL absoluta.
+- Accesibilidad: el menú mobile conserva navegación nativa por teclado, cierra con Escape, actualiza `aria-expanded`, usa un
+  `aria-controls` válido y devuelve el foco al botón que lo abrió. La landing y las páginas legales conservan un H1 único.
+- Motion: `IntersectionObserver` permanece como mejora progresiva; el contenido inicia visible, no depende de JavaScript si
+  el observer no está disponible y elimina transformaciones con `prefers-reduced-motion`. No se añadió Lenis ni otra librería.
+- Structured data: sólo `WebApplication` con claims verificables; no se publican `Offer`, rating, reviews, precios ni IDs
+  internos.
+- Favicon: no se inventó una marca. El asset vacío existente requiere un asset de marca real antes de reemplazarse.
+- Performance registrada: Landing JS **25.16 kB**, Landing CSS **9.33 kB**, mayor chunk no relacionado Overview **977.24 kB**.
+- Responsive E2E cubre 375/390 para overflow, navegación, CTA, plan Free y enlaces legales; desktop se mantiene cubierto por
+  la suite existente. La validación final U4 fue: backend **2595 passed / 15 skipped**, Vitest **578 passed**, full E2E
+  **37 passed / 0 failed** con setup fresco, `workers=1` y `retries=0`; cola limpia (`failed=0`, `pending=0`,
+  `reserved=0`, `delayed=0`).
