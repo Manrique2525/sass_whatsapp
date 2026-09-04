@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global) · FASE 32 COMPLETADA/PUBLICADA (U1: deterministic message ordering) · FASE 33 COMPLETA LOCALMENTE (U1: self-service provisioning; pendiente revisión global)**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global) · FASE 32 COMPLETADA/PUBLICADA (U1: deterministic message ordering) · FASE 33 EN PROGRESO (U1: self-service provisioning completa y validada localmente)**.
 
 ## Fases
 
@@ -39,7 +39,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA
 | 30 | E2E Playwright (U1: Infra + Auth + Multi-Tenancy Base · U2: Inbox · U3: Handoff · U4: Flow Builder + Billing + Knowledge integration · U5: CI foundation/static/frontend/backend/PostgreSQL integration) | EN PROGRESO |
 | 31 | Meta / WhatsApp Cloud API (U1: Provider + config hardening · U2: Webhook authenticity + durable ingestion · U3: Inbound normalization + monotonic status · U4: Outbound delivery ambiguity + care window · U5: Secure media + approved templates · U6: Operations, Observability & Production Readiness) | COMPLETA LOCALMENTE (pendiente revisión) |
 | 32 | Deterministic message ordering (U1: `ORDER BY created_at, id` en inbox + conversación activa + frontend realtime==reload · contract + tests) | COMPLETADA/PUBLICADA |
-| 33 | Self-service provisioning (U1: registro atómico User + workspace + owner + plan free + onboarding post-verificación) | COMPLETA LOCALMENTE (pendiente revisión) |
+| 33 | Self-service provisioning (U1: registro atómico User + workspace + owner + plan free + onboarding post-verificación) | EN PROGRESO · U1 COMPLETE + VALIDATED LOCAL |
 | 34 | Performance | PENDIENTE |
 | 35 | DevOps (Docker, CI/CD) | PENDIENTE |
 | 36 | Documentación API (OpenAPI) | PENDIENTE |
@@ -3363,7 +3363,7 @@ consolida como la fase de Operations, Observability & Production Readiness sigui
 U1 queda **COMPLETA + VALIDADA + PUBLICADA**. NO deploy, NO ejecución de migrations, NO configuración de Meta, NO envío
 a clientes: el push es publicación de fuente únicamente.
 
-## FASE 33 — Self-service provisioning (U1) · COMPLETA LOCALMENTE
+## FASE 33 — Self-service provisioning · EN PROGRESO
 
 - **Alcance**: `POST /register` web provisiona atómicamente el usuario, un workspace con slug server-side collision-safe,
   membresía `owner`, `current_tenant_id` y suscripción activa al plan `free`. El flujo API de registro permanece user-only.
@@ -3374,5 +3374,7 @@ a clientes: el push es publicación de fuente únicamente.
   existentes. No se añadió migración: el modelo actual ya soporta todo el flujo.
 - **Implementación**: `ProvisionNewWorkspace`, `OnboardingController`, ruta protegida `verified` + `tenant`, y redirección
   post-verificación. `RegisterUser` no se modificó para preservar el contrato del registro API.
-- **Tests y gates**: backend 2110 passed / 15 skipped / 5878 assertions; frontend 574 passed; typecheck PASS; build PASS;
-  PHPStan PASS; Pint PASS; E2E 29 passed. No deploy ni configuración de Meta.
+- **Tests y gates U1**: backend canónico 2591 passed / 15 skipped / 7475 assertions; frontend 574 passed; typecheck PASS;
+  build PASS; PHPStan PASS; Pint PASS; E2E 29 passed antes del cierre formal. El journey browser literal de registro,
+  verificación y onboarding se valida en el cierre U1.
+- **Estado**: U1 **COMPLETE + VALIDATED LOCAL**. U2 **NOT STARTED**. La fase permanece EN PROGRESO.
