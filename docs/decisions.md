@@ -3766,3 +3766,20 @@ una pantalla de upload/search en el frontend.
   - El CTA de WhatsApp reutiliza el flujo oficial existente y no inicia conexiones Meta desde onboarding.
   - No se requiere cambio de esquema. La cobertura incluye provisión, estado del plan, aislamiento, rol, redirección y
     recorrido E2E de onboarding.
+
+## ADR-125 - Public marketing landing with dependency-free motion (FASE 33 U2)
+
+- **Estado**: Aceptado - FASE 33 U2 (local)
+- **Contexto**: la raíz era un redirect al login y necesitaba una entrada pública orientada al producto, sin introducir una
+  segunda aplicación frontend ni promesas comerciales que el producto aún no puede respaldar.
+- **Decisión**:
+  1. `/` renderiza `Landing` mediante Inertia y comparte un `MarketingLayout` público, manteniendo `/login`, `/register` y
+     las rutas autenticadas existentes.
+  2. La landing muestra capacidades implementadas del producto y usa CTAs reales a registro/login; no añade pricing,
+     testimonios, métricas ni integraciones simuladas.
+  3. Las entradas al viewport usan un componente `Reveal` basado en `IntersectionObserver`; no se añade una librería de
+     animación. `prefers-reduced-motion` elimina transformaciones y transiciones.
+- **Consecuencias**:
+  - La página pública queda disponible para visitantes y usuarios autenticados sin alterar sus permisos.
+  - El bundle no incorpora dependencias de motion; el comportamiento puede evolucionar dentro del sistema Vue existente.
+  - La cobertura incluye render Inertia, CTA principal, navegación mobile, typecheck, build y Playwright.

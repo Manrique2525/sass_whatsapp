@@ -12,6 +12,7 @@ use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\Invitations\InvitationWebController;
+use App\Http\Controllers\LandingController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\Settings\AnalyticsSettingsController;
 use App\Http\Controllers\Settings\BillingSettingsController;
@@ -26,7 +27,7 @@ use App\Http\Controllers\Settings\UserSettingsController;
 use App\Http\Controllers\Settings\WhatsAppSettingsController;
 use Illuminate\Support\Facades\Route;
 
-Route::redirect('/', '/login');
+Route::get('/', LandingController::class)->name('landing');
 
 Route::get('/health', HealthController::class);
 Route::get('/ready', [HealthController::class, 'ready']);

@@ -63,8 +63,10 @@ test('la sesión se regenera tras el login', function (): void {
     $this->assertAuthenticatedAs($user);
 });
 
-test('la ruta raíz redirige al login', function (): void {
-    $this->get('/')->assertRedirect('/login');
+test('la ruta raíz muestra la landing pública', function (): void {
+    $this->get('/')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->component('Landing'));
 });
 
 test('el login está limitado por tasa', function (): void {

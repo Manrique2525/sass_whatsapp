@@ -3360,7 +3360,7 @@ consolida como la fase de Operations, Observability & Production Readiness sigui
 - **Nota de alcance**: el ítem previamente catalogado en esta fila como "Testing de fallbacks" queda diferido fuera del
   alcance de FASE 32 (no es parte de este cierre) y pasa a fases posteriores.
 
-U1 queda **COMPLETA + VALIDADA + PUBLICADA**. NO deploy, NO ejecución de migrations, NO configuración de Meta, NO envío
+ U1 queda **COMPLETA + VALIDADA + PUBLICADA**. NO deploy, NO ejecución de migrations, NO configuración de Meta, NO envío
 a clientes: el push es publicación de fuente únicamente.
 
 ## FASE 33 — Self-service provisioning · EN PROGRESO
@@ -3377,4 +3377,12 @@ a clientes: el push es publicación de fuente únicamente.
 - **Tests y gates U1**: backend canónico 2591 passed / 15 skipped / 7475 assertions; frontend 574 passed; typecheck PASS;
   build PASS; PHPStan PASS; Pint PASS; E2E 29 passed antes del cierre formal. El journey browser literal de registro,
   verificación y onboarding se valida en el cierre U1.
-- **Estado**: U1 **COMPLETE + VALIDATED LOCAL**. U2 **NOT STARTED**. La fase permanece EN PROGRESO.
+- **Estado**: U1 **COMPLETE + VALIDATED LOCAL**. U2 **COMPLETE + VALIDATED LOCAL**. La fase permanece EN PROGRESO hasta el cierre global.
+
+### U2 — Public marketing landing · COMPLETE + VALIDATED LOCAL
+
+- **Alcance**: la raíz pública `/` presenta el producto con CTA real a `/register`, acceso a `/login`, navegación por anclas, responsive mobile y contenido de producto sin métricas, testimonios ni pricing inventados.
+- **Contenido**: hero con preview del inbox, beneficios, funciones de inbox/Flow Builder/IA, leads, analytics, pasos de uso, casos de uso, seguridad, FAQ y CTA final.
+- **Motion y accesibilidad**: `Reveal.vue` centraliza entrada mediante `IntersectionObserver`; `prefers-reduced-motion` desactiva transformaciones/transiciones. El menú mobile expone estado y controles accesibles.
+- **Implementación**: `LandingController`, `MarketingLayout`, `Landing.vue` y estilos Tailwind existentes. No se instalaron dependencias ni se modificó el contrato de autenticación.
+- **Validación U2**: backend landing 2 tests / 9 assertions; Vitest 39 files / 574 passed; typecheck PASS; build PASS; Playwright landing 2 passed; Pint PASS; diff --check PASS.
