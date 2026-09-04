@@ -3834,4 +3834,23 @@ una pantalla de upload/search en el frontend.
 - **Consecuencias**:
   - El funnel queda instrumentado sin red externa, cookies no esenciales ni coste de bundle relevante.
   - Una integración futura puede implementarse detrás del provider y de una revisión explícita de privacidad/consentimiento.
-  - La métrica local sólo demuestra emisión segura de eventos, no tasas de conversión reales.
+- La métrica local sólo demuestra emisión segura de eventos, no tasas de conversión reales.
+
+## ADR-128 - Migration and recovery readiness (FASE 34 U2)
+
+- **Estado**: Aceptado - FASE 34 U2 (rehearsal local)
+- **Contexto**: las migraciones U2 añaden invariantes tenant-aware y tablas dependientes. La creación de claves únicas
+  compuestas solicita `AccessExclusiveLock`, por lo que el tiempo de espera de locks puede dominar la ventana de release.
+  La recuperación debe validarse en una base distinta y no puede depender de credenciales o proveedores reales.
+- **Decisión**:
+  1. Las cuatro migraciones se ejecutan en el orden documentado en `docs/runbooks/database-migrations.md`; la duplicidad se
+     comprueba antes de crear las claves y los locks se tratan como condición operativa explícita.
+  2. Los backups PostgreSQL usan formato custom, excluyen ownership/privilegios y se verifican con `pg_restore --list`,
+     checksum y restore en una base nueva. Los objetos de media se respaldan por separado en storage S3-compatible.
+  3. La recuperación conserva la base fuente hasta validar conteos, esquema, aislamiento tenant y arranque de aplicación.
+     RPO 15 minutos y RTO 30 minutos quedan como objetivos sujetos a aprobación y drills posteriores.
+  4. No se ejecuta ninguna migración ni restore contra producción como parte de U2.
+- **Consecuencias**:
+  - La migración 2 requiere una ventana controlada y `lock_timeout`; un retry limpio es preferible a esperar indefinidamente.
+  - El rollback destructivo no es la corrección por defecto; se prefiere forward fix o restore aislado cuando ya existen datos.
+  - El procedimiento completo, responsabilidades y evidencias quedan en los dos runbooks de `docs/runbooks/`.

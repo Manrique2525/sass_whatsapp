@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global) · FASE 32 COMPLETADA/PUBLICADA (U1: deterministic message ordering) · FASE 33 COMPLETE + VALIDATED + PUBLISHED (U1-U6) · FASE 34 EN PROGRESO (U1 COMPLETE + VALIDATED LOCAL; U2 NOT STARTED)**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global) · FASE 32 COMPLETADA/PUBLICADA (U1: deterministic message ordering) · FASE 33 COMPLETE + VALIDATED + PUBLISHED (U1-U6) · FASE 34 EN PROGRESO (U1 COMPLETE + VALIDATED LOCAL; U2 COMPLETE + VALIDATED LOCAL; U3 NOT STARTED)**.
 
 ## Fases
 
@@ -40,7 +40,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA
 | 31 | Meta / WhatsApp Cloud API (U1: Provider + config hardening · U2: Webhook authenticity + durable ingestion · U3: Inbound normalization + monotonic status · U4: Outbound delivery ambiguity + care window · U5: Secure media + approved templates · U6: Operations, Observability & Production Readiness) | COMPLETA LOCALMENTE (pendiente revisión) |
 | 32 | Deterministic message ordering (U1: `ORDER BY created_at, id` en inbox + conversación activa + frontend realtime==reload · contract + tests) | COMPLETADA/PUBLICADA |
 | 33 | Self-service provisioning (U1: registro atómico User + workspace + owner + plan free + onboarding post-verificación) | COMPLETE + VALIDATED + PUBLISHED |
-| 34 | Performance | EN PROGRESO (U1 COMPLETE + VALIDATED LOCAL; U2 NOT STARTED) |
+| 34 | Performance | EN PROGRESO (U1 COMPLETE + VALIDATED LOCAL; U2 COMPLETE + VALIDATED LOCAL; U3 NOT STARTED) |
 | 35 | DevOps (Docker, CI/CD) | PENDIENTE |
 | 36 | Documentación API (OpenAPI) | PENDIENTE |
 | 37 | Seeders demo | PENDIENTE |
@@ -3416,3 +3416,20 @@ a clientes: el push es publicación de fuente únicamente.
 - **Estado de marketing**: no hay planes pagos, precios, testimonios, logos, ratings ni métricas comerciales inventadas. Seguridad, roles, aislamiento, credenciales cifradas, auditoría y webhooks se presentan sólo con respaldo del producto.
 - **P2 no bloqueantes**: asset real de favicon/marca, integración de proveedor externo o A/B testing, pricing pago, social proof y optimización futura del chunk dashboard grande.
 - **Publicación**: `HEAD` y `origin/master` coinciden en `0ea23ff7da44ba4ef6ff114b305dbeb52606174d`; ahead `0`, behind `0`.
+
+### U2 — Migraciones y recuperación operativa · COMPLETE + VALIDATED LOCAL
+
+- **Migraciones**: rehearsal PostgreSQL 16 desechable con 3 tenants/300 mensajes y 10 tenants/100.000 mensajes. Las cuatro
+  migraciones aplicaron, revirtieron y reaplicaron correctamente; se verificaron índices únicos, FKs, CHECK y aislamiento.
+- **Locks**: la creación de unicidad compuesta solicita `AccessExclusiveLock`. Sin contención, PostgreSQL reportó ~12/96/16/16
+  ms; con una lectura de 15 s, el DDL esperó ~11,5 s y una lectura concurrente esperó el mismo periodo.
+- **Failure controlado**: una FK dependiente ejecutada antes de su clave padre falló sin dejar tabla ni registro parcial en
+  `migrations`, confirmando rollback DDL transaccional en PostgreSQL.
+- **Backup/restore**: dump custom verificado con `pg_restore --list`, checksum SHA-256 y restore en una base distinta; el
+  restore arrancó la aplicación y tardó ~701 ms para el dataset sintético. El backup era pre-U2 y conservó correctamente 57
+  migraciones, sin tablas U2.
+- **Documentación**: `docs/runbooks/database-migrations.md`, `docs/runbooks/backup-restore.md` y ADR-128 describen ejecución,
+  locks, rollback, recuperación, responsabilidades y objetivos RPO/RTO.
+- **Límites**: no se ejecutó producción, no se validó tráfico real ni PITR, y RPO 15 min/RTO 30 min son objetivos pendientes
+  de aprobación y drills operativos.
+- **Estado**: U2 **COMPLETE + VALIDATED LOCAL**. U3 permanece **NOT STARTED**.

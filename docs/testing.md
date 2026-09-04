@@ -2254,3 +2254,19 @@ Esto NO es un wait-condition flaky ni carga de assets (assets ~0.1–0.5ms).
 - `git diff --check` PASS. `sh -n` no se ejecutó: host Windows sin `sh`; queda como gate de CI/entorno Unix.
 - No se ejecutaron migraciones; el estado configurado conserva cuatro migraciones pendientes.
 - No se contactaron proveedores reales de Meta, Stripe, OpenAI, Sentry, SMTP ni AWS.
+
+## FASE 34 U2 — Migraciones y recuperación (VALIDADA LOCALMENTE)
+
+- PostgreSQL 16/pgvector desechable: baseline reproducido con 57 migraciones previas y datasets sintéticos tenant-aware.
+- Small: 3 tenants, 300 mensajes; las cuatro migraciones aplicaron, rollback inverso y reaplicación PASS.
+- Medium: 10 tenants, 100.000 mensajes, tabla `messages` de 21 MB; las cuatro migraciones aplicaron, rollback de 2-4 y
+  reaplicación PASS. Duplicados `(tenant_id,id)`: `messages=0`, `whatsapp_accounts=0`.
+- Constraints/indexes/FKs: verificados para reservations, media, templates y claves únicas compuestas. Insert smoke PASS y
+  `quantity=0` rechazado por CHECK.
+- Lock rehearsal: `AccessExclusiveLock` observado en `messages`; lectura concurrente esperó ~11,5 s ante un lock de lectura
+  de 15 s. Escritura concurrente terminó antes de adquirir el DDL; no se interpreta como garantía durante la ventana exclusiva.
+- Failure controlado de FK: SQLSTATE `42830`, sin tabla ni fila residual en `migrations`.
+- Backup custom: `pg_restore --list` PASS, checksum registrado fuera del repositorio y restore en base distinta PASS; `artisan
+  about` y `migrate:status` verificaron el estado pre-U2 esperado. Restore medido: ~701 ms en dataset sintético.
+- No hubo cambios de esquema ni migraciones en producción, ni contacto con proveedores reales. RPO/RTO son objetivos pendientes
+  de aprobación y drill.

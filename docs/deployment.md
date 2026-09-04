@@ -193,7 +193,7 @@ No existe auto-migrate en ningún contenedor (`entrypoint.sh`, `Dockerfile`, ser
 `docker-compose.yml`). **Toda migración requiere ejecución manual explícita por el deployer**
 antes de activar tráfico.
 
-Migración pendiente al momento del commit:
+Historical migration example from the FASE 26 gate:
 - `2026_08_25_100001_create_usage_reservations_table.php` — tabla
   `usage_reservations` con PK uuid, FK→`tenants` CASCADE, FK→`subscriptions` CASCADE,
   CHECK `quantity > 0`, UNIQUE compuesta `(tenant_id, subscription_id, category,
@@ -218,3 +218,23 @@ es seguro si se ejecuta antes de activar dichos chokepoints.
 
 `GET /health` → `{"status":"ok"}`. Verifica DB y Redis (si falla redis, degrada a `degraded`).
 Usado por orquestadores y balancers.
+
+## 8. FASE 34 U2: migration and recovery release gate
+
+The current U2 release has four pending migrations, in dependency order:
+
+1. `2026_08_25_100001_create_usage_reservations_table`
+2. `2026_08_26_000001_add_tenant_id_id_unique_to_messages_and_whatsapp_accounts`
+3. `2026_08_26_000002_create_message_media_table`
+4. `2026_08_26_000003_create_whatsapp_templates_table`
+
+Before enabling traffic, the deployer must complete the preflight and postflight in
+`docs/runbooks/database-migrations.md`, including a verified backup. Migration 2
+requires special attention: it requests `AccessExclusiveLock` and is not suitable
+for an unbounded rolling deploy. Use a maintenance window, bounded `lock_timeout`,
+and an abort/retry decision if active traffic prevents the lock.
+
+Recovery is performed into a new database first and validated before cutover. Follow
+`docs/runbooks/backup-restore.md`; do not restore over the source database or delete
+the source before the incident owner approves it. U2 did not execute production
+migrations, PITR or provider operations.
