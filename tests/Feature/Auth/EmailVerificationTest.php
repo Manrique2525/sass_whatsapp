@@ -40,7 +40,9 @@ test('un email puede verificarse mediante URL firmada', function (): void {
         ['id' => $user->id, 'hash' => sha1($user->email)],
     );
 
-    $this->actingAs($user)->get($url)->assertRedirect(route('dashboard'));
+    // Tras la verificación, el usuario entra al onboarding (tenants web son
+    // provisionados en el signup, ADR-124).
+    $this->actingAs($user)->get($url)->assertRedirect(route('onboarding'));
 
     expect($user->fresh()->email_verified_at)->not->toBeNull();
 });

@@ -14,6 +14,7 @@ export const PASSWORD = process.env.E2E_TEST_PASSWORD ?? 'e2e-password';
 
 export const TENANT_A_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
 export const TENANT_B_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2';
+export const TENANT_ONBOARDING_ID = 'ffffffff-ffff-4fff-8fff-fffffffffff6';
 export const CONTACT_A_ID = 'cccccccc-cccc-4ccc-8ccc-ccccccccccc3';
 export const CONTACT_B_ID = 'dddddddd-dddd-4ddd-8ddd-ddddddddddd4';
 export const CONVERSATION_A_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee5';
@@ -74,6 +75,17 @@ export const USERS: Record<string, E2EUser> = {
         tenantId: TENANT_A_ID,
         tenantName: 'E2E Tenant A',
         storageKey: 'switch',
+    },
+    // Usuario self-service (FASE 33 U1 / ADR-124): cuenta recién provisionada con
+    // su propio workspace + plan free, owner, verificado, SIN WhatsApp conectado.
+    // Espejo de `createOnboardingTenant()` en E2ETenantSeeder.
+    onboardingUser: {
+        email: 'onboarding@e2e.local',
+        name: 'E2E Onboarding',
+        role: 'owner',
+        tenantId: TENANT_ONBOARDING_ID,
+        tenantName: 'E2E Onboarding',
+        storageKey: 'onboarding',
     },
 };
 

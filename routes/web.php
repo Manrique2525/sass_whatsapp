@@ -12,6 +12,7 @@ use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\Invitations\InvitationWebController;
+use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\Settings\AnalyticsSettingsController;
 use App\Http\Controllers\Settings\BillingSettingsController;
 use App\Http\Controllers\Settings\BusinessProfileSettingsController;
@@ -65,6 +66,10 @@ Route::middleware('auth')->group(function (): void {
     Route::get('email/verify/{id}/{hash}', VerifyEmailController::class)
         ->middleware('signed')
         ->name('verification.verify');
+
+    Route::get('onboarding', OnboardingController::class)
+        ->middleware(['verified', 'tenant'])
+        ->name('onboarding');
 
     Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 

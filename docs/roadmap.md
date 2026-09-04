@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global) · FASE 32 COMPLETADA/PUBLICADA (U1: deterministic message ordering)**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global) · FASE 32 COMPLETADA/PUBLICADA (U1: deterministic message ordering) · FASE 33 COMPLETA LOCALMENTE (U1: self-service provisioning; pendiente revisión global)**.
 
 ## Fases
 
@@ -39,11 +39,12 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA
 | 30 | E2E Playwright (U1: Infra + Auth + Multi-Tenancy Base · U2: Inbox · U3: Handoff · U4: Flow Builder + Billing + Knowledge integration · U5: CI foundation/static/frontend/backend/PostgreSQL integration) | EN PROGRESO |
 | 31 | Meta / WhatsApp Cloud API (U1: Provider + config hardening · U2: Webhook authenticity + durable ingestion · U3: Inbound normalization + monotonic status · U4: Outbound delivery ambiguity + care window · U5: Secure media + approved templates · U6: Operations, Observability & Production Readiness) | COMPLETA LOCALMENTE (pendiente revisión) |
 | 32 | Deterministic message ordering (U1: `ORDER BY created_at, id` en inbox + conversación activa + frontend realtime==reload · contract + tests) | COMPLETADA/PUBLICADA |
-| 33 | Performance | PENDIENTE |
-| 34 | DevOps (Docker, CI/CD) | PENDIENTE |
-| 35 | Documentación API (OpenAPI) | PENDIENTE |
-| 36 | Seeders demo | PENDIENTE |
-| 37 | Demo completa | PENDIENTE |
+| 33 | Self-service provisioning (U1: registro atómico User + workspace + owner + plan free + onboarding post-verificación) | COMPLETA LOCALMENTE (pendiente revisión) |
+| 34 | Performance | PENDIENTE |
+| 35 | DevOps (Docker, CI/CD) | PENDIENTE |
+| 36 | Documentación API (OpenAPI) | PENDIENTE |
+| 37 | Seeders demo | PENDIENTE |
+| 38 | Demo completa | PENDIENTE |
 
 ## Definición de DONE
 
@@ -3361,3 +3362,17 @@ consolida como la fase de Operations, Observability & Production Readiness sigui
 
 U1 queda **COMPLETA + VALIDADA + PUBLICADA**. NO deploy, NO ejecución de migrations, NO configuración de Meta, NO envío
 a clientes: el push es publicación de fuente únicamente.
+
+## FASE 33 — Self-service provisioning (U1) · COMPLETA LOCALMENTE
+
+- **Alcance**: `POST /register` web provisiona atómicamente el usuario, un workspace con slug server-side collision-safe,
+  membresía `owner`, `current_tenant_id` y suscripción activa al plan `free`. El flujo API de registro permanece user-only.
+- **Verificación y onboarding**: la verificación de email sigue siendo obligatoria; después de verificar, el usuario llega a
+  `/onboarding`, donde ve workspace, plan activo y estado de configuración. Los CTAs reales apuntan a
+  `/settings/whatsapp` y `/dashboard`; no se realizan llamadas falsas a Meta.
+- **Aislamiento**: la provisión usa `TenantContext` al crear la suscripción y mantiene las políticas/middleware tenant
+  existentes. No se añadió migración: el modelo actual ya soporta todo el flujo.
+- **Implementación**: `ProvisionNewWorkspace`, `OnboardingController`, ruta protegida `verified` + `tenant`, y redirección
+  post-verificación. `RegisterUser` no se modificó para preservar el contrato del registro API.
+- **Tests y gates**: backend 2110 passed / 15 skipped / 5878 assertions; frontend 574 passed; typecheck PASS; build PASS;
+  PHPStan PASS; Pint PASS; E2E 29 passed. No deploy ni configuración de Meta.

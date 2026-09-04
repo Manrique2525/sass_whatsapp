@@ -3742,3 +3742,27 @@ una pantalla de upload/search en el frontend.
     P2 separado (no forma parte de este U1 ni se toca aquí).
   - Tests añadidos: feature (`MSG-API-21/22`, `CONV-27`), PostgreSQL canónico (`MESSAGE-ORDER-PG-01`) y frontend
     (`compareMessagesChronologically`/`mergeIncomingMessage`).
+
+## ADR-124 - Self-service workspace provisioning (FASE 33 U1)
+
+- **Estado**: Aceptado - FASE 33 U1 (local)
+- **Contexto**: un registro web exitoso debe dejar al negocio listo para comenzar, sin pasos manuales de plataforma ni
+  riesgo de crear el usuario sin su tenant, membresía o entitlement. La verificación de email continúa siendo una barrera
+  obligatoria antes de acceder al producto.
+- **Decisión**:
+  1. El registro web ejecuta `RegisterUser` y `ProvisionNewWorkspace` dentro de una única transacción. Si falla una parte
+     crítica, se revierte el conjunto completo.
+  2. El workspace se crea con el nombre del usuario y un slug generado exclusivamente en servidor mediante `Str::slug` más
+     un sufijo aleatorio corto. La restricción `UNIQUE` de base de datos es la autoridad final ante carreras.
+  3. La provisión crea la membresía activa `owner`, fija `users.current_tenant_id` y crea una suscripción activa al plan
+     `free`, respetando `TenantContext` para las operaciones tenant-scoped.
+  4. La verificación de email no se omite. `VerifyEmailController` redirige a `/onboarding`, ruta protegida por
+     `auth`, `verified` y `tenant`, que muestra el workspace creado, el plan y CTAs reales de configuración.
+  5. `RegisterUser` permanece user-only para no cambiar el contrato de `AuthController@register`: el API register no
+     provisiona tenants automáticamente.
+- **Consecuencias**:
+  - El usuario web obtiene un workspace usable de forma atómica y puede abandonar o volver al onboarding sin quedar bloqueado.
+  - El slug no es controlable por el cliente; una colisión excepcional queda protegida por la restricción única de la base de datos.
+  - El CTA de WhatsApp reutiliza el flujo oficial existente y no inicia conexiones Meta desde onboarding.
+  - No se requiere cambio de esquema. La cobertura incluye provisión, estado del plan, aislamiento, rol, redirección y
+    recorrido E2E de onboarding.

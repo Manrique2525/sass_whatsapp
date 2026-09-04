@@ -55,6 +55,9 @@ final class E2ETenantSeeder extends Seeder
 
     public const TENANT_B_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2';
 
+    /** Workspace self-service del journey de onboarding (FASE 33 U1 / ADR-124). */
+    public const TENANT_ONBOARDING_ID = 'ffffffff-ffff-4fff-8fff-fffffffffff6';
+
     public const CONTACT_A_ID = 'cccccccc-cccc-4ccc-8ccc-ccccccccccc3';
 
     public const CONTACT_B_ID = 'dddddddd-dddd-4ddd-8ddd-ddddddddddd4';
@@ -92,6 +95,7 @@ final class E2ETenantSeeder extends Seeder
         DB::transaction(function () use ($freePlan, $paidPlan): void {
             $this->createTenantA($paidPlan);
             $this->createTenantB($freePlan);
+            $this->createOnboardingTenant($freePlan);
         });
     }
 
@@ -228,6 +232,27 @@ final class E2ETenantSeeder extends Seeder
             'last_message_at' => now()->subMinutes(40),
             'last_interaction_at' => now()->subMinutes(40),
         ])->save();
+    }
+
+    /**
+     * Workspace self-service del journey de onboarding (FASE 33 U1 / ADR-124).
+     *
+     * Refleja el estado de una cuenta recién provisionada por el registro
+     * (ProvisionNewWorkspace): workspace propio + plan free con suscripción
+     * ACTIVA + owner verificado con `current_tenant_id`, y SIN WhatsApp conectado
+     * (por eso el onboarding muestra "Falta conectar WhatsApp" y el CTA real).
+     */
+    private function createOnboardingTenant(Plan $freePlan): void
+    {
+        $tenant = $this->createTenant(
+            self::TENANT_ONBOARDING_ID,
+            'E2E Onboarding',
+            'e2e-onboarding',
+            $freePlan,
+        );
+
+        $this->makeMember($tenant, 'onboarding@e2e.local', 'E2E Onboarding', UserRole::Owner);
+        $this->createEntitlement($tenant, $freePlan);
     }
 
     private function createTenant(string $id, string $name, string $slug, Plan $plan): Tenant

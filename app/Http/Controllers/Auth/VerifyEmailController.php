@@ -19,6 +19,8 @@ final class VerifyEmailController extends Controller
             $verifyUserEmail->verify($user);
         }
 
-        return redirect()->route('dashboard')->with('status', 'Tu email ha sido verificado.');
+        // Tras verificar el email, el usuario recién provisionado entra al
+        // onboarding (workspace + plan free creados en el signup, ADR-124).
+        return redirect()->route('onboarding')->with('status', 'Tu email ha sido verificado.');
     }
 }
