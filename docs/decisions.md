@@ -2,6 +2,22 @@
 
 Formato: problema → decisión → consecuencia. Fechadas y en orden cronológico.
 
+## ADR-034 · Contrato explícito para el runtime de producción
+
+- **Estado**: Aceptado · FASE 34 U1
+- **Contexto**: El Compose local usa bind mounts, credenciales de desarrollo, Mailpit y
+  servicios auxiliares. Reutilizarlo en producción permitiría arrancar con defaults inseguros y
+  mezclar responsabilidades de web, workers y tiempo real.
+- **Decisión**: Producción se construye desde targets inmutables: runtime PHP sin dependencias
+  de desarrollo y una imagen Nginx estática. La topología usa servicios separados para HTTP,
+  workers dedicados para `default`, `knowledge` y `analytics`, scheduler y Reverb; PostgreSQL,
+  Redis, S3, SMTP y TLS son servicios externos autenticados. El arranque valida el contrato mínimo y falla cerrado sólo cuando
+  `APP_ENV=production`.
+- **Consecuencias**: el Compose local y E2E conservan sus dependencias y servicios de prueba;
+  un despliegue debe proporcionar `.env.production` mediante el gestor de secretos y publicar
+  la imagen con un tag inmutable. Migraciones y activación de proveedores siguen siendo pasos
+  manuales y explícitos fuera del contenedor.
+
 ## ADR-001 · Arquitectura modular DDD-inspired (no monolito tradicional)
 
 - **Estado**: Aceptado · FASE 0

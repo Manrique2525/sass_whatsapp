@@ -35,6 +35,7 @@ use App\Events\InboxConversationChanged;
 use App\Infrastructure\AI\OpenAIEmbeddingProvider;
 use App\Infrastructure\AI\OpenAIProvider;
 use App\Infrastructure\Billing\StripeProvider;
+use App\Infrastructure\Configuration\ProductionEnvironmentValidator;
 use App\Infrastructure\Observability\MetricsRecorder;
 use App\Infrastructure\WhatsApp\MetaWhatsAppProvider;
 use App\Listeners\DispatchTagTriggerJob;
@@ -131,6 +132,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        if ($this->app->environment('production')) {
+            $this->app->make(ProductionEnvironmentValidator::class)->validate();
+        }
+
         Gate::policy(Tenant::class, TenantPolicy::class);
 
         Event::listen(TagAssigned::class, DispatchTagTriggerJob::class);

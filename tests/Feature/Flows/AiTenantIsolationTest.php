@@ -133,7 +133,7 @@ function make_mt_executor(?FakeAIProvider $fake = null): AiNodeExecutor
 // AI-MT-01: Flow A usa business/contact/custom A
 // ---------------------------------------------------------------------------
 test('AI-MT-01: AI node uses correct tenant A business/contact/custom', function (): void {
-    $tenantA = Tenant::factory()->create();
+    $tenantA = ai_enabled_tenant();
     $fake = new FakeAIProvider;
     $fake->withResponse('Response A');
     $executor = make_mt_executor($fake);
@@ -151,7 +151,7 @@ test('AI-MT-01: AI node uses correct tenant A business/contact/custom', function
 // AI-MT-02: Flow B usa únicamente B
 // ---------------------------------------------------------------------------
 test('AI-MT-02: AI node uses only tenant B data', function (): void {
-    $tenantB = Tenant::factory()->create();
+    $tenantB = ai_enabled_tenant();
     $fake = new FakeAIProvider;
     $fake->withResponse('Response B');
     $executor = make_mt_executor($fake);
@@ -168,8 +168,8 @@ test('AI-MT-02: AI node uses only tenant B data', function (): void {
 // AI-MT-03: AI output A se guarda solo en execution A
 // ---------------------------------------------------------------------------
 test('AI-MT-03: AI output saved only in tenant A execution', function (): void {
-    $tenantA = Tenant::factory()->create();
-    $tenantB = Tenant::factory()->create();
+    $tenantA = ai_enabled_tenant();
+    $tenantB = ai_enabled_tenant();
 
     $fake = new FakeAIProvider;
     $fake->withResponse('Tenant A output');
@@ -188,7 +188,7 @@ test('AI-MT-03: AI output saved only in tenant A execution', function (): void {
 // AI-MT-04: Template de A no puede resolver custom B
 // ---------------------------------------------------------------------------
 test('AI-MT-04: Template from A cannot resolve custom B variables', function (): void {
-    $tenantA = Tenant::factory()->create();
+    $tenantA = ai_enabled_tenant();
     $fake = new FakeAIProvider;
     $fake->withResponse('OK');
     $executor = make_mt_executor($fake);
@@ -196,7 +196,7 @@ test('AI-MT-04: Template from A cannot resolve custom B variables', function ():
     $ctxA = mt_context_for($tenantA, ['secret_a' => 'only_for_a']);
     $executor->execute($ctxA);
 
-    $tenantB = Tenant::factory()->create();
+    $tenantB = ai_enabled_tenant();
     $ctxB = mt_context_for($tenantB);
 
     expect($ctxB->custom)->not->toHaveKey('secret_a');
@@ -206,8 +206,8 @@ test('AI-MT-04: Template from A cannot resolve custom B variables', function ():
 // AI-MT-05: TenantContext incorrecto falla cerrado/no mezcla
 // ---------------------------------------------------------------------------
 test('AI-MT-05: Wrong tenant context does not leak data', function (): void {
-    $tenantA = Tenant::factory()->create();
-    $tenantB = Tenant::factory()->create();
+    $tenantA = ai_enabled_tenant();
+    $tenantB = ai_enabled_tenant();
 
     $fake = new FakeAIProvider;
     $fake->withResponse('Mixed data');
@@ -229,8 +229,8 @@ test('AI-MT-05: Wrong tenant context does not leak data', function (): void {
 // AI-MT-06: job/worker secuencial A→B limpia contexto
 // ---------------------------------------------------------------------------
 test('AI-MT-06: Sequential execution A then B cleans tenant context', function (): void {
-    $tenantA = Tenant::factory()->create();
-    $tenantB = Tenant::factory()->create();
+    $tenantA = ai_enabled_tenant();
+    $tenantB = ai_enabled_tenant();
 
     $fake = new FakeAIProvider;
     $fake->withResponse('Response');

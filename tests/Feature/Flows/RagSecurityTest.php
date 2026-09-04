@@ -41,7 +41,7 @@ function rag_sec_context(
     array $nodeConfig = [],
     ?Tenant $tenant = null,
 ): NodeExecutionContext {
-    $tenant ??= Tenant::factory()->create();
+    $tenant ??= ai_enabled_tenant();
     TenantContext::setId($tenant->id);
 
     $contact = Contact::query()->create([
@@ -402,8 +402,8 @@ test('RAG-SEC-07: RAG telemetry contains no chunk content or search details', fu
 // RAG-SEC-08: No cross-tenant chunks in prompt
 // ---------------------------------------------------------------------------
 test('RAG-SEC-08: Tenant A chunks cannot leak into Tenant B prompt', function (): void {
-    $tenantA = Tenant::factory()->create();
-    $tenantB = Tenant::factory()->create();
+    $tenantA = ai_enabled_tenant();
+    $tenantB = ai_enabled_tenant();
 
     // Tenant A's search returns secret data
     $secretChunk = new RetrievedChunk(

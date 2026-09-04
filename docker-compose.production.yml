@@ -1,0 +1,70 @@
+services:
+  app:
+    build:
+      context: .
+      target: runtime
+    image: ${APP_IMAGE:?APP_IMAGE is required}
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    expose:
+      - "9000"
+
+  worker-default:
+    image: ${APP_IMAGE:?APP_IMAGE is required}
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    command: ["php", "artisan", "queue:work", "redis", "--queue=default", "--sleep=1", "--tries=3", "--timeout=120"]
+    depends_on:
+      - app
+
+  worker-knowledge:
+    image: ${APP_IMAGE:?APP_IMAGE is required}
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    command: ["php", "artisan", "queue:work", "redis", "--queue=knowledge", "--sleep=1", "--tries=3", "--timeout=300"]
+    depends_on:
+      - app
+
+  worker-analytics:
+    image: ${APP_IMAGE:?APP_IMAGE is required}
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    command: ["php", "artisan", "queue:work", "redis", "--queue=analytics", "--sleep=1", "--tries=3", "--timeout=300"]
+    depends_on:
+      - app
+
+  scheduler:
+    image: ${APP_IMAGE:?APP_IMAGE is required}
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    command: ["php", "artisan", "schedule:work"]
+    depends_on:
+      - app
+
+  reverb:
+    image: ${APP_IMAGE:?APP_IMAGE is required}
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
+    expose:
+      - "8080"
+    depends_on:
+      - app
+
+  web:
+    build:
+      context: .
+      target: web
+    image: ${WEB_IMAGE:?WEB_IMAGE is required}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      - app
+      - reverb

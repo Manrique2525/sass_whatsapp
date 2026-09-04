@@ -33,6 +33,17 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 
+function ai_enabled_tenant(array $attributes = []): Tenant
+{
+    $plan = Plan::factory()->create([
+        'features' => ['ai_enabled' => true],
+    ]);
+
+    return Tenant::factory()->create(array_merge([
+        'plan_id' => $plan->id,
+    ], $attributes));
+}
+
 /**
  * URL y helpers del webhook de WhatsApp (FASE 6). Compartidos por los tests de
  * FASE 6 (ingesta) y FASE 9 (mensajes): firma HMAC, POST con body CRUDO y

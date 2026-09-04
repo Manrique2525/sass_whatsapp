@@ -43,7 +43,7 @@ afterEach(function (): void {
 
 function sec_context(array $nodeConfig = [], array $custom = []): NodeExecutionContext
 {
-    $tenant = Tenant::factory()->create();
+    $tenant = ai_enabled_tenant();
     TenantContext::setId($tenant->id);
 
     $contact = Contact::query()->create([
@@ -270,8 +270,8 @@ test('AI-SEC-F06: Contact PII never appears in telemetry payload', function (): 
 // AI-SEC-F07: Tenant A/B isolation
 // ---------------------------------------------------------------------------
 test('AI-SEC-F07: Tenant A telemetry never contains Tenant B data', function (): void {
-    $tenantA = Tenant::factory()->create();
-    $tenantB = Tenant::factory()->create();
+    $tenantA = ai_enabled_tenant();
+    $tenantB = ai_enabled_tenant();
 
     // Tenant A
     TenantContext::setId($tenantA->id);
@@ -488,8 +488,8 @@ test('AI-SEC-F10: AiNodeExecutor depends only on AIProviderInterface, KnowledgeS
 // AI-SEC-F11: tenant_id in config injection does not change context
 // ---------------------------------------------------------------------------
 test('AI-SEC-F11: tenant_id injection in node config cannot alter tenant context', function (): void {
-    $tenantA = Tenant::factory()->create();
-    $tenantB = Tenant::factory()->create();
+    $tenantA = ai_enabled_tenant();
+    $tenantB = ai_enabled_tenant();
 
     TenantContext::setId($tenantA->id);
 

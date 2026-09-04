@@ -19,4 +19,5 @@ enum AIErrorCode: string
     case ProviderError = 'AI_PROVIDER_ERROR';
     case Timeout = 'AI_TIMEOUT';
     case ResponseInvalid = 'AI_RESPONSE_INVALID';
+    case FeatureNotIncluded = 'AI_FEATURE_NOT_INCLUDED';
 }

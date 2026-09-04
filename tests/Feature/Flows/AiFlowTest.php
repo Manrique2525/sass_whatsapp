@@ -70,7 +70,7 @@ function register_fake_ai(?string $response = 'Respuesta AI del bot'): FakeAIPro
 // AI-F01: Flow con AI se puede publicar
 // ---------------------------------------------------------------------------
 test('AI-F01: Flow with AI node can be published', function (): void {
-    $tenant = Tenant::factory()->create();
+    $tenant = ai_enabled_tenant();
     ['flow' => $flow] = make_ai_flow($tenant);
 
     expect($flow->fresh()->status)->toBe(FlowStatus::Published);
@@ -80,7 +80,7 @@ test('AI-F01: Flow with AI node can be published', function (): void {
 // AI-F02: Flow AI ejecuta end-to-end con fake provider
 // ---------------------------------------------------------------------------
 test('AI-F02: AI flow executes end-to-end with fake provider', function (): void {
-    $tenant = Tenant::factory()->create();
+    $tenant = ai_enabled_tenant();
     $fake = register_fake_ai('Hola, soy tu asistente virtual.');
 
     ['flow' => $flow] = make_ai_flow($tenant);
@@ -121,7 +121,7 @@ test('AI-F02: AI flow executes end-to-end with fake provider', function (): void
 // AI-F03: AI → condition usando custom output
 // ---------------------------------------------------------------------------
 test('AI-F03: AI output can be used in condition branching', function (): void {
-    $tenant = Tenant::factory()->create();
+    $tenant = ai_enabled_tenant();
     $fake = register_fake_ai('positivo');
     $chatbot = make_chatbot($tenant);
     $flow = make_flow($tenant, $chatbot);
@@ -175,7 +175,7 @@ test('AI-F03: AI output can be used in condition branching', function (): void {
 // AI-F04: AI → message usando {{custom.output}}
 // ---------------------------------------------------------------------------
 test('AI-F04: AI output interpolated in subsequent message node', function (): void {
-    $tenant = Tenant::factory()->create();
+    $tenant = ai_enabled_tenant();
     $fake = register_fake_ai('Respuesta personalizada del AI');
 
     ['flow' => $flow] = make_ai_flow($tenant);
@@ -203,7 +203,7 @@ test('AI-F04: AI output interpolated in subsequent message node', function (): v
 // AI-F05: provider falla → fallback → flow continúa
 // ---------------------------------------------------------------------------
 test('AI-F05: Provider failure triggers fallback and flow continues', function (): void {
-    $tenant = Tenant::factory()->create();
+    $tenant = ai_enabled_tenant();
     $fake = register_fake_ai('');
     $fake->withException(new AIRateLimitException);
 
@@ -242,7 +242,7 @@ test('AI-F05: Provider failure triggers fallback and flow continues', function (
 // AI-F06: bot paused → AI no ejecuta
 // ---------------------------------------------------------------------------
 test('AI-F06: Bot paused prevents AI flow execution', function (): void {
-    $tenant = Tenant::factory()->create();
+    $tenant = ai_enabled_tenant();
     $fake = register_fake_ai('Should not execute');
     ['flow' => $flow] = make_ai_flow($tenant);
 
@@ -271,7 +271,7 @@ test('AI-F06: Bot paused prevents AI flow execution', function (): void {
 // AI-F07: duplicate execution/node → una llamada
 // ---------------------------------------------------------------------------
 test('AI-F07: Idempotency check prevents duplicate provider calls', function (): void {
-    $tenant = Tenant::factory()->create();
+    $tenant = ai_enabled_tenant();
     $fake = register_fake_ai('First result');
     ['flow' => $flow] = make_ai_flow($tenant);
 
@@ -298,7 +298,7 @@ test('AI-F07: Idempotency check prevents duplicate provider calls', function ():
 // AI-F08: execution completa correctamente
 // ---------------------------------------------------------------------------
 test('AI-F08: Full AI flow execution completes successfully', function (): void {
-    $tenant = Tenant::factory()->create();
+    $tenant = ai_enabled_tenant();
     $fake = register_fake_ai('AI output');
     ['flow' => $flow] = make_ai_flow($tenant);
 
@@ -323,7 +323,7 @@ test('AI-F08: Full AI flow execution completes successfully', function (): void 
 // AI-F09: handoff posterior al AI mantiene invariantes
 // ---------------------------------------------------------------------------
 test('AI-F09: Handoff after AI node preserves invariants', function (): void {
-    $tenant = Tenant::factory()->create();
+    $tenant = ai_enabled_tenant();
     $fake = register_fake_ai('AI before handoff');
     $chatbot = make_chatbot($tenant);
     $flow = make_flow($tenant, $chatbot);
@@ -372,7 +372,7 @@ test('AI-F09: Handoff after AI node preserves invariants', function (): void {
 // AI-F10: AI node no start
 // ---------------------------------------------------------------------------
 test('AI-F10: AI node cannot be start node', function (): void {
-    $tenant = Tenant::factory()->create();
+    $tenant = ai_enabled_tenant();
     $chatbot = make_chatbot($tenant);
     $flow = make_flow($tenant, $chatbot);
 

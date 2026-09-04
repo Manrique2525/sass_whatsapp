@@ -4,7 +4,7 @@ services:
   app:
     build:
       context: .
-      target: runtime
+      target: runtime-dev
     image: whatsapp-saas-app
     pull_policy: build
     restart: unless-stopped

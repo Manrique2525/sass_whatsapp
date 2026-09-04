@@ -11,6 +11,20 @@ RUN composer install \
     --no-interaction \
     --no-progress \
     --prefer-dist \
+    --no-dev \
+    --no-scripts \
+    --optimize-autoloader
+
+FROM composer:2 AS vendor-dev
+
+WORKDIR /app
+
+COPY composer.json composer.lock ./
+
+RUN composer install \
+    --no-interaction \
+    --no-progress \
+    --prefer-dist \
     --no-scripts \
     --optimize-autoloader
 
@@ -29,6 +43,11 @@ RUN npm ci --no-audit --no-fund
 COPY . .
 
 RUN npm run build
+
+FROM nginx:1.27-alpine AS web
+
+COPY --from=frontend /app/public /var/www/html/public
+COPY docker/nginx/production.conf /etc/nginx/conf.d/default.conf
 
 # ============================================================
 # Etapa 3: runtime (php-fpm)
@@ -75,12 +94,28 @@ EXPOSE 9000
 ENTRYPOINT ["entrypoint.sh"]
 CMD ["php-fpm"]
 
+USER www-data
+
+FROM runtime AS runtime-dev
+
+USER root
+
+COPY --from=vendor-dev /app/vendor ./vendor
+
+FROM runtime AS runtime-e2e
+
+USER root
+
+COPY --from=vendor-dev /app/vendor ./vendor
+
 # ============================================================
 # Etapa 4: coverage (dev/test only — NOT for production)
 # Adds PCOV extension for PHPUnit/Pest code coverage.
 # Use: docker compose -f docker-compose.yml -f docker-compose.coverage.yml run --rm coverage ...
 # ============================================================
 FROM runtime AS coverage
+
+USER root
 
 RUN pecl install pcov \
     && docker-php-ext-enable pcov \

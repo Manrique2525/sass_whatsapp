@@ -152,10 +152,21 @@ jobs:
 
 ## 6. Producción
 
+La referencia `docker-compose.production.yml` no incluye PostgreSQL, Redis, MinIO ni Mailpit:
+son dependencias externas de producción. Requiere `.env.production` generado desde
+`.env.production.example`, imágenes versionadas en `APP_IMAGE` y `WEB_IMAGE`, TLS terminado en
+el ingress/ALB y `REVERB_ALLOWED_ORIGINS` explícito. No usa bind mounts ni publica los puertos de
+PostgreSQL, Redis, PHP-FPM o Reverb; Nginx expone HTTP sólo en loopback para el ingress local.
+El entrypoint falla si falta `APP_KEY` y no genera ni copia `.env` en producción.
+
+El target `runtime` instala sólo dependencias Composer de producción. Los targets `runtime-dev` y
+`runtime-e2e` conservan las dependencias de desarrollo y no deben desplegarse.
+
 - **App**: contenedores PHP-FPM detrás de nginx/ALB. Horizontalmente escalables (stateless,
   sesiones en Redis, storage S3).
-- **Workers**: `queue:work` por cola (`high`, `default`, `whatsapp`, `ai`, `billing`) +
-  `schedule:run` en un worker dedicado.
+- **Workers**: `queue:work` por cola (`default`, `knowledge`, `analytics`) +
+  `schedule:work` en un scheduler dedicado. Los jobs de WhatsApp, flows y triggers usan
+  `default`; procesamiento de documentos usa `knowledge`; agregación diaria usa `analytics`.
 - **Reverb**: al menos 1 nodo; múltiples nodos con `REVERB_*` compartidos y sticky sessions
   no necesarias (broadcast por Redis pub/sub si se usa `redis` driver de broadcaster).
 - **DB**: backups automáticos (PITR), réplica de lectura para analytics/read-heavy opcional.

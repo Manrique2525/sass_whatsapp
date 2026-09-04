@@ -2245,3 +2245,12 @@ Esto NO es un wait-condition flaky ni carga de assets (assets ~0.1–0.5ms).
 - Tests focales de tracking cubren taxonomy, CTA seguro, once-only, eventos de registro/onboarding/WhatsApp, no-op y fallo del provider.
 - Validación final U6: Pest **2597 passed / 15 skipped**, Vitest **592 passed**, Playwright **39 passed / 0 failed** con
   setup E2E fresco, `workers=1` y `retries=0`; typecheck, build, PHPStan, Pint y `git diff --check` PASS.
+
+## FASE 34 U1 — Contrato de runtime productivo (VALIDADA LOCALMENTE)
+
+- Pest canónico: `php -d memory_limit=512M vendor/bin/pest --no-coverage` — **2601 passed / 15 skipped**.
+- Tests focales U1: **19 passed / 39 assertions**, cubriendo el contrato productivo y el entitlement AI.
+- PHPStan PASS, Pint PASS, typecheck PASS, build PASS, Composer audit PASS y npm audit PASS.
+- `git diff --check` PASS. `sh -n` no se ejecutó: host Windows sin `sh`; queda como gate de CI/entorno Unix.
+- No se ejecutaron migraciones; el estado configurado conserva cuatro migraciones pendientes.
+- No se contactaron proveedores reales de Meta, Stripe, OpenAI, Sentry, SMTP ni AWS.

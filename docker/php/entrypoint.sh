@@ -1,13 +1,16 @@
 #!/bin/sh
 set -e
 
-if [ ! -f ".env" ]; then
-    cp ".env.example" ".env"
-    php artisan key:generate --force
-fi
-
-if [ -n "${APP_KEY}" ] && [ "${APP_KEY}" = "" ]; then
-    php artisan key:generate --force
+if [ "${APP_ENV:-local}" = "production" ]; then
+    if [ -z "${APP_KEY:-}" ]; then
+        echo "APP_KEY is required in production" >&2
+        exit 1
+    fi
+else
+    if [ ! -f ".env" ]; then
+        cp ".env.example" ".env"
+        php artisan key:generate --force
+    fi
 fi
 
 # Permisos de storage (volúmenes montados conservan el usuario host)

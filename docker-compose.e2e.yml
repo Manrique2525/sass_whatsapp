@@ -54,7 +54,7 @@ services:
   e2e-app:
     build:
       context: .
-      target: runtime
+      target: runtime-e2e
     image: whatsapp-saas-app
     pull_policy: build
     restart: unless-stopped
@@ -155,7 +155,7 @@ services:
   reverb:
     build:
       context: .
-      target: runtime
+      target: runtime-e2e
     image: whatsapp-saas-app
     pull_policy: build
     restart: unless-stopped
@@ -218,7 +218,7 @@ services:
   e2e-worker:
     build:
       context: .
-      target: runtime
+      target: runtime-e2e
     image: whatsapp-saas-app
     pull_policy: build
     restart: unless-stopped

@@ -7,8 +7,10 @@ use App\Application\Flows\Services\Executors\AiNodeExecutor;
 use App\Application\KnowledgeBase\Services\KnowledgeSearchService;
 use App\Domain\AI\Contracts\EmbeddingProviderInterface;
 use App\Domain\AI\Exceptions\AIAuthFailedException;
+use App\Domain\AI\Exceptions\AIFeatureNotIncludedException;
 use App\Domain\AI\Exceptions\AIRateLimitException;
 use App\Domain\AI\ValueObjects\AIRequest;
+use App\Domain\Billing\Models\Plan;
 use App\Domain\Contacts\Models\Contact;
 use App\Domain\Conversations\Models\Conversation;
 use App\Domain\Flows\Enums\FlowNodeType;
@@ -44,7 +46,10 @@ afterEach(function (): void {
 
 function ai_context(array $nodeConfig = [], array $custom = []): NodeExecutionContext
 {
-    $tenant = Tenant::factory()->create();
+    $plan = Plan::factory()->create([
+        'features' => ['ai_enabled' => true],
+    ]);
+    $tenant = Tenant::factory()->create(['plan_id' => $plan->id]);
     TenantContext::setId($tenant->id);
 
     $contact = Contact::query()->create([
@@ -152,6 +157,51 @@ test('AI-01: AiNodeExecutor llama al provider con AIRequest', function (): void 
     expect($fake->callCount())->toBe(1)
         ->and($fake->lastRequest())->toBeInstanceOf(AIRequest::class)
         ->and($fake->lastRequest()->prompt)->toContain('Hola');
+});
+
+test('AI-U1: Free plan rejects AI before quota or provider', function (): void {
+    $fake = new FakeAIProvider;
+    $fake->withResponse('No debería llegar');
+    $usageGuard = new FakeUsageGuard;
+    $executor = new AiNodeExecutor(
+        provider: $fake,
+        promptBuilder: new AiPromptBuilder(new VariableResolver),
+        searchService: new KnowledgeSearchService(new FakeEmbeddingProvider, $usageGuard),
+        usageGuard: $usageGuard,
+    );
+    $context = ai_context(['prompt' => 'Test', 'output_variable' => 'result']);
+    $plan = Plan::factory()->create([
+        'features' => ['ai_enabled' => false],
+    ]);
+    $context->tenant->update(['plan_id' => $plan->id]);
+    $context->tenant->refresh();
+
+    expect(fn () => $executor->execute($context))
+        ->toThrow(AIFeatureNotIncludedException::class);
+    expect($fake->callCount())->toBe(0)
+        ->and($usageGuard->reserveCalls)->toBe(0);
+});
+
+test('AI-U1: enabled plan proceeds through the normal provider path', function (): void {
+    $fake = new FakeAIProvider;
+    $fake->withResponse('Respuesta habilitada');
+    $usageGuard = new FakeUsageGuard;
+    $executor = new AiNodeExecutor(
+        provider: $fake,
+        promptBuilder: new AiPromptBuilder(new VariableResolver),
+        searchService: new KnowledgeSearchService(new FakeEmbeddingProvider, $usageGuard),
+        usageGuard: $usageGuard,
+    );
+    $context = ai_context(['prompt' => 'Test', 'output_variable' => 'result']);
+    $plan = Plan::factory()->create([
+        'features' => ['ai_enabled' => true],
+    ]);
+    $context->tenant->update(['plan_id' => $plan->id]);
+    $context->tenant->refresh();
+
+    $executor->execute($context);
+
+    expect($fake->callCount())->toBe(1);
 });
 
 // ---------------------------------------------------------------------------

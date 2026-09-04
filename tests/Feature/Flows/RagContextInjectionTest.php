@@ -41,7 +41,7 @@ function rag_ai_context(
     array $nodeConfig = [],
     array $custom = [],
 ): NodeExecutionContext {
-    $tenant = Tenant::factory()->create();
+    $tenant = ai_enabled_tenant();
     TenantContext::setId($tenant->id);
 
     $contact = Contact::query()->create([

@@ -39,7 +39,7 @@ afterEach(function (): void {
 
 function security_context(array $overrides = []): NodeExecutionContext
 {
-    $tenant = Tenant::factory()->create();
+    $tenant = ai_enabled_tenant();
     TenantContext::setId($tenant->id);
 
     $contact = Contact::query()->create([

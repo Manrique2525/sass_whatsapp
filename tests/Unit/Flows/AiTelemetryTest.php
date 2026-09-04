@@ -17,7 +17,6 @@ use App\Domain\Flows\Models\FlowExecution;
 use App\Domain\Flows\Models\FlowNode;
 use App\Domain\Flows\Services\VariableResolver;
 use App\Domain\Flows\ValueObjects\NodeExecutionContext;
-use App\Domain\Tenants\Models\Tenant;
 use App\Infrastructure\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
@@ -43,7 +42,7 @@ afterEach(function (): void {
 
 function telemetry_context(array $nodeConfig = [], array $custom = []): NodeExecutionContext
 {
-    $tenant = Tenant::factory()->create();
+    $tenant = ai_enabled_tenant();
     TenantContext::setId($tenant->id);
 
     $contact = Contact::query()->create([

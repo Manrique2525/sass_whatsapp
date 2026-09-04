@@ -9,6 +9,7 @@ use App\Application\KnowledgeBase\Contracts\KnowledgeSearchServiceInterface;
 use App\Domain\AI\Contracts\AIProviderInterface;
 use App\Domain\AI\Enums\AIErrorCode;
 use App\Domain\AI\Exceptions\AIException;
+use App\Domain\AI\Exceptions\AIFeatureNotIncludedException;
 use App\Domain\AI\ValueObjects\AIRequest;
 use App\Domain\AI\ValueObjects\TelemetryPayload;
 use App\Domain\Billing\Contracts\UsageGuardInterface;
@@ -77,6 +78,11 @@ final class AiNodeExecutor implements NodeExecutorInterface
             ]);
 
             return NodeExecutionResult::continue();
+        }
+
+        $plan = $context->tenant->plan;
+        if ($plan === null || ! $plan->hasFeature('ai_enabled')) {
+            throw new AIFeatureNotIncludedException;
         }
 
         $config = is_array($context->node->config) ? $context->node->config : [];

@@ -20,6 +20,8 @@ final class FakeUsageGuard implements UsageGuardInterface
 {
     private ?UsageReservation $reservation = null;
 
+    public int $reserveCalls = 0;
+
     public function reserve(
         Tenant $tenant,
         UsageCategory $category,
@@ -27,6 +29,8 @@ final class FakeUsageGuard implements UsageGuardInterface
         ?string $idempotencyKey = null,
         ?int $ttlSeconds = null,
     ): ?UsageReservation {
+        $this->reserveCalls++;
+
         return $this->reservation;
     }
 
