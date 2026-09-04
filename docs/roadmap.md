@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global) · FASE 32 COMPLETADA/PUBLICADA (U1: deterministic message ordering) · FASE 33 COMPLETE + VALIDATED LOCAL (U1-U6; pendiente publicación explícita)**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global) · FASE 32 COMPLETADA/PUBLICADA (U1: deterministic message ordering) · FASE 33 COMPLETE + VALIDATED + PUBLISHED (U1-U6)**.
 
 ## Fases
 
@@ -39,7 +39,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA
 | 30 | E2E Playwright (U1: Infra + Auth + Multi-Tenancy Base · U2: Inbox · U3: Handoff · U4: Flow Builder + Billing + Knowledge integration · U5: CI foundation/static/frontend/backend/PostgreSQL integration) | EN PROGRESO |
 | 31 | Meta / WhatsApp Cloud API (U1: Provider + config hardening · U2: Webhook authenticity + durable ingestion · U3: Inbound normalization + monotonic status · U4: Outbound delivery ambiguity + care window · U5: Secure media + approved templates · U6: Operations, Observability & Production Readiness) | COMPLETA LOCALMENTE (pendiente revisión) |
 | 32 | Deterministic message ordering (U1: `ORDER BY created_at, id` en inbox + conversación activa + frontend realtime==reload · contract + tests) | COMPLETADA/PUBLICADA |
-| 33 | Self-service provisioning (U1: registro atómico User + workspace + owner + plan free + onboarding post-verificación) | EN PROGRESO · U1 COMPLETE + VALIDATED LOCAL |
+| 33 | Self-service provisioning (U1: registro atómico User + workspace + owner + plan free + onboarding post-verificación) | COMPLETE + VALIDATED + PUBLISHED |
 | 34 | Performance | PENDIENTE |
 | 35 | DevOps (Docker, CI/CD) | PENDIENTE |
 | 36 | Documentación API (OpenAPI) | PENDIENTE |
@@ -3363,7 +3363,7 @@ consolida como la fase de Operations, Observability & Production Readiness sigui
  U1 queda **COMPLETA + VALIDADA + PUBLICADA**. NO deploy, NO ejecución de migrations, NO configuración de Meta, NO envío
 a clientes: el push es publicación de fuente únicamente.
 
-## FASE 33 — Self-service provisioning · EN PROGRESO
+## FASE 33 — Self-service provisioning · COMPLETE + VALIDATED + PUBLISHED
 
 - **Alcance**: `POST /register` web provisiona atómicamente el usuario, un workspace con slug server-side collision-safe,
   membresía `owner`, `current_tenant_id` y suscripción activa al plan `free`. El flujo API de registro permanece user-only.
@@ -3377,9 +3377,9 @@ a clientes: el push es publicación de fuente únicamente.
 - **Tests y gates U1**: backend canónico 2591 passed / 15 skipped / 7475 assertions; frontend 574 passed; typecheck PASS;
   build PASS; PHPStan PASS; Pint PASS; E2E 29 passed antes del cierre formal. El journey browser literal de registro,
   verificación y onboarding se valida en el cierre U1.
-- **Estado**: U1 **COMPLETE + VALIDATED LOCAL**. U2 **COMPLETE + VALIDATED LOCAL**. La fase permanece EN PROGRESO hasta el cierre global.
+- **Estado**: U1 **COMPLETE + VALIDATED**. U2 **COMPLETE + VALIDATED**. U3 **COMPLETE + VALIDATED**. U4 **COMPLETE + VALIDATED**. U5 **COMPLETE + VALIDATED**. U6 **COMPLETE + VALIDATED**. FASE 33 **PUBLISHED**.
 
-### U2 — Public marketing landing · COMPLETE + VALIDATED LOCAL
+### U2 — Public marketing landing · COMPLETE + VALIDATED
 
 - **Alcance**: la raíz pública `/` presenta el producto con CTA real a `/register`, acceso a `/login`, navegación por anclas, responsive mobile y contenido de producto sin métricas, testimonios ni pricing inventados.
 - **Contenido**: hero con preview del inbox, beneficios, funciones de inbox/Flow Builder/IA, leads, analytics, pasos de uso, casos de uso, seguridad, FAQ y CTA final.
@@ -3387,7 +3387,7 @@ a clientes: el push es publicación de fuente únicamente.
 - **Implementación**: `LandingController`, `MarketingLayout`, `Landing.vue` y estilos Tailwind existentes. No se instalaron dependencias ni se modificó el contrato de autenticación.
  - **Validación U2**: backend landing 2 tests / 9 assertions; Vitest 39 files / 574 passed; typecheck PASS; build PASS; Playwright landing 2 passed; Pint PASS; diff --check PASS.
 
-### U3 — Free plan, legal y conversión · COMPLETE LOCAL
+### U3 — Free plan, legal y conversión · COMPLETE + VALIDATED
 
 - **Alcance**: presentación pública del plan Free real, CTAs contextuales para visitantes/usuarios autenticados, microcopy de
   registro, footer con navegación legal y páginas públicas `/privacy` y `/terms`.
@@ -3395,9 +3395,9 @@ a clientes: el push es publicación de fuente únicamente.
   La IA se declara explícitamente no incluida en Free. No se presentan planes pagos ni precios ficticios.
 - **Legal**: las páginas son una base de producto y requieren revisión legal/empresarial final antes de producción. No se
   inventan entidad legal, domicilio, jurisdicción, email público, certificaciones ni periodos de retención concretos.
-- **Estado**: U1 **COMPLETE + VALIDATED LOCAL**. U2 **COMPLETE + VALIDATED LOCAL**. U3 **COMPLETE + VALIDATED LOCAL**. U4 **COMPLETE LOCAL**. U5 **NOT STARTED**.
+- **Estado**: U3 **COMPLETE + VALIDATED**; la presentación pública usa exclusivamente el catálogo Free vigente.
 
-### U4 — SEO, accesibilidad, performance y motion polish · COMPLETE LOCAL
+### U4 — SEO, accesibilidad, performance y motion polish · COMPLETE + VALIDATED
 
 - **SEO público**: títulos sin duplicar marca, descripción orientada a beneficio, canonical y Open Graph absolutos, Twitter metadata, JSON-LD `WebApplication` sin claims comerciales no verificables, sitemap sólo público y robots dinámico con sitemap absoluto.
 - **Accesibilidad**: menú mobile con `aria-expanded`, `aria-controls`, Escape y retorno de foco; estilos `focus-visible`; landmarks semánticos; estructura de headings conservada; anchors con espacio para navbar sticky.
@@ -3405,9 +3405,9 @@ a clientes: el push es publicación de fuente únicamente.
 - **Branding**: `APP_NAME` real sigue siendo `WhatsApp SaaS`. No existe asset de marca válido para reemplazar `public/favicon.ico` vacío; favicon queda diferido como **BRAND ASSET REQUIRED**.
 - **Decisiones diferidas**: no se añadieron aliases de anchors en inglés por bajo valor actual. La discoverability de dashboard, Knowledge, Tags, Templates y Media queda para U5.
 - **Validación U4**: backend 2595 passed / 15 skipped; Vitest 578 passed; typecheck PASS; build PASS; PHPStan PASS; Pint PASS; diff-check PASS; full E2E 37 passed con setup fresco, 1 worker y 0 retries; cola E2E limpia.
-- **Estado**: U1 **COMPLETE + VALIDATED LOCAL**. U2 **COMPLETE + VALIDATED LOCAL**. U3 **COMPLETE + VALIDATED LOCAL**. U4 **COMPLETE + VALIDATED LOCAL**. U5 **COMPLETE + VALIDATED LOCAL**: dashboard operativo, navegación autenticada por permisos, responsive mobile, UI inicial de Knowledge, cobertura de roles y E2E completo validados localmente. U6 **COMPLETE + VALIDATED LOCAL**: funnel público medible, tracking provider-agnostic privacy-first, auditoría CRO/SEO/UX y cierre local. FASE 33 queda **COMPLETE + VALIDATED LOCAL**; no implica publicación remota.
+- **Estado**: U4 **COMPLETE + VALIDATED**. U5 **COMPLETE + VALIDATED**: dashboard operativo, navegación autenticada por permisos, responsive mobile, UI inicial de Knowledge, cobertura de roles y E2E completo validados localmente. U6 **COMPLETE + VALIDATED**: funnel público medible, tracking provider-agnostic privacy-first, auditoría CRO/SEO/UX y cierre local. FASE 33 queda **COMPLETE + VALIDATED + PUBLISHED**; la publicación corresponde únicamente al código fuente.
 
-### U6 — Marketing analytics, CRO y auditoría final · COMPLETE + VALIDATED LOCAL
+### U6 — Marketing analytics, CRO y auditoría final · COMPLETE + VALIDATED
 
 - **Tracking**: `trackMarketingEvent` define nueve eventos semánticos estables para landing, registro, onboarding y producto. El provider es inyectable para una futura integración, pero no hay proveedor externo activo ni llamadas de red por defecto.
 - **Privacidad y resiliencia**: sólo se permiten `location` y `destination` como propiedades; no se envían email, nombre, teléfono, password, tenant ID, IDs privados, tokens ni contenido. Los errores del tracker se ignoran y nunca bloquean navegación o acciones.
@@ -3415,3 +3415,4 @@ a clientes: el push es publicación de fuente únicamente.
 - **CRO/auditoría**: se conserva un CTA primario para visitantes (`Empezar gratis`) y autenticados (`Ir al panel`), el plan Free muestra límites reales y exclusión de IA, y onboarding mantiene `Conectar WhatsApp` como siguiente acción principal.
 - **Estado de marketing**: no hay planes pagos, precios, testimonios, logos, ratings ni métricas comerciales inventadas. Seguridad, roles, aislamiento, credenciales cifradas, auditoría y webhooks se presentan sólo con respaldo del producto.
 - **P2 no bloqueantes**: asset real de favicon/marca, integración de proveedor externo o A/B testing, pricing pago, social proof y optimización futura del chunk dashboard grande.
+- **Publicación**: `HEAD` y `origin/master` coinciden en `0ea23ff7da44ba4ef6ff114b305dbeb52606174d`; ahead `0`, behind `0`.
