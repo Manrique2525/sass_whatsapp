@@ -49,12 +49,12 @@ const contextItems = computed<Array<{ key: string; value: string }>>(() => {
 </script>
 
 <template>
-    <div class="flex h-full flex-col gap-4 overflow-y-auto border-l border-zinc-200 bg-white p-4">
-        <div class="flex flex-col items-center gap-2 border-b border-zinc-100 pb-4">
-            <span class="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-2xl font-semibold text-emerald-800">
+    <div class="flex h-full flex-col gap-4 overflow-y-auto border-l border-[#dce8df] bg-white p-5">
+        <div class="flex flex-col items-center gap-2 border-b border-[#edf2ec] pb-5">
+            <span class="flex h-16 w-16 items-center justify-center rounded-3xl bg-[#dff4d7] text-2xl font-semibold text-[#176b42]">
                 {{ (conversation.contact?.name ?? '?').charAt(0).toUpperCase() }}
             </span>
-            <p class="text-sm font-semibold text-zinc-900">
+            <p class="text-sm font-semibold text-[#10261f]">
                 {{ conversation.contact?.name ?? 'Sin nombre' }}
             </p>
             <p v-if="conversation.contact?.phone" class="text-xs text-zinc-500">

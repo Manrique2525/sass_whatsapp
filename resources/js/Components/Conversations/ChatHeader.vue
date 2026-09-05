@@ -10,6 +10,7 @@ import {
     type Conversation,
     type TenantMember,
 } from '@/features/conversations/conversationUtils';
+import AppSelect from '@/Components/AppSelect.vue';
 
 const props = defineProps<{
     conversation: Conversation;
@@ -74,26 +75,26 @@ const closeAction = computed<'close' | 'reopen' | null>(() => {
 </script>
 
 <template>
-    <div class="border-b border-zinc-200 bg-white">
+    <div class="border-b border-[#dce8df] bg-white">
         <div class="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
             <div class="flex min-w-0 items-center gap-3">
                 <button
                     type="button"
-                    class="rounded-full bg-zinc-100 px-2 py-1 text-xs text-zinc-600 lg:hidden"
+                    class="app-button app-button--secondary px-2 py-1 text-xs lg:hidden"
                     @click="$emit('back')"
                 >
                     Volver
                 </button>
 
-                <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-800">
+                <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-[#dff4d7] text-sm font-semibold text-[#176b42]">
                     {{ (conversation.contact?.name ?? '?').charAt(0).toUpperCase() }}
                 </span>
 
                 <div class="min-w-0">
-                    <p class="truncate text-sm font-semibold text-zinc-900">
+                    <p class="truncate text-sm font-semibold text-[#10261f]">
                         {{ conversation.contact?.name ?? conversation.contact?.phone ?? 'Sin nombre' }}
                     </p>
-                    <p v-if="conversation.contact?.phone" class="truncate text-xs text-zinc-500">
+                    <p v-if="conversation.contact?.phone" class="truncate text-xs text-[#71877b]">
                         {{ conversation.contact.phone }}
                     </p>
                 </div>
@@ -132,32 +133,29 @@ const closeAction = computed<'close' | 'reopen' | null>(() => {
                 <button
                     v-if="showClaimButton"
                     type="button"
-                    class="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                    class="app-button bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700"
                     :disabled="acting"
                     @click="$emit('claim')"
                 >
                     Reclamar
                 </button>
 
-                <select
+                <AppSelect
                     v-if="props.canAssign && availableMembers.length > 0"
-                    class="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-700"
-                    :disabled="props.acting"
+                    class="w-auto min-w-[150px]"
                     v-model="selectedAgent"
+                    :options="[
+                        { value: '', label: conversation.agent !== null ? 'Transferir a...' : 'Asignar a...', disabled: true },
+                        ...availableMembers.map((member) => ({ value: String(member.user.id), label: member.user.name })),
+                    ]"
+                    :disabled="props.acting"
                     @change="onAssignChange"
-                >
-                    <option value="" disabled>
-                        {{ conversation.agent !== null ? 'Transferir a...' : 'Asignar a...' }}
-                    </option>
-                    <option v-for="member in availableMembers" :key="member.id" :value="member.user.id">
-                        {{ member.user.name }}
-                    </option>
-                </select>
+                />
 
                 <button
                     v-if="props.canManage && closeAction !== null"
                     type="button"
-                    class="rounded-md border border-zinc-300 px-3 py-1 text-xs text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
+                    class="app-button app-button--secondary px-3 py-1 text-xs"
                     :disabled="props.acting"
                     @click="$emit('action', closeAction)"
                 >

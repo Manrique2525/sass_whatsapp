@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import type { NodeConfigContext } from '../../../flowEditorTypes';
-import type { VariableNamespace } from '../../../flowTypes';
 import { useVariableCatalog } from '../../../useVariableCatalog';
 import { CONDITION_OPERATORS } from '../../../flowValidation';
+import AppSelect from '@/Components/AppSelect.vue';
 
 interface RuleDraft {
     field: string;
@@ -11,13 +11,6 @@ interface RuleDraft {
     value: string;
     not?: boolean;
 }
-
-const NAMESPACE_LABELS: Record<VariableNamespace, string> = {
-    contact: 'Contacto',
-    business: 'Negocio',
-    conversation: 'Conversación',
-    custom: 'Personalizadas',
-};
 
 const props = defineProps<{ modelValue: Record<string, unknown> | null; context: NodeConfigContext }>();
 const emit = defineEmits<{ (e: 'update:modelValue', value: Record<string, unknown>): void }>();
@@ -126,25 +119,22 @@ const fieldOptions = computed<{ value: string; label: string }[]>(() => {
 
         <div v-for="(rule, index) in rules" :key="index" class="space-y-2 rounded-md border border-zinc-200 p-2">
             <div class="flex gap-2">
-                <select
+                <AppSelect
                     v-model="rule.field"
-                    class="w-2/5 rounded-md border border-zinc-300 px-2 py-1.5 text-xs font-mono focus:border-emerald-500 focus:outline-none"
+                    class="w-2/5"
+                    :options="[
+                        { value: '', label: 'Seleccionar variable...' },
+                        ...fieldOptions.map((option) => ({ value: option.value, label: option.label })),
+                    ]"
+                    searchable
                     @change="update"
-                >
-                    <option value="">Seleccionar variable...</option>
-                    <optgroup v-for="group in catalog.groups.value" :key="group.namespace" :label="NAMESPACE_LABELS[group.namespace]">
-                        <option v-for="option in fieldOptions.filter((o) => o.value.startsWith(group.namespace + '.'))" :key="option.value" :value="option.value">
-                            {{ option.label }}
-                        </option>
-                    </optgroup>
-                </select>
-                <select
+                />
+                <AppSelect
                     v-model="rule.operator"
-                    class="w-3/5 rounded-md border border-zinc-300 px-2 py-1.5 text-xs focus:border-emerald-500 focus:outline-none"
+                    class="w-3/5"
+                    :options="CONDITION_OPERATORS.map((op) => ({ value: op.value, label: op.label }))"
                     @change="update"
-                >
-                    <option v-for="op in CONDITION_OPERATORS" :key="op.value" :value="op.value">{{ op.label }}</option>
-                </select>
+                />
             </div>
             <div class="flex gap-2">
                 <input

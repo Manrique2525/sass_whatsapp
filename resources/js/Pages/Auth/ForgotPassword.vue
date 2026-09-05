@@ -17,17 +17,17 @@ const submit = (): void => {
 
 <template>
     <AuthLayout title="Recuperar contraseña">
-        <div v-if="status" class="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <div v-if="status" class="app-alert app-alert--success">
             {{ status }}
         </div>
 
         <form class="space-y-4" @submit.prevent="submit">
-            <p class="text-sm text-zinc-600">
+            <p class="text-sm leading-6 text-[#60766a]">
                 Introduce tu email y te enviaremos un enlace para restablecer tu contraseña.
             </p>
 
             <div>
-                <label for="email" class="mb-1 block text-sm font-medium text-zinc-700">Email</label>
+                <label for="email" class="mb-1.5 block text-sm font-semibold text-[#33483e]">Email</label>
                 <input
                     id="email"
                     v-model="form.email"
@@ -35,7 +35,7 @@ const submit = (): void => {
                     autocomplete="email"
                     required
                     autofocus
-                    class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    class="app-field"
                 />
                 <p v-if="form.errors.email" class="mt-1 text-sm text-red-600">{{ form.errors.email }}</p>
             </div>
@@ -43,7 +43,7 @@ const submit = (): void => {
             <button
                 type="submit"
                 :disabled="form.processing"
-                class="w-full rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                class="app-button app-button--primary w-full"
             >
                 Enviar enlace
             </button>

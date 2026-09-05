@@ -3,6 +3,7 @@ import { Link, router, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import type { AuthUser } from '@/types/inertia';
 import NotificationBell from '@/Components/Notifications/NotificationBell.vue';
+import AppSelect from '@/Components/AppSelect.vue';
 
 const props = defineProps<{
     user: AuthUser | null;
@@ -72,38 +73,40 @@ onBeforeUnmount(() => window.removeEventListener('keydown', closeOnEscape));
 </script>
 
 <template>
-    <div class="min-h-screen bg-zinc-100">
-        <header class="border-b border-zinc-200 bg-white">
-            <div class="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
-                <div class="flex items-center gap-4">
-                    <Link href="/dashboard" class="font-semibold text-zinc-900">WhatsApp SaaS</Link>
-                    <select
+    <div class="app-shell">
+        <header class="border-b border-[#dce8df] bg-white/90 backdrop-blur-xl lg:sticky lg:top-0 lg:z-30">
+            <div class="mx-auto flex max-w-[1400px] items-center justify-between gap-3 px-4 py-4 sm:px-6">
+                <div class="flex min-w-0 items-center gap-3">
+                    <Link href="/dashboard" class="flex shrink-0 items-center gap-2.5 text-sm font-bold tracking-tight text-[#10261f]">
+                        <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-[#10261f] text-[#b7f36b]">W</span>
+                        <span class="hidden sm:inline">WhatsApp SaaS</span>
+                    </Link>
+                    <AppSelect
                         v-if="tenants.length > 0"
-                        class="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700"
-                        :value="currentTenantId ?? undefined"
+                        class="w-[150px] shrink-0 sm:w-auto sm:min-w-[180px]"
+                        :model-value="currentTenantId"
+                        :options="tenants.map((tenant) => ({ value: tenant.id, label: tenant.name }))"
                         :disabled="switching"
-                        @change="switchTenant(($event.target as HTMLSelectElement).value)"
-                    >
-                        <option v-for="tenant in tenants" :key="tenant.id" :value="tenant.id">
-                            {{ tenant.name }}
-                        </option>
-                    </select>
+                        searchable
+                        aria-label="Tenant activo"
+                        @update:model-value="switchTenant($event as string)"
+                    />
                     <span
                         v-else-if="currentTenantId === null"
-                        class="text-xs text-zinc-400"
+                        class="text-xs text-[#71877b]"
                     >
                         Sin tenant asignado
                     </span>
                 </div>
-                <div class="flex items-center gap-4">
+                <div class="flex items-center gap-2 sm:gap-4">
                     <NotificationBell v-if="currentTenantId !== null" />
                     <div class="hidden text-right sm:block">
-                        <p class="text-sm font-medium text-zinc-800">{{ props.user?.name }}</p>
-                        <p class="text-xs text-zinc-500">{{ props.user?.email }}</p>
+                        <p class="text-sm font-semibold text-[#10261f]">{{ props.user?.name }}</p>
+                        <p class="text-xs text-[#71877b]">{{ props.user?.email }}</p>
                     </div>
                     <button
                         type="button"
-                        class="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
+                        class="app-button app-button--secondary hidden sm:inline-flex"
                         @click="logout"
                     >
                         Cerrar sesión
@@ -111,7 +114,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', closeOnEscape));
                     <button
                         v-if="currentTenantId !== null"
                         type="button"
-                        class="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 sm:hidden"
+                        class="app-button app-button--secondary sm:hidden"
                         :aria-expanded="mobileNavOpen"
                         aria-controls="mobile-navigation"
                         @click="mobileNavOpen = !mobileNavOpen"
@@ -120,16 +123,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', closeOnEscape));
                     </button>
                 </div>
             </div>
-            <p v-if="error" class="border-t border-zinc-200 bg-red-50 px-4 py-2 text-sm text-red-600">
+            <p v-if="error" class="border-t border-red-100 bg-red-50 px-4 py-2 text-sm text-red-700">
                 {{ error }}
             </p>
             <nav
                 v-if="currentTenantId !== null"
                 data-testid="authenticated-navigation"
-                class="hidden border-t border-zinc-200 bg-white sm:block"
+                class="hidden border-t border-[#edf2ec] bg-white sm:block"
             >
-                <div class="mx-auto flex max-w-6xl gap-5 overflow-x-auto px-4 py-2 text-sm">
-                    <Link v-for="item in navigation" :key="item.href" :href="item.href" class="whitespace-nowrap rounded px-1 py-1 text-zinc-600 hover:text-zinc-900" :class="isActive(item.href) ? 'font-semibold text-zinc-900' : ''" :aria-current="isActive(item.href) ? 'page' : undefined">
+                <div class="mx-auto flex max-w-[1400px] gap-1 overflow-x-auto px-4 py-2 sm:px-6">
+                    <Link v-for="item in navigation" :key="item.href" :href="item.href" class="whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium text-[#71877b] transition hover:bg-[#f0f5ef] hover:text-[#10261f]" :class="isActive(item.href) ? 'bg-[#eef8ed] font-semibold text-[#10261f]' : ''" :aria-current="isActive(item.href) ? 'page' : undefined">
                         {{ item.label }}
                     </Link>
                 </div>
@@ -138,17 +141,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', closeOnEscape));
                 v-if="currentTenantId !== null && mobileNavOpen"
                 id="mobile-navigation"
                 data-testid="mobile-navigation"
-                class="border-t border-zinc-200 bg-white p-3 sm:hidden"
+                class="border-t border-[#edf2ec] bg-white p-3 sm:hidden"
             >
                 <div class="grid gap-1">
-                    <Link v-for="item in navigation" :key="item.href" :href="item.href" class="rounded-md px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100" :class="isActive(item.href) ? 'bg-zinc-100 font-semibold text-zinc-900' : ''" :aria-current="isActive(item.href) ? 'page' : undefined" @click="closeMobileNav">
+                        <Link v-for="item in navigation" :key="item.href" :href="item.href" class="rounded-xl px-3 py-2.5 text-sm font-medium text-[#33483e] hover:bg-[#f0f5ef]" :class="isActive(item.href) ? 'bg-[#eef8ed] font-semibold text-[#10261f]' : ''" :aria-current="isActive(item.href) ? 'page' : undefined" @click="closeMobileNav">
                         {{ item.label }}
                     </Link>
                 </div>
             </nav>
         </header>
 
-        <main class="mx-auto px-4 py-8" :class="props.fullWidth ? 'max-w-[1400px]' : 'max-w-6xl'">
+        <main class="mx-auto px-4 py-8 sm:px-6 lg:py-10" :class="props.fullWidth ? 'max-w-[1400px]' : 'max-w-6xl'">
             <slot />
         </main>
     </div>

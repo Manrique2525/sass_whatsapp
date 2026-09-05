@@ -21,18 +21,18 @@ const read = computed(() => props.message.status === 'read');
 <template>
     <div class="flex" :class="isOwn ? 'justify-end' : 'justify-start'">
         <div
-            class="max-w-[78%] rounded-2xl px-3 py-2 text-sm shadow-sm"
+            class="max-w-[78%] rounded-2xl px-3.5 py-2.5 text-sm shadow-sm"
             :class="
                 isOwn
-                    ? 'rounded-br-md bg-emerald-600 text-white'
-                    : 'rounded-bl-md bg-white text-zinc-800 border border-zinc-200'
+                    ? 'rounded-br-md bg-[#10261f] text-white'
+                    : 'rounded-bl-md border border-[#dce8df] bg-white text-[#33483e]'
             "
         >
             <p v-if="message.body !== null" class="whitespace-pre-wrap break-words">{{ message.body }}</p>
             <p v-else class="italic opacity-80">Mensaje multimedia</p>
 
             <div class="mt-1 flex items-center justify-end gap-1.5">
-                <span class="text-[10px]" :class="isOwn ? 'text-emerald-100' : 'text-zinc-400'">{{ time }}</span>
+                <span class="text-[10px]" :class="isOwn ? 'text-[#b7d8bf]' : 'text-[#8a9b91]'">{{ time }}</span>
 
                 <span v-if="isOwn && !failed" class="flex items-center" title="Entregado">
                     <svg

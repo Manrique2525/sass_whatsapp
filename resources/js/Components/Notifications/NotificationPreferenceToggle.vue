@@ -60,11 +60,11 @@ onMounted(loadPreference);
 </script>
 
 <template>
-    <div v-if="isOwnerOrAdmin" class="rounded-lg border border-zinc-200 bg-white p-4">
+    <div v-if="isOwnerOrAdmin" class="app-card p-4">
         <div class="flex items-center justify-between">
             <div>
-                <h4 class="text-sm font-medium text-zinc-900">Notificaciones por correo</h4>
-                <p class="mt-0.5 text-xs text-zinc-500">
+                <h4 class="text-sm font-medium text-[#10261f]">Notificaciones por correo</h4>
+                <p class="mt-0.5 text-xs leading-5 text-[#71877b]">
                     Recibir un correo cuando una conversación requiera atención humana.
                 </p>
             </div>
@@ -74,8 +74,8 @@ onMounted(loadPreference);
                 role="switch"
                 :aria-checked="emailEnabled"
                 :disabled="isSaving"
-                class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                :class="emailEnabled ? 'bg-indigo-600' : 'bg-zinc-200'"
+                class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[#10261f] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                :class="emailEnabled ? 'bg-[#0b8f5a]' : 'bg-[#dce8df]'"
                 @click="togglePreference"
             >
                 <span
@@ -85,9 +85,9 @@ onMounted(loadPreference);
             </button>
         </div>
         <div v-if="isLoading" class="mt-2">
-            <div class="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-indigo-600" />
+            <div class="h-4 w-4 animate-spin rounded-full border-2 border-[#cbdacf] border-t-[#0b8f5a]" />
         </div>
-        <p v-if="error" class="mt-2 text-xs text-red-600">{{ error }}</p>
-        <p v-if="successMessage" class="mt-2 text-xs text-green-600">{{ successMessage }}</p>
+        <p v-if="error" class="app-alert app-alert--error mt-2 px-3 py-2 text-xs">{{ error }}</p>
+        <p v-if="successMessage" class="app-alert app-alert--success mt-2 px-3 py-2 text-xs">{{ successMessage }}</p>
     </div>
 </template>

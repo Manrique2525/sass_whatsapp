@@ -49,41 +49,41 @@ const humanActive = computed(() => isHumanActive(props.conversation));
 <template>
     <button
         type="button"
-        class="flex w-full items-start gap-3 border-b border-zinc-100 px-4 py-3 text-left transition-colors"
+        class="flex w-full items-start gap-3 border-b border-[#edf2ec] px-4 py-3.5 text-left transition-colors"
         :class="[
-            active ? 'bg-emerald-50/60' : 'hover:bg-zinc-50',
+            active ? 'bg-[#eef8ed]' : 'hover:bg-[#f0f5ef]',
             unassignedHandoff ? 'border-l-2 border-l-amber-400' : '',
         ]"
         @click="$emit('select')"
     >
         <span
-            class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-800"
+            class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#dff4d7] text-sm font-semibold text-[#176b42]"
         >
             {{ initials }}
         </span>
 
         <span class="min-w-0 flex-1">
             <span class="flex items-baseline justify-between gap-2">
-                <span class="truncate text-sm font-semibold text-zinc-900">
+                <span class="truncate text-sm font-semibold text-[#10261f]">
                     {{ conversation.contact?.name ?? conversation.contact?.phone ?? 'Sin nombre' }}
                 </span>
-                <span class="shrink-0 text-xs text-zinc-400">{{ time }}</span>
+                <span class="shrink-0 text-xs text-[#8a9b91]">{{ time }}</span>
             </span>
 
             <span class="mt-0.5 flex items-center justify-between gap-2">
-                <span class="truncate text-xs text-zinc-500">
+                <span class="truncate text-xs text-[#71877b]">
                     {{ preview || 'Sin mensajes' }}
                 </span>
                 <span class="flex shrink-0 items-center gap-1">
                     <span
                         v-if="unassignedHandoff"
-                        class="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+                        class="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"
                     >
                         Requiere agente
                     </span>
                     <span
                         v-else-if="humanActive"
-                        class="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700"
+                        class="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700"
                     >
                         {{ conversation.agent?.name ?? 'Humano' }}
                     </span>

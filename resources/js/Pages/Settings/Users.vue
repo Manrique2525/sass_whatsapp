@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useForm, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import AppSelect from '@/Components/AppSelect.vue';
 
 interface MemberUser {
     id: number;
@@ -180,84 +181,87 @@ onMounted(load);
 <template>
     <AppLayout :user="user">
         <div class="space-y-6">
-            <div class="rounded-xl border border-zinc-200 bg-white p-8 shadow-sm">
-                <h2 class="text-xl font-semibold text-zinc-900">Usuarios del tenant</h2>
-                <p class="mt-2 text-sm text-zinc-600">
+            <div class="app-card relative overflow-hidden p-6 sm:p-8">
+                <p class="app-eyebrow">Equipo y acceso</p>
+                <h2 class="mt-2 text-2xl font-semibold tracking-tight text-[#10261f]">Usuarios del tenant</h2>
+                <p class="mt-2 text-sm leading-6 text-[#71877b]">
                     Gestiona miembros e invitaciones. Tu rol actual:
-                    <span class="font-medium text-zinc-800">{{ roleLabel[page.props.auth.current_role ?? ''] ?? '—' }}</span>
+                    <span class="font-medium text-[#33483e]">{{ roleLabel[page.props.auth.current_role ?? ''] ?? '—' }}</span>
                 </p>
             </div>
 
-            <div v-if="success" class="rounded-md bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            <div v-if="success" class="app-alert app-alert--success px-4">
                 {{ success }}
             </div>
-            <div v-if="error" class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div v-if="error" class="app-alert app-alert--error px-4">
                 {{ error }}
             </div>
 
-            <div v-if="canInvite" class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-                <h3 class="text-lg font-semibold text-zinc-900">Invitar</h3>
+            <div v-if="canInvite" class="app-card p-5 sm:p-6">
+                <h3 class="font-semibold text-[#10261f]">Invitar</h3>
                 <form class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end" @submit.prevent="submitInvite">
                     <div class="flex-1">
-                        <label for="invite-email" class="mb-1 block text-sm font-medium text-zinc-700">Email</label>
+                        <label for="invite-email" class="mb-2 block text-sm font-medium text-[#33483e]">Email</label>
                         <input
                             id="invite-email"
                             v-model="inviteForm.email"
                             type="email"
                             required
-                            class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            class="app-field"
                         />
                     </div>
                     <div>
-                        <label for="invite-role" class="mb-1 block text-sm font-medium text-zinc-700">Rol</label>
-                        <select
+                        <label for="invite-role" class="mb-2 block text-sm font-medium text-[#33483e]">Rol</label>
+                        <AppSelect
                             id="invite-role"
                             v-model="inviteForm.role"
-                            class="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        >
-                            <option value="admin">Administrador</option>
-                            <option value="agent">Agente</option>
-                        </select>
+                            class="w-full sm:min-w-[150px]"
+                            :options="[
+                                { value: 'admin', label: 'Administrador' },
+                                { value: 'agent', label: 'Agente' },
+                            ]"
+                        />
                     </div>
                     <button
                         type="submit"
                         :disabled="inviteForm.processing"
-                        class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                        class="app-button app-button--primary"
                     >
                         Enviar invitación
                     </button>
                 </form>
             </div>
 
-            <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-                <h3 class="text-lg font-semibold text-zinc-900">Miembros</h3>
+            <div class="app-card p-5 sm:p-6">
+                <h3 class="font-semibold text-[#10261f]">Miembros</h3>
 
-                <p v-if="loading" class="mt-4 text-sm text-zinc-500">Cargando...</p>
-                <p v-else-if="members.length === 0" class="mt-4 text-sm text-zinc-500">Sin miembros.</p>
+                <p v-if="loading" class="mt-4 text-sm text-[#71877b]">Cargando...</p>
+                <p v-else-if="members.length === 0" class="mt-4 text-sm text-[#71877b]">Sin miembros.</p>
 
-                <ul v-else class="mt-4 divide-y divide-zinc-100">
-                    <li v-for="member in members" :key="member.id" class="flex items-center justify-between py-3">
-                        <div>
-                            <p class="text-sm font-medium text-zinc-800">{{ member.user.name }}</p>
-                            <p class="text-xs text-zinc-500">{{ member.user.email }}</p>
+                <ul v-else class="mt-4 divide-y divide-[#dce8df]">
+                    <li v-for="member in members" :key="member.id" class="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="min-w-0">
+                            <p class="text-sm font-medium text-[#10261f]">{{ member.user.name }}</p>
+                            <p class="break-all text-xs text-[#71877b]">{{ member.user.email }}</p>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <span class="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="rounded-full bg-[#eef3ed] px-2.5 py-1 text-xs font-medium text-[#4b6557]">
                                 {{ roleLabel[member.role] }}
                             </span>
-                            <select
+                            <AppSelect
                                 v-if="canUpdateUsers && member.role !== 'owner'"
-                                class="rounded-md border border-zinc-300 px-2 py-1 text-xs"
-                                :value="member.role"
-                                @change="changeRole(member, ($event.target as HTMLSelectElement).value)"
-                            >
-                                <option value="admin">Administrador</option>
-                                <option value="agent">Agente</option>
-                            </select>
+                                class="w-auto min-w-[140px]"
+                                :model-value="member.role"
+                                :options="[
+                                    { value: 'admin', label: 'Administrador' },
+                                    { value: 'agent', label: 'Agente' },
+                                ]"
+                                @update:model-value="changeRole(member, $event as string)"
+                            />
                             <button
                                 v-if="canRemoveUsers"
                                 type="button"
-                                class="rounded-md border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                                class="app-button app-button--secondary border-red-200 px-2 py-1 text-xs text-red-600 hover:border-red-300 hover:bg-red-50"
                                 @click="removeMember(member)"
                             >
                                 Remover
@@ -267,25 +271,25 @@ onMounted(load);
                 </ul>
             </div>
 
-            <div v-if="canViewUsers" class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-                <h3 class="text-lg font-semibold text-zinc-900">Invitaciones pendientes</h3>
+            <div v-if="canViewUsers" class="app-card p-5 sm:p-6">
+                <h3 class="font-semibold text-[#10261f]">Invitaciones pendientes</h3>
 
-                <p v-if="loading" class="mt-4 text-sm text-zinc-500">Cargando...</p>
-                <p v-else-if="invitations.length === 0" class="mt-4 text-sm text-zinc-500">Sin invitaciones pendientes.</p>
+                <p v-if="loading" class="mt-4 text-sm text-[#71877b]">Cargando...</p>
+                <p v-else-if="invitations.length === 0" class="mt-4 text-sm text-[#71877b]">Sin invitaciones pendientes.</p>
 
-                <ul v-else class="mt-4 divide-y divide-zinc-100">
-                    <li v-for="invitation in invitations" :key="invitation.id" class="flex items-center justify-between py-3">
-                        <div>
-                            <p class="text-sm font-medium text-zinc-800">{{ invitation.email }}</p>
-                            <p class="text-xs text-zinc-500">
+                <ul v-else class="mt-4 divide-y divide-[#dce8df]">
+                    <li v-for="invitation in invitations" :key="invitation.id" class="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="min-w-0">
+                            <p class="break-all text-sm font-medium text-[#10261f]">{{ invitation.email }}</p>
+                            <p class="text-xs text-[#71877b]">
                                 {{ roleLabel[invitation.role] }} · expira el {{ new Date(invitation.expires_at).toLocaleDateString() }}
                             </p>
                         </div>
-                        <div class="flex items-center gap-2">
+                        <div class="flex flex-wrap items-center gap-2">
                             <button
                                 v-if="canInvite"
                                 type="button"
-                                class="rounded-md border border-zinc-300 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
+                                class="app-button app-button--secondary px-2 py-1 text-xs"
                                 @click="resendInvitation(invitation)"
                             >
                                 Reenviar
@@ -293,7 +297,7 @@ onMounted(load);
                             <button
                                 v-if="canInvite"
                                 type="button"
-                                class="rounded-md border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                                class="app-button app-button--secondary border-red-200 px-2 py-1 text-xs text-red-600 hover:border-red-300 hover:bg-red-50"
                                 @click="revokeInvitation(invitation)"
                             >
                                 Revocar

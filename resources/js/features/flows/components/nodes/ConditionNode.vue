@@ -10,7 +10,7 @@ defineProps<{ data: FlowEditorNodeData; selected?: boolean }>();
     <div class="relative">
         <FlowNodeBase :data="data" :selected="selected" :show-default-source="false" />
 
-        <div class="flex items-center justify-between gap-1 px-1 pb-1 text-[9px] font-semibold uppercase tracking-wide">
+        <div class="flex items-center justify-between gap-1 px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide">
             <span class="flex items-center gap-0.5 text-emerald-600">
                 <span class="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
                 true

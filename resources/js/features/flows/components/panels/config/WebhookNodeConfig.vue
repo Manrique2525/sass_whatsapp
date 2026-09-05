@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
+import AppSelect from '@/Components/AppSelect.vue';
 
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 
@@ -37,13 +38,12 @@ function update(): void {
 
         <label class="block">
             <span class="mb-1 block text-xs font-medium text-zinc-600">Método HTTP</span>
-            <select
+            <AppSelect
                 v-model="method"
-                class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                class="w-full"
+                :options="HTTP_METHODS.map((httpMethod) => ({ value: httpMethod, label: httpMethod }))"
                 @change="update"
-            >
-                <option v-for="httpMethod in HTTP_METHODS" :key="httpMethod" :value="httpMethod">{{ httpMethod }}</option>
-            </select>
+            />
         </label>
 
         <p class="text-[11px] text-zinc-400">

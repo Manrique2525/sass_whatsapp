@@ -16,12 +16,12 @@ const submit = (): void => {
 <template>
     <AuthLayout title="Iniciar sesión">
         <form class="space-y-4" @submit.prevent="submit">
-            <div v-if="form.errors.email" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+            <div v-if="form.errors.email" class="app-alert app-alert--error">
                 {{ form.errors.email }}
             </div>
 
             <div>
-                <label for="email" class="mb-1 block text-sm font-medium text-zinc-700">Email</label>
+                <label for="email" class="mb-1.5 block text-sm font-semibold text-[#33483e]">Email</label>
                 <input
                     id="email"
                     v-model="form.email"
@@ -29,19 +29,19 @@ const submit = (): void => {
                     autocomplete="email"
                     required
                     autofocus
-                    class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    class="app-field"
                 />
             </div>
 
             <div>
-                <label for="password" class="mb-1 block text-sm font-medium text-zinc-700">Contraseña</label>
+                <label for="password" class="mb-1.5 block text-sm font-semibold text-[#33483e]">Contraseña</label>
                 <input
                     id="password"
                     v-model="form.password"
                     type="password"
                     autocomplete="current-password"
                     required
-                    class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    class="app-field"
                 />
             </div>
 
@@ -58,15 +58,15 @@ const submit = (): void => {
             <button
                 type="submit"
                 :disabled="form.processing"
-                class="w-full rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                class="app-button app-button--primary w-full"
             >
                 Iniciar sesión
             </button>
         </form>
 
         <p class="mt-6 text-center text-sm text-zinc-600">
-            ¿No tienes cuenta?
-            <a href="/register" class="font-medium text-emerald-700 hover:underline">Regístrate</a>
+            <span class="text-[#71877b]">¿No tienes cuenta?</span>
+            <a href="/register" class="font-semibold text-[#0b8f5a] hover:underline">Regístrate</a>
         </p>
     </AuthLayout>
 </template>

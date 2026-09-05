@@ -20,7 +20,7 @@ function severityBadge(severity: EditorValidationIssue['severity']): string {
         <div
             v-for="(issue, index) in editor.validationIssues.value"
             :key="`${issue.code}-${issue.nodeId ?? 'flow'}-${index}`"
-            class="flex items-start gap-2 rounded-md border px-3 py-2 text-xs"
+            class="flex items-start gap-2 rounded-xl border px-3 py-2.5 text-xs"
             :class="severityClass(issue.severity)"
         >
             <span class="mt-0.5 shrink-0 rounded bg-black/5 px-1.5 py-0.5 text-[9px] font-bold tracking-wide">
@@ -41,7 +41,7 @@ function severityBadge(severity: EditorValidationIssue['severity']): string {
         </div>
     </div>
 
-    <div v-else class="py-2 text-center text-xs text-zinc-400">
+    <div v-else class="py-2 text-center text-xs text-[#8a9b91]">
         Sin errores de validación locales.
     </div>
 </template>

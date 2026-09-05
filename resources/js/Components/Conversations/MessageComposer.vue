@@ -47,19 +47,19 @@ function onEnter(event: KeyboardEvent): void {
 </script>
 
 <template>
-    <form class="flex items-end gap-2 border-t border-zinc-200 bg-white p-3" @submit.prevent="submit">
+    <form class="flex items-end gap-2 border-t border-[#dce8df] bg-white p-3" @submit.prevent="submit">
         <textarea
             v-model="text"
             rows="2"
             placeholder="Escribi un mensaje..."
-            class="max-h-32 min-h-[42px] flex-1 resize-none rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-800"
+            class="app-field max-h-32 min-h-[42px] flex-1 resize-none"
             :disabled="props.disabled"
             @keydown="onEnter"
         />
 
         <button
             type="submit"
-            class="h-10 w-10 shrink-0 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+            class="h-10 w-10 shrink-0 rounded-full bg-[#10261f] text-white transition hover:bg-[#1a3b2f] disabled:opacity-50"
             :disabled="props.sending || props.disabled || text.trim() === ''"
             aria-label="Enviar mensaje"
         >

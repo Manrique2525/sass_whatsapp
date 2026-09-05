@@ -13,6 +13,7 @@ import {
   buildLeadPayload,
   buildLeadEditPayload,
 } from '@/features/leads/leadUtils';
+import AppSelect from '@/Components/AppSelect.vue';
 
 interface LeadMeta {
     current_page: number;
@@ -195,86 +196,86 @@ onMounted(load);
 <template>
     <AppLayout :user="user">
         <div class="space-y-6">
-            <div class="rounded-xl border border-zinc-200 bg-white p-8 shadow-sm">
-                <h2 class="text-xl font-semibold text-zinc-900">Leads</h2>
-                <p class="mt-2 text-sm text-zinc-600">
+            <div class="app-card relative overflow-hidden p-6 sm:p-8">
+                <h2 class="text-2xl font-semibold tracking-tight text-[#10261f]">Leads</h2>
+                <p class="mt-2 max-w-2xl text-sm leading-6 text-[#71877b]">
                     Administra prospectos y su avance comercial.
                 </p>
             </div>
 
-            <div v-if="success" class="rounded-md bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            <div v-if="success" class="app-alert app-alert--success px-4">
                 {{ success }}
             </div>
-            <div v-if="error && !showModal && deletingLead === null" class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div v-if="error && !showModal && deletingLead === null" class="app-alert app-alert--error px-4">
                 {{ error }}
             </div>
 
             <div v-if="canManage" class="flex justify-end">
                 <button
                     type="button"
-                    class="rounded-md bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                    class="app-button app-button--primary"
                     @click="openCreate"
                 >
                     Nuevo lead
                 </button>
             </div>
 
-            <div v-if="!can('leads.view')" class="rounded-xl border border-zinc-200 bg-white p-8 text-sm text-zinc-500 shadow-sm">
+            <div v-if="!can('leads.view')" class="app-card p-8 text-sm text-[#71877b]">
                 No tienes permiso para ver leads.
             </div>
 
-            <div v-else class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+            <div v-else class="app-card p-5 sm:p-6">
                 <form class="grid grid-cols-1 gap-4 sm:grid-cols-4" @submit.prevent="applyFilters">
                     <div>
-                        <label for="lead-search" class="mb-1 block text-sm font-medium text-zinc-700">Buscar</label>
+                        <label for="lead-search" class="mb-1 block text-sm font-medium text-[#33483e]">Buscar</label>
                         <input
                             id="lead-search"
                             v-model="filters.search"
                             type="text"
                             placeholder="Nombre, teléfono, email o notas"
-                            class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            class="app-field"
                         />
                     </div>
                     <div>
-                        <label for="lead-status" class="mb-1 block text-sm font-medium text-zinc-700">Estado</label>
-                        <select
+                        <label for="lead-status" class="mb-1 block text-sm font-medium text-[#33483e]">Estado</label>
+                        <AppSelect
                             id="lead-status"
                             v-model="filters.status"
-                            class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        >
-                            <option value="">Todos</option>
-                            <option value="new">Nuevo</option>
-                            <option value="contacted">Contactado</option>
-                            <option value="qualified">Calificado</option>
-                            <option value="won">Ganado</option>
-                            <option value="lost">Perdido</option>
-                        </select>
+                            :options="[
+                                { value: '', label: 'Todos' },
+                                { value: 'new', label: 'Nuevo' },
+                                { value: 'contacted', label: 'Contactado' },
+                                { value: 'qualified', label: 'Calificado' },
+                                { value: 'won', label: 'Ganado' },
+                                { value: 'lost', label: 'Perdido' },
+                            ]"
+                        />
                     </div>
                     <div>
-                        <label for="lead-source" class="mb-1 block text-sm font-medium text-zinc-700">Origen</label>
-                        <select
+                        <label for="lead-source" class="mb-1 block text-sm font-medium text-[#33483e]">Origen</label>
+                        <AppSelect
                             id="lead-source"
                             v-model="filters.source"
-                            class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        >
-                            <option value="">Todos</option>
-                            <option value="manual">Manual</option>
-                            <option value="whatsapp">WhatsApp</option>
-                            <option value="web">Web</option>
-                            <option value="referral">Referido</option>
-                            <option value="other">Otro</option>
-                        </select>
+                            :options="[
+                                { value: '', label: 'Todos' },
+                                { value: 'manual', label: 'Manual' },
+                                { value: 'whatsapp', label: 'WhatsApp' },
+                                { value: 'web', label: 'Web' },
+                                { value: 'referral', label: 'Referido' },
+                                { value: 'other', label: 'Otro' },
+                            ]"
+                        />
                     </div>
                     <div class="flex items-end gap-2">
                         <button
                             type="submit"
-                            class="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
+                            class="app-button app-button--primary"
                         >
                             Filtrar
                         </button>
                         <button
                             type="button"
-                            class="rounded-md border border-zinc-300 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
+                            class="app-button app-button--secondary"
                             @click="filters = { search: '', status: '', source: '' }; applyFilters()"
                         >
                             Limpiar
@@ -282,16 +283,16 @@ onMounted(load);
                     </div>
                 </form>
 
-                <p v-if="loading" class="mt-6 text-sm text-zinc-500">Cargando...</p>
+                <p v-if="loading" class="mt-6 text-sm text-[#71877b]">Cargando...</p>
 
-                <div v-else-if="leads.length === 0" class="mt-6 rounded-md bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-500">
+                <div v-else-if="leads.length === 0" class="mt-6 rounded-xl border border-dashed border-[#dce8df] bg-[#f7f8f3] px-4 py-8 text-center text-sm text-[#71877b]">
                     No hay leads registrados.
                 </div>
 
                 <div v-else class="mt-6 overflow-x-auto">
                     <table class="w-full text-left text-sm">
                         <thead>
-                            <tr class="border-b border-zinc-200 text-xs uppercase text-zinc-500">
+                            <tr class="border-b border-[#dce8df] text-xs uppercase tracking-wide text-[#71877b]">
                                 <th class="py-2 pr-4">Nombre</th>
                                 <th class="py-2 pr-4">Contacto</th>
                                 <th class="py-2 pr-4">Estado</th>
@@ -301,13 +302,13 @@ onMounted(load);
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="lead in leads" :key="lead.id" class="border-b border-zinc-100">
-                                <td class="max-w-[16rem] py-3 pr-4 font-medium text-zinc-900">{{ lead.name }}</td>
-                                <td class="max-w-[16rem] py-3 pr-4 text-zinc-700">
+                            <tr v-for="lead in leads" :key="lead.id" class="border-b border-[#edf2ec]">
+                                <td class="max-w-[16rem] py-3 pr-4 font-medium text-[#10261f]">{{ lead.name }}</td>
+                                <td class="max-w-[16rem] py-3 pr-4 text-[#33483e]">
                                     <span v-if="lead.phone">{{ lead.phone }}</span>
-                                    <span v-if="lead.phone && lead.email" class="mx-1 text-zinc-300">·</span>
+                                    <span v-if="lead.phone && lead.email" class="mx-1 text-[#b7c8bb]">·</span>
                                     <span v-if="lead.email">{{ lead.email }}</span>
-                                    <span v-if="!lead.phone && !lead.email" class="text-zinc-400">—</span>
+                                    <span v-if="!lead.phone && !lead.email" class="text-[#8a9b91]">—</span>
                                 </td>
                                 <td class="py-3 pr-4">
                                     <span
@@ -317,28 +318,28 @@ onMounted(load);
                                         {{ statusLabel(lead.status) }}
                                     </span>
                                 </td>
-                                <td class="py-3 pr-4 text-zinc-700">{{ sourceLabel(lead.source) }}</td>
-                                <td class="py-3 pr-4 text-xs text-zinc-500">
+                                <td class="py-3 pr-4 text-[#33483e]">{{ sourceLabel(lead.source) }}</td>
+                                <td class="py-3 pr-4 text-xs text-[#71877b]">
                                     {{ new Date(lead.updated_at).toLocaleDateString('es-MX') }}
                                 </td>
                                 <td class="py-3 text-right">
                                     <template v-if="canManage">
                                         <button
                                             type="button"
-                                            class="text-emerald-700 hover:underline"
+                                            class="font-semibold text-[#0b8f5a] hover:underline"
                                             @click="openEdit(lead)"
                                         >
                                             Editar
                                         </button>
                                         <button
                                             type="button"
-                                            class="ml-3 text-red-600 hover:underline"
+                                            class="ml-3 font-semibold text-[#b42318] hover:underline"
                                             @click="askDelete(lead)"
                                         >
                                             Eliminar
                                         </button>
                                     </template>
-                                    <span v-else class="text-zinc-400">Solo lectura</span>
+                                    <span v-else class="text-[#8a9b91]">Solo lectura</span>
                                 </td>
                             </tr>
                         </tbody>
@@ -346,14 +347,14 @@ onMounted(load);
                 </div>
 
                 <div v-if="!loading && meta.total > 0" class="mt-4 flex items-center justify-between text-sm">
-                    <p class="text-zinc-500">
+                    <p class="text-[#71877b]">
                         Página {{ meta.current_page }} de {{ lastPage }} · {{ meta.total }} leads
                     </p>
                     <div class="flex gap-2">
                         <button
                             type="button"
                             :disabled="meta.current_page <= 1"
-                            class="rounded-md border border-zinc-300 px-3 py-1.5 text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                            class="app-button app-button--secondary px-3 py-1.5 disabled:opacity-50"
                             @click="goToPage(meta.current_page - 1)"
                         >
                             Anterior
@@ -361,7 +362,7 @@ onMounted(load);
                         <button
                             type="button"
                             :disabled="meta.current_page >= lastPage"
-                            class="rounded-md border border-zinc-300 px-3 py-1.5 text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                            class="app-button app-button--secondary px-3 py-1.5 disabled:opacity-50"
                             @click="goToPage(meta.current_page + 1)"
                         >
                             Siguiente
@@ -374,18 +375,18 @@ onMounted(load);
         <!-- Create/Edit Modal -->
         <div
             v-if="showModal"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 p-4"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-[#10261f]/45 p-4 backdrop-blur-sm"
             @click.self="showModal = false"
             @keydown.escape="showModal = false"
         >
-            <div class="w-full max-w-lg rounded-xl bg-white p-6 shadow-lg">
-                <h3 class="text-lg font-semibold text-zinc-900">
+            <div class="app-card w-full max-w-lg p-6 sm:p-7">
+                <h3 class="text-lg font-semibold text-[#10261f]">
                     {{ editingLead === null ? 'Nuevo lead' : 'Editar lead' }}
                 </h3>
 
                 <form class="mt-4 space-y-4" @submit.prevent="saveLead">
                     <div>
-                        <label for="lead-name" class="mb-1 block text-sm font-medium text-zinc-700">Nombre *</label>
+                        <label for="lead-name" class="mb-1 block text-sm font-medium text-[#33483e]">Nombre *</label>
                         <input
                             id="lead-name"
                             v-model="form.name"
@@ -393,83 +394,81 @@ onMounted(load);
                             required
                             maxlength="255"
                             placeholder="Nombre del lead"
-                            class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            class="app-field"
                         />
                     </div>
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label for="lead-phone" class="mb-1 block text-sm font-medium text-zinc-700">Teléfono</label>
+                            <label for="lead-phone" class="mb-1 block text-sm font-medium text-[#33483e]">Teléfono</label>
                             <input
                                 id="lead-phone"
                                 v-model="form.phone"
                                 type="text"
                                 maxlength="50"
                                 placeholder="+52 993 123 4567"
-                                class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                class="app-field"
                             />
                         </div>
                         <div>
-                            <label for="lead-email" class="mb-1 block text-sm font-medium text-zinc-700">Email</label>
+                            <label for="lead-email" class="mb-1 block text-sm font-medium text-[#33483e]">Email</label>
                             <input
                                 id="lead-email"
                                 v-model="form.email"
                                 type="email"
                                 maxlength="255"
                                 placeholder="correo@ejemplo.com"
-                                class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                class="app-field"
                             />
                         </div>
                     </div>
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label for="lead-source-form" class="mb-1 block text-sm font-medium text-zinc-700">Origen</label>
-                            <select
+                            <label for="lead-source-form" class="mb-1 block text-sm font-medium text-[#33483e]">Origen</label>
+                            <AppSelect
                                 id="lead-source-form"
                                 v-model="form.source"
-                                class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                            >
-                                <option value="">Sin origen</option>
-                                <option value="manual">Manual</option>
-                                <option value="whatsapp">WhatsApp</option>
-                                <option value="web">Web</option>
-                                <option value="referral">Referido</option>
-                                <option value="other">Otro</option>
-                            </select>
+                                :options="[
+                                    { value: '', label: 'Sin origen' },
+                                    { value: 'manual', label: 'Manual' },
+                                    { value: 'whatsapp', label: 'WhatsApp' },
+                                    { value: 'web', label: 'Web' },
+                                    { value: 'referral', label: 'Referido' },
+                                    { value: 'other', label: 'Otro' },
+                                ]"
+                            />
                         </div>
                         <div v-if="editingLead !== null && canChangeStatus">
-                            <label for="lead-status-edit" class="mb-1 block text-sm font-medium text-zinc-700">Estado</label>
-                            <select
+                            <label for="lead-status-edit" class="mb-1 block text-sm font-medium text-[#33483e]">Estado</label>
+                            <AppSelect
                                 id="lead-status-edit"
                                 v-model="form.status"
-                                class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                            >
-                                <option :value="editingLead.status">{{ statusLabel(editingLead.status) }} (actual)</option>
-                                <option v-for="t in editTransitions" :key="t" :value="t">
-                                    {{ statusLabel(t) }}
-                                </option>
-                            </select>
+                                :options="[
+                                    { value: editingLead.status, label: `${statusLabel(editingLead.status)} (actual)` },
+                                    ...editTransitions.map((t) => ({ value: t, label: statusLabel(t) })),
+                                ]"
+                            />
                         </div>
                     </div>
                     <div>
-                        <label for="lead-notes" class="mb-1 block text-sm font-medium text-zinc-700">Notas</label>
+                        <label for="lead-notes" class="mb-1 block text-sm font-medium text-[#33483e]">Notas</label>
                         <textarea
                             id="lead-notes"
                             v-model="form.notes"
                             rows="3"
                             maxlength="10000"
                             placeholder="Notas sobre el lead..."
-                            class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            class="app-field"
                         />
                     </div>
 
-                    <div v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                    <div v-if="error" class="app-alert app-alert--error">
                         {{ error }}
                     </div>
 
                     <div class="mt-6 flex justify-end gap-2">
                         <button
                             type="button"
-                            class="rounded-md border border-zinc-300 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
+                            class="app-button app-button--secondary"
                             @click="showModal = false"
                         >
                             Cancelar
@@ -477,7 +476,7 @@ onMounted(load);
                         <button
                             type="submit"
                             :disabled="saving"
-                            class="rounded-md bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                            class="app-button app-button--primary disabled:opacity-50"
                         >
                             {{ saving ? 'Guardando...' : 'Guardar' }}
                         </button>
@@ -489,22 +488,22 @@ onMounted(load);
         <!-- Delete Confirmation -->
         <div
             v-if="deletingLead !== null"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 p-4"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-[#10261f]/45 p-4 backdrop-blur-sm"
             @click.self="deletingLead = null"
             @keydown.escape="deletingLead = null"
         >
-            <div class="w-full max-w-sm rounded-xl bg-white p-6 shadow-lg">
-                <h3 class="text-lg font-semibold text-zinc-900">Eliminar lead</h3>
-                <p class="mt-2 text-sm text-zinc-600">
-                    El lead <span class="font-medium text-zinc-900">"{{ deletingLead.name }}"</span> dejará de aparecer en la lista.
+            <div class="app-card w-full max-w-sm p-6">
+                <h3 class="text-lg font-semibold text-[#10261f]">Eliminar lead</h3>
+                <p class="mt-2 text-sm leading-6 text-[#71877b]">
+                    El lead <span class="font-medium text-[#10261f]">"{{ deletingLead.name }}"</span> dejará de aparecer en la lista.
                 </p>
-                <div v-if="error && deletingLead !== null" class="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                <div v-if="error && deletingLead !== null" class="app-alert app-alert--error mt-3">
                     {{ error }}
                 </div>
                 <div class="mt-6 flex justify-end gap-2">
                     <button
                         type="button"
-                        class="rounded-md border border-zinc-300 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
+                        class="app-button app-button--secondary"
                         @click="deletingLead = null"
                     >
                         Cancelar
@@ -512,7 +511,7 @@ onMounted(load);
                     <button
                         type="button"
                         :disabled="deleting"
-                        class="rounded-md bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                        class="app-button app-button--danger disabled:opacity-50"
                         @click="confirmDelete"
                     >
                         {{ deleting ? 'Eliminando...' : 'Eliminar' }}

@@ -4,6 +4,7 @@ import type { NodeConfigContext } from '../../../flowEditorTypes';
 import type { VariableDefinition } from '../../../flowTypes';
 import { useKnowledgeBases } from '../../../../knowledge/useKnowledgeBases';
 import VariablePicker from '../../VariablePicker.vue';
+import AppSelect from '@/Components/AppSelect.vue';
 
 const props = defineProps<{ modelValue: Record<string, unknown> | null; context: NodeConfigContext }>();
 const emit = defineEmits<{ (e: 'update:modelValue', value: Record<string, unknown>): void }>();
@@ -83,9 +84,9 @@ function update(): void {
     });
 }
 
-function onKnowledgeBaseChange(event: Event): void {
-    const value = (event.target as HTMLSelectElement).value;
-    knowledgeBaseId.value = value === '' ? null : value;
+function onKnowledgeBaseChange(value: unknown): void {
+    const selected = typeof value === 'string' ? value : '';
+    knowledgeBaseId.value = selected === '' ? null : selected;
     update();
 }
 
@@ -114,17 +115,16 @@ function insertVariable(variable: VariableDefinition, targetField: 'prompt'): vo
         <!-- ── Knowledge Base Selector ────────────────────────────── -->
         <label class="block">
             <span class="mb-1 block text-xs font-medium text-zinc-600">Base de conocimiento</span>
-            <select
-                :value="knowledgeBaseId ?? ''"
+            <AppSelect
+                :model-value="knowledgeBaseId ?? ''"
                 :disabled="context.readOnly || kbLoading"
-                class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
-                @change="onKnowledgeBaseChange"
-            >
-                <option value="">{{ kbLoading ? 'Cargando bases...' : 'Sin base de conocimiento' }}</option>
-                <option v-for="kb in knowledgeBases" :key="kb.id" :value="kb.id">
-                    {{ kb.name }}
-                </option>
-            </select>
+                class="w-full"
+                :options="[
+                    { value: '', label: kbLoading ? 'Cargando bases...' : 'Sin base de conocimiento' },
+                    ...knowledgeBases.map((kb) => ({ value: kb.id, label: kb.name })),
+                ]"
+                @update:model-value="onKnowledgeBaseChange"
+            />
             <div class="mt-1 flex items-start justify-between gap-2">
                 <span class="block text-[11px] text-zinc-400">{{ kbHint }}</span>
                 <span v-if="missingKB" class="text-[11px] text-amber-600">{{ kbLabel }}</span>

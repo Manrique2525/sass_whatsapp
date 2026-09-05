@@ -53,20 +53,20 @@ watch(
     <div class="flex min-h-[calc(100vh-220px)] flex-col gap-3">
         <FlowToolbar :editor="editor" @deactivate-request="emit('deactivate-request')" />
 
-        <div v-if="editor.connectError.value" class="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
+        <div v-if="editor.connectError.value" class="app-alert app-alert--error px-4 py-2">
             {{ editor.connectError.value }}
         </div>
 
-        <div v-if="editor.readOnly.value" class="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700">
+        <div v-if="editor.readOnly.value" class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700">
             Flujo publicado: el editor está en modo solo lectura. Desactivá el flujo para poder editarlo.
         </div>
 
-        <div v-if="editor.error.value" class="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
+        <div v-if="editor.error.value" class="app-alert app-alert--error px-4 py-2">
             {{ editor.error.value }}
         </div>
 
         <div class="grid flex-1 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_21rem]">
-            <div class="relative h-[560px] min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+            <div class="relative h-[560px] min-w-0 overflow-hidden rounded-2xl border border-[#dce8df] bg-white shadow-[0_12px_35px_rgba(16,38,31,0.06)]">
                 <div class="absolute left-3 top-3 z-20">
                     <NodePalette :editor="editor" />
                 </div>
@@ -95,7 +95,7 @@ watch(
                 <EmptyState v-if="editor.empty.value" :editor="editor" />
             </div>
 
-            <aside class="min-w-0 overflow-y-auto rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+            <aside class="min-w-0 overflow-y-auto rounded-2xl border border-[#dce8df] bg-white p-4 shadow-[0_12px_35px_rgba(16,38,31,0.06)]">
                 <NodePropertiesPanel
                     v-if="editor.selected.value?.kind === 'node'"
                     :editor="editor"
@@ -108,7 +108,7 @@ watch(
             </aside>
         </div>
 
-        <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+        <div class="app-card p-4">
             <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Validación</h3>
             <ValidationPanel :editor="editor" />
         </div>

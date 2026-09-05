@@ -27,15 +27,15 @@ const submit = (): void => {
 
 <template>
     <AuthLayout title="Crea tu espacio de trabajo">
-        <p class="mb-6 text-center text-sm leading-6 text-zinc-600">
+        <p class="mb-6 text-center text-sm leading-6 text-[#60766a]">
             Empieza gratis y configura tu espacio de trabajo.
         </p>
-        <div class="mb-6 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-center text-xs leading-5 text-emerald-900">
+        <div class="app-alert app-alert--success mb-6 text-center text-xs leading-5">
             Tu cuenta incluye un workspace y el plan Free. Después podrás conectar tu WhatsApp Business.
         </div>
         <form class="space-y-4" @submit.prevent="submit">
             <div>
-                <label for="name" class="mb-1 block text-sm font-medium text-zinc-700">Nombre</label>
+                <label for="name" class="mb-1.5 block text-sm font-semibold text-[#33483e]">Nombre</label>
                 <input
                     id="name"
                     v-model="form.name"
@@ -43,39 +43,39 @@ const submit = (): void => {
                     autocomplete="name"
                     required
                     autofocus
-                    class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    class="app-field"
                 />
                 <p v-if="form.errors.name" class="mt-1 text-sm text-red-600">{{ form.errors.name }}</p>
             </div>
 
             <div>
-                <label for="email" class="mb-1 block text-sm font-medium text-zinc-700">Email</label>
+                <label for="email" class="mb-1.5 block text-sm font-semibold text-[#33483e]">Email</label>
                 <input
                     id="email"
                     v-model="form.email"
                     type="email"
                     autocomplete="email"
                     required
-                    class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    class="app-field"
                 />
                 <p v-if="form.errors.email" class="mt-1 text-sm text-red-600">{{ form.errors.email }}</p>
             </div>
 
             <div>
-                <label for="password" class="mb-1 block text-sm font-medium text-zinc-700">Contraseña</label>
+                <label for="password" class="mb-1.5 block text-sm font-semibold text-[#33483e]">Contraseña</label>
                 <input
                     id="password"
                     v-model="form.password"
                     type="password"
                     autocomplete="new-password"
                     required
-                    class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    class="app-field"
                 />
                 <p v-if="form.errors.password" class="mt-1 text-sm text-red-600">{{ form.errors.password }}</p>
             </div>
 
             <div>
-                <label for="password_confirmation" class="mb-1 block text-sm font-medium text-zinc-700">
+                <label for="password_confirmation" class="mb-1.5 block text-sm font-semibold text-[#33483e]">
                     Confirmar contraseña
                 </label>
                 <input
@@ -84,14 +84,14 @@ const submit = (): void => {
                     type="password"
                     autocomplete="new-password"
                     required
-                    class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    class="app-field"
                 />
             </div>
 
             <button
                 type="submit"
                 :disabled="form.processing"
-                class="w-full rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                class="app-button app-button--primary w-full"
             >
                 Crear mi espacio
             </button>

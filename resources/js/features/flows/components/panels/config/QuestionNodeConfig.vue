@@ -3,6 +3,7 @@ import { ref, watch } from 'vue';
 import type { NodeConfigContext } from '../../../flowEditorTypes';
 import type { VariableDefinition, VariableType } from '../../../flowTypes';
 import VariablePicker from '../../VariablePicker.vue';
+import AppSelect from '@/Components/AppSelect.vue';
 
 const props = defineProps<{ modelValue: Record<string, unknown> | null; context: NodeConfigContext }>();
 const emit = defineEmits<{ (e: 'update:modelValue', value: Record<string, unknown>): void }>();
@@ -121,15 +122,12 @@ function insertVariable(variable: VariableDefinition): void {
         </label>
         <label class="block">
             <span class="mb-1 block text-xs font-medium text-zinc-600">Tipo de variable</span>
-            <select
+            <AppSelect
                 v-model="type"
-                class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                class="w-full"
+                :options="variableTypes"
                 @change="update"
-            >
-                <option v-for="option in variableTypes" :key="option.value" :value="option.value">
-                    {{ option.label }}
-                </option>
-            </select>
+            />
         </label>
 
         <label class="block">

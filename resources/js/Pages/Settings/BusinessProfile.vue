@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import AppSelect from '@/Components/AppSelect.vue';
 
 interface WorkingHoursEntry {
     day: string;
@@ -299,13 +300,12 @@ onMounted(load);
 
                     <ul v-else class="mt-4 divide-y divide-zinc-100">
                         <li v-for="(entry, index) in form.working_hours" :key="index" class="flex flex-col gap-3 py-3 sm:flex-row sm:items-center">
-                            <select
+                            <AppSelect
                                 v-model="entry.day"
                                 :disabled="!canUpdate"
-                                class="rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:bg-zinc-100"
-                            >
-                                <option v-for="day in dayOptions" :key="day" :value="day">{{ days[day] }}</option>
-                            </select>
+                                class="w-full sm:w-auto sm:min-w-[140px]"
+                                :options="dayOptions.map((day) => ({ value: day, label: days[day] }))"
+                            />
                             <label class="flex items-center gap-2 text-sm text-zinc-700">
                                 <input v-model="entry.closed" type="checkbox" :disabled="!canUpdate" />
                                 Cerrado

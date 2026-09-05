@@ -57,7 +57,7 @@ function add(type: FlowNodeType): void {
     <div class="relative">
         <button
             type="button"
-            class="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-800 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            class="app-button app-button--secondary w-full rounded-xl py-2"
             :disabled="editor.readOnly.value"
             @click="expanded = !expanded"
         >
@@ -66,20 +66,20 @@ function add(type: FlowNodeType): void {
 
         <div
             v-if="expanded && !editor.readOnly.value"
-            class="absolute left-0 top-11 z-30 w-72 space-y-1 rounded-lg border border-zinc-200 bg-white p-2 shadow-xl"
+            class="app-card absolute left-0 top-12 z-30 w-72 space-y-1 p-2"
         >
             <div v-for="type in NODE_TYPES" :key="type">
                 <button
                     type="button"
-                    class="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-zinc-50"
+                    class="flex w-full items-start gap-2 rounded-xl px-2.5 py-2 text-left hover:bg-[#f0f5ef]"
                     @click="add(type)"
                 >
                     <span class="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" :class="accent[type]" />
                     <span class="flex-1">
-                        <span class="block text-xs font-semibold text-zinc-800">
+                        <span class="block text-xs font-semibold text-[#10261f]">
                             {{ nodeTypeLabel(type) }}
                         </span>
-                        <span class="block text-[11px] text-zinc-500">{{ descriptions[type] }}</span>
+                        <span class="block text-[11px] text-[#71877b]">{{ descriptions[type] }}</span>
                     </span>
                 </button>
             </div>

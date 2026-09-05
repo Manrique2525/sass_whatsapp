@@ -125,7 +125,7 @@ onMounted(load);
 <template>
   <AppLayout :user="user">
     <div class="space-y-6">
-      <div class="rounded-xl border border-zinc-200 bg-white p-8 shadow-sm">
+      <div class="app-card p-8">
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 class="text-xl font-semibold text-zinc-900">Dashboard</h2>
@@ -136,7 +136,7 @@ onMounted(load);
           <button
             type="button"
             :disabled="loading"
-            class="self-start rounded-md border border-zinc-300 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+            class="app-button app-button--secondary self-start"
             @click="load"
           >
             {{ loading ? 'Cargando...' : 'Actualizar' }}
@@ -144,7 +144,7 @@ onMounted(load);
         </div>
       </div>
 
-      <div v-if="!hasAccess" class="rounded-xl border border-zinc-200 bg-white p-8 text-sm text-zinc-500 shadow-sm">
+      <div v-if="!hasAccess" class="app-card p-8 text-sm text-[#71877b]">
         No tienes permiso para ver analytics.
       </div>
 
@@ -156,8 +156,8 @@ onMounted(load);
             type="button"
             class="rounded-md px-4 py-1.5 text-sm font-medium transition-colors"
             :class="activePreset === preset
-              ? 'bg-zinc-900 text-white'
-              : 'border border-zinc-300 text-zinc-700 hover:bg-zinc-50'"
+              ? 'bg-[#10261f] text-white'
+              : 'border border-[#cbdacf] text-[#33483e] hover:bg-[#f0f5ef]'"
             @click="selectPreset(preset)"
           >
             {{ presetLabel(preset) }}
@@ -166,8 +166,8 @@ onMounted(load);
             type="button"
             class="rounded-md px-4 py-1.5 text-sm font-medium transition-colors"
             :class="activePreset === 'custom'
-              ? 'bg-zinc-900 text-white'
-              : 'border border-zinc-300 text-zinc-700 hover:bg-zinc-50'"
+              ? 'bg-[#10261f] text-white'
+              : 'border border-[#cbdacf] text-[#33483e] hover:bg-[#f0f5ef]'"
             @click="activePreset = 'custom'"
           >
             Personalizado
@@ -181,7 +181,7 @@ onMounted(load);
               id="analytics-from"
               v-model="customFrom"
               type="date"
-              class="rounded-md border border-zinc-300 px-3 py-1.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              class="app-field px-3 py-1.5"
             />
           </div>
           <div>
@@ -190,12 +190,12 @@ onMounted(load);
               id="analytics-to"
               v-model="customTo"
               type="date"
-              class="rounded-md border border-zinc-300 px-3 py-1.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              class="app-field px-3 py-1.5"
             />
           </div>
           <button
             type="button"
-            class="rounded-md bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-700"
+            class="app-button app-button--primary"
             @click="applyCustomRange"
           >
             Aplicar
@@ -220,13 +220,13 @@ onMounted(load);
 
         <div v-if="loading" class="space-y-6">
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div v-for="i in 4" :key="i" class="animate-pulse rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+            <div v-for="i in 4" :key="i" class="animate-pulse app-card p-6">
               <div class="h-4 w-24 rounded bg-zinc-200"></div>
               <div class="mt-3 h-8 w-16 rounded bg-zinc-200"></div>
             </div>
           </div>
           <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div v-for="i in 4" :key="i" class="animate-pulse rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+            <div v-for="i in 4" :key="i" class="animate-pulse app-card p-6">
               <div class="h-4 w-40 rounded bg-zinc-200"></div>
               <div class="mt-4 h-48 rounded bg-zinc-100"></div>
             </div>
@@ -257,7 +257,7 @@ onMounted(load);
             />
           </div>
 
-          <div v-if="overview.daily.length === 0" class="rounded-xl border border-zinc-200 bg-white p-8 text-center shadow-sm">
+          <div v-if="overview.daily.length === 0" class="app-card p-8 text-center">
             <p class="text-sm text-zinc-500">Sin datos en el rango seleccionado.</p>
           </div>
 

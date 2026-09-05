@@ -28,6 +28,7 @@ import ConversationFilters from '@/Components/Conversations/ConversationFilters.
 import ConversationListItem from '@/Components/Conversations/ConversationListItem.vue';
 import MessageComposer from '@/Components/Conversations/MessageComposer.vue';
 import MessageList from '@/Components/Conversations/MessageList.vue';
+import AppSelect from '@/Components/AppSelect.vue';
 
 interface ContactOption {
     id: string;
@@ -589,41 +590,41 @@ onBeforeUnmount(() => {
 <template>
     <AppLayout :user="user" full-width>
         <div class="space-y-4">
-            <div v-if="success" class="rounded-md bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            <div v-if="success" class="app-alert app-alert--success px-4">
                 {{ success }}
             </div>
-            <div v-if="error" class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div v-if="error" class="app-alert app-alert--error px-4">
                 {{ error }}
             </div>
 
             <div
                 v-if="!canView"
-                class="rounded-xl border border-zinc-200 bg-white p-8 text-sm text-zinc-500 shadow-sm"
+                class="app-card p-8 text-sm text-[#71877b]"
             >
                 No tienes permiso para ver conversaciones.
             </div>
 
             <div
                 v-else
-                class="flex h-[calc(100vh-12rem)] min-h-[480px] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+                class="app-card flex h-[calc(100vh-12rem)] min-h-[480px] overflow-hidden"
             >
                 <section
-                    class="w-full flex-col border-r border-zinc-200 lg:flex lg:w-72 lg:shrink-0"
+                    class="w-full flex-col border-r border-[#dce8df] lg:flex lg:w-72 lg:shrink-0"
                     :class="view === 'list' ? 'flex' : 'hidden'"
                 >
-                    <div class="flex items-center justify-between gap-2 border-b border-zinc-200 bg-white px-4 py-3">
-                        <h2 class="text-sm font-semibold text-zinc-900">Conversaciones</h2>
+                    <div class="flex items-center justify-between gap-2 border-b border-[#edf2ec] bg-white px-4 py-4">
+                        <h2 class="text-sm font-semibold text-[#10261f]">Conversaciones</h2>
                         <button
                             v-if="canManage"
                             type="button"
-                            class="rounded-md bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+                            class="app-button app-button--primary px-3 py-1 text-xs"
                             @click="openCreate"
                         >
                             Nueva
                         </button>
                     </div>
 
-                    <div class="flex border-b border-zinc-200 bg-white" role="tablist">
+                    <div class="flex border-b border-[#edf2ec] bg-white" role="tablist">
                         <button
                             v-for="tab in scopeTabs"
                             :key="tab.key"
@@ -632,14 +633,14 @@ onBeforeUnmount(() => {
                             :aria-selected="scope === tab.key"
                             class="flex-1 px-3 py-2 text-center text-xs font-medium transition-colors"
                             :class="scope === tab.key
-                                ? 'border-b-2 border-emerald-600 text-emerald-700'
-                                : 'text-zinc-500 hover:text-zinc-700'"
+                                ? 'border-b-2 border-[#0b8f5a] text-[#0b8f5a]'
+                                : 'text-[#71877b] hover:text-[#33483e]'"
                             @click="changeScope(tab.key)"
                         >
                             {{ tab.label }}
                             <span
                                 v-if="counts[tab.key] > 0"
-                                class="ml-1 inline-flex items-center justify-center rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-600"
+                                class="ml-1 inline-flex items-center justify-center rounded-full bg-[#eef3ed] px-1.5 py-0.5 text-[10px] font-semibold text-[#60766a]"
                             >
                                 {{ counts[tab.key] }}
                             </span>
@@ -653,7 +654,7 @@ onBeforeUnmount(() => {
                         @clear="clearFilters"
                     />
 
-                    <div class="min-h-0 flex-1 overflow-y-auto bg-white">
+                    <div class="min-h-0 flex-1 overflow-y-auto bg-[#fbfcf9]">
                         <p v-if="loading" class="px-4 py-6 text-center text-sm text-zinc-500">Cargando...</p>
 
                         <div
@@ -672,10 +673,10 @@ onBeforeUnmount(() => {
                         />
                     </div>
 
-                    <div v-if="listHasMore" class="border-t border-zinc-200 p-2">
+                    <div v-if="listHasMore" class="border-t border-[#edf2ec] p-2">
                         <button
                             type="button"
-                            class="w-full rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 disabled:opacity-60"
+                            class="app-button app-button--secondary w-full px-3 py-1.5 text-xs"
                             :disabled="listLoadingMore"
                             @click="loadMoreList"
                         >
@@ -685,7 +686,7 @@ onBeforeUnmount(() => {
                 </section>
 
                 <section
-                    class="min-w-0 flex-1 flex-col bg-zinc-50 lg:flex"
+                    class="min-w-0 flex-1 flex-col bg-[#f0f5ef] lg:flex"
                     :class="view === 'chat' ? 'flex' : 'hidden'"
                 >
                     <template v-if="detail !== null">
@@ -727,7 +728,7 @@ onBeforeUnmount(() => {
                         />
                         <div
                             v-else
-                            class="border-t border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-400"
+                            class="border-t border-[#dce8df] bg-white px-4 py-3 text-xs text-[#71877b]"
                         >
                             {{ canSend ? 'La conversacion esta archivada.' : 'No tienes permiso para enviar mensajes.' }}
                         </div>
@@ -748,32 +749,32 @@ onBeforeUnmount(() => {
 
         <div
             v-if="showCreateModal"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 p-4"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-[#10261f]/45 p-4"
             @click.self="showCreateModal = false"
         >
-            <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-lg">
-                <h3 class="text-lg font-semibold text-zinc-900">Nueva conversacion</h3>
+            <div class="app-card w-full max-w-md p-6">
+                <h3 class="text-lg font-semibold text-[#10261f]">Nueva conversacion</h3>
                 <form class="mt-4 space-y-4" @submit.prevent="createConversation">
                     <div>
                         <label for="f-contact" class="mb-1 block text-sm font-medium text-zinc-700">Contacto *</label>
-                        <select
+                        <AppSelect
                             id="f-contact"
                             v-model="newContactId"
-                            class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        >
-                            <option value="">Elegir contacto...</option>
-                            <option v-for="contact in contacts" :key="contact.id" :value="contact.id">
-                                {{ contact.name }} - {{ contact.phone }}
-                            </option>
-                        </select>
+                            class="w-full"
+                            :options="[
+                                { value: '', label: 'Elegir contacto...' },
+                                ...contacts.map((contact) => ({ value: contact.id, label: `${contact.name} - ${contact.phone}` })),
+                            ]"
+                            searchable
+                        />
                     </div>
-                    <div v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                    <div v-if="error" class="app-alert app-alert--error">
                         {{ error }}
                     </div>
                     <div class="mt-6 flex justify-end gap-2">
                         <button
                             type="button"
-                            class="rounded-md border border-zinc-300 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
+                            class="app-button app-button--secondary"
                             @click="showCreateModal = false"
                         >
                             Cancelar
@@ -781,7 +782,7 @@ onBeforeUnmount(() => {
                         <button
                             type="submit"
                             :disabled="creating"
-                            class="rounded-md bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                            class="app-button app-button--primary px-5"
                         >
                             {{ creating ? 'Creando...' : 'Crear' }}
                         </button>

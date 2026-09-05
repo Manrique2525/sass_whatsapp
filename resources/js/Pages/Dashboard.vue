@@ -61,23 +61,24 @@ onMounted(() => {
 
 <template>
     <AppLayout :user="user">
-        <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-8">
-            <p class="text-sm font-medium text-emerald-700">Workspace activo</p>
-            <h2 class="mt-1 text-2xl font-semibold text-zinc-900">Hola, {{ user?.name }}</h2>
-            <p class="mt-2 text-sm text-zinc-600">
+        <div class="app-card relative overflow-hidden p-6 sm:p-8">
+            <div class="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-[#b7f36b]/25 blur-3xl" />
+            <p class="app-eyebrow relative">Workspace activo</p>
+            <h2 class="relative mt-2 text-3xl font-semibold tracking-[-0.04em] text-[#10261f]">Hola, {{ user?.name }}</h2>
+            <p class="relative mt-2 max-w-2xl text-sm leading-6 text-[#60766a]">
                 <template v-if="currentTenant">
-                    <span class="font-medium text-zinc-800">{{ currentTenant.name }} {{ currentTenant.status }}</span>.
+                    <span class="font-semibold text-[#33483e]">{{ currentTenant.name }} {{ currentTenant.status }}</span>.
                     Gestiona este workspace desde un solo lugar.
                 </template>
                 <template v-else>Sin tenant activo. Selecciona uno con el selector superior.</template>
             </p>
             <div class="mt-5 flex flex-wrap gap-3">
-                <Link v-if="can('conversations.view')" href="/settings/conversations" class="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700">Abrir conversaciones</Link>
-                <Link v-if="can('flows.view')" href="/settings/flows" class="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">Configurar automatizaciones</Link>
+                <Link v-if="can('conversations.view')" href="/settings/conversations" class="app-button app-button--primary">Abrir conversaciones</Link>
+                <Link v-if="can('flows.view')" href="/settings/flows" class="app-button app-button--secondary">Configurar automatizaciones</Link>
             </div>
         </div>
 
-        <p v-if="error" class="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{{ error }}</p>
+        <p v-if="error" class="app-alert app-alert--error mt-6">{{ error }}</p>
 
         <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <div v-for="card in [
@@ -86,24 +87,24 @@ onMounted(() => {
                 { label: 'Chatbots', value: counts.chatbots, href: '/settings/flows', visible: can('flows.view') },
                 { label: 'FAQs', value: counts.faqs, href: '/settings/faq', visible: can('faqs.view') },
                 { label: 'Knowledge', value: counts.knowledge, href: '/settings/knowledge', visible: can('knowledge.view') },
-            ].filter((item) => item.visible)" :key="card.label" class="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-                <p class="text-sm text-zinc-500">{{ card.label }}</p>
-                <p class="mt-2 text-3xl font-semibold text-zinc-900">{{ loading ? '...' : card.value }}</p>
-                <Link :href="card.href" class="mt-3 inline-block text-sm font-medium text-emerald-700 hover:text-emerald-800">Ver módulo →</Link>
+            ].filter((item) => item.visible)" :key="card.label" class="app-card p-5 transition hover:-translate-y-0.5 hover:shadow-[0_16px_38px_rgba(16,38,31,0.1)]">
+                <p class="text-sm font-medium text-[#71877b]">{{ card.label }}</p>
+                <p class="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[#10261f]">{{ loading ? '...' : card.value }}</p>
+                <Link :href="card.href" class="mt-3 inline-block text-sm font-semibold text-[#0b8f5a] hover:text-[#10261f]">Ver módulo →</Link>
             </div>
         </div>
 
         <div class="mt-6 grid gap-6 lg:grid-cols-2">
-            <section class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-                <h3 class="font-semibold text-zinc-900">Primeros pasos</h3>
+            <section class="app-card p-6">
+                <h3 class="font-semibold text-[#10261f]">Primeros pasos</h3>
                 <div class="mt-4 space-y-3 text-sm">
-                    <Link v-if="can('whatsapp.view')" href="/settings/whatsapp" class="flex items-center justify-between rounded-lg bg-zinc-50 p-3 hover:bg-zinc-100" @click="trackMarketingEvent('whatsapp_connect_clicked')"><span>Conectar WhatsApp</span><span :class="whatsappConnected ? 'text-emerald-700' : 'text-amber-700'">{{ whatsappConnected ? 'Conectado' : 'Revisar' }}</span></Link>
-                    <Link v-if="can('flows.view')" href="/settings/flows" class="flex items-center justify-between rounded-lg bg-zinc-50 p-3 hover:bg-zinc-100"><span>Publicar tu primer flujo</span><span class="text-zinc-500">Ir a flujos →</span></Link>
-                    <Link v-if="can('knowledge.view')" href="/settings/knowledge" class="flex items-center justify-between rounded-lg bg-zinc-50 p-3 hover:bg-zinc-100"><span>Preparar respuestas con IA</span><span class="text-zinc-500">{{ counts.knowledge }} bases</span></Link>
+                    <Link v-if="can('whatsapp.view')" href="/settings/whatsapp" class="flex items-center justify-between rounded-xl bg-[#f0f5ef] p-3.5 transition hover:bg-[#e5f0e5]" @click="trackMarketingEvent('whatsapp_connect_clicked')"><span>Conectar WhatsApp</span><span :class="whatsappConnected ? 'text-[#176b42]' : 'text-amber-700'">{{ whatsappConnected ? 'Conectado' : 'Revisar' }}</span></Link>
+                    <Link v-if="can('flows.view')" href="/settings/flows" class="flex items-center justify-between rounded-xl bg-[#f0f5ef] p-3.5 transition hover:bg-[#e5f0e5]"><span>Publicar tu primer flujo</span><span class="text-[#71877b]">Ir a flujos →</span></Link>
+                    <Link v-if="can('knowledge.view')" href="/settings/knowledge" class="flex items-center justify-between rounded-xl bg-[#f0f5ef] p-3.5 transition hover:bg-[#e5f0e5]"><span>Preparar respuestas con IA</span><span class="text-[#71877b]">{{ counts.knowledge }} bases</span></Link>
                 </div>
             </section>
-            <section v-if="can('analytics.view')" class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-                <div class="flex items-center justify-between"><h3 class="font-semibold text-zinc-900">Últimos 30 días</h3><Link href="/settings/analytics" class="text-sm text-emerald-700">Ver analytics →</Link></div>
+            <section v-if="can('analytics.view')" class="app-card p-6">
+                <div class="flex items-center justify-between"><h3 class="font-semibold text-[#10261f]">Últimos 30 días</h3><Link href="/settings/analytics" class="text-sm font-semibold text-[#0b8f5a]">Ver analytics →</Link></div>
                 <p v-if="loading" class="mt-5 text-sm text-zinc-500">Cargando métricas...</p>
                 <p v-else-if="!analytics" class="mt-5 rounded-lg bg-zinc-50 p-4 text-sm text-zinc-600">Aún no hay actividad suficiente para mostrar métricas.</p>
                 <div v-else class="mt-5 grid grid-cols-3 gap-3 text-center"><div><p class="text-2xl font-semibold text-zinc-900">{{ analytics.messages }}</p><p class="text-xs text-zinc-500">Mensajes</p></div><div><p class="text-2xl font-semibold text-zinc-900">{{ analytics.open }}</p><p class="text-xs text-zinc-500">Abiertas</p></div><div><p class="text-2xl font-semibold text-zinc-900">{{ analytics.newLeads }}</p><p class="text-xs text-zinc-500">Leads nuevos</p></div></div>

@@ -7,9 +7,9 @@ defineProps<{
 </script>
 
 <template>
-  <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-    <p class="text-sm font-medium text-zinc-500">{{ label }}</p>
-    <p class="mt-2 text-2xl font-bold text-zinc-900">{{ value }}</p>
-    <p v-if="subtitle" class="mt-1 text-xs text-zinc-400">{{ subtitle }}</p>
+  <div class="app-card p-6 transition hover:-translate-y-0.5 hover:shadow-[0_16px_38px_rgba(16,38,31,0.1)]">
+    <p class="text-sm font-medium text-[#71877b]">{{ label }}</p>
+    <p class="mt-2 text-2xl font-bold tracking-[-0.03em] text-[#10261f]">{{ value }}</p>
+    <p v-if="subtitle" class="mt-1 text-xs text-[#8a9b91]">{{ subtitle }}</p>
   </div>
 </template>

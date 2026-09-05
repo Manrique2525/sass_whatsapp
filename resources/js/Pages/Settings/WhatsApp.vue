@@ -157,35 +157,36 @@ onMounted(load);
 <template>
     <AppLayout :user="user">
         <div class="space-y-6">
-            <div class="rounded-xl border border-zinc-200 bg-white p-8 shadow-sm">
-                <h2 class="text-xl font-semibold text-zinc-900">WhatsApp</h2>
-                <p class="mt-2 text-sm text-zinc-600">
+            <div class="app-card relative overflow-hidden p-6 sm:p-8">
+                <p class="app-eyebrow">Canal oficial</p>
+                <h2 class="mt-2 text-2xl font-semibold tracking-tight text-[#10261f]">WhatsApp</h2>
+                <p class="mt-2 text-sm leading-6 text-[#71877b]">
                     Conecta la WhatsApp Business Account (WABA) de tu negocio mediante la
                     Meta WhatsApp Cloud API oficial. El token de acceso se guarda cifrado y
                     nunca se muestra.
                 </p>
             </div>
 
-            <div v-if="success" class="rounded-md bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            <div v-if="success" class="app-alert app-alert--success px-4">
                 {{ success }}
             </div>
-            <div v-if="error" class="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div v-if="error" class="app-alert app-alert--error px-4">
                 {{ error }}
             </div>
 
-            <p v-if="loading" class="text-sm text-zinc-500">Cargando...</p>
+            <p v-if="loading" class="text-sm text-[#71877b]">Cargando...</p>
 
             <template v-else>
-                <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-                    <h3 class="text-lg font-semibold text-zinc-900">Estado de la conexión</h3>
+                <div class="app-card p-5 sm:p-6">
+                    <h3 class="font-semibold text-[#10261f]">Estado de la conexión</h3>
 
-                    <p v-if="!account" class="mt-4 text-sm text-zinc-500">
+                    <p v-if="!account" class="mt-4 text-sm text-[#71877b]">
                         No hay una cuenta de WhatsApp conectada.
                     </p>
 
                     <dl v-else class="mt-4 space-y-3 text-sm">
                         <div class="flex items-center justify-between">
-                            <dt class="text-zinc-500">Estado</dt>
+                            <dt class="text-[#71877b]">Estado</dt>
                             <dd>
                                 <span
                                     :class="account.status === 'connected' ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-600'"
@@ -196,22 +197,22 @@ onMounted(load);
                             </dd>
                         </div>
                         <div class="flex items-center justify-between">
-                            <dt class="text-zinc-500">Nombre</dt>
-                            <dd class="text-zinc-900">{{ account.display_name ?? '—' }}</dd>
+                            <dt class="text-[#71877b]">Nombre</dt>
+                            <dd class="text-[#10261f]">{{ account.display_name ?? '—' }}</dd>
                         </div>
                         <div class="flex items-center justify-between">
-                            <dt class="text-zinc-500">WhatsApp Business Account ID</dt>
-                            <dd class="text-zinc-900">{{ account.whatsapp_business_account_id ?? '—' }}</dd>
+                            <dt class="text-[#71877b]">WhatsApp Business Account ID</dt>
+                            <dd class="text-[#10261f]">{{ account.whatsapp_business_account_id ?? '—' }}</dd>
                         </div>
                         <div class="flex items-center justify-between">
-                            <dt class="text-zinc-500">Teléfono</dt>
-                            <dd class="text-zinc-900">
+                            <dt class="text-[#71877b]">Teléfono</dt>
+                            <dd class="text-[#10261f]">
                                 {{
                                     account.phone_numbers[0]?.display_phone_number ?? account.phone_numbers[0]?.phone_id ?? '—'
                                 }}
                             </dd>
                         </div>
-                        <div v-if="webhookSubscribed" class="rounded-md bg-emerald-50 px-3 py-2 text-emerald-700">
+                        <div v-if="webhookSubscribed" class="app-alert app-alert--success px-3 py-2">
                             El webhook está suscrito a la app.
                         </div>
                     </dl>
@@ -220,7 +221,7 @@ onMounted(load);
                         <button
                             type="button"
                             :disabled="disconnecting"
-                            class="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                            class="app-button app-button--secondary border-red-200 text-red-600 hover:border-red-300 hover:bg-red-50"
                             @click="disconnect"
                         >
                             {{ disconnecting ? 'Desconectando...' : 'Desconectar' }}
@@ -233,59 +234,59 @@ onMounted(load);
                     class="space-y-6"
                     @submit.prevent="connect"
                 >
-                    <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-                        <h3 class="text-lg font-semibold text-zinc-900">Conectar cuenta</h3>
-                        <p class="mt-1 text-sm text-zinc-500">
+                    <div class="app-card p-5 sm:p-6">
+                        <h3 class="font-semibold text-[#10261f]">Conectar cuenta</h3>
+                        <p class="mt-1 text-sm leading-6 text-[#71877b]">
                             Completa estos datos desde tu app de Meta (WhatsApp &gt; API Setup) y
                             con un token de usuario del sistema con permisos de la WABA.
                         </p>
 
                         <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
-                                <label for="wa-waba" class="mb-1 block text-sm font-medium text-zinc-700">WhatsApp Business Account ID</label>
+                                <label for="wa-waba" class="mb-2 block text-sm font-medium text-[#33483e]">WhatsApp Business Account ID</label>
                                 <input
                                     id="wa-waba"
                                     v-model="form.whatsapp_business_account_id"
                                     type="text"
                                     required
                                     maxlength="255"
-                                    class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                    class="app-field"
                                 />
                             </div>
                             <div>
-                                <label for="wa-phone-id" class="mb-1 block text-sm font-medium text-zinc-700">Phone Number ID</label>
+                                <label for="wa-phone-id" class="mb-2 block text-sm font-medium text-[#33483e]">Phone Number ID</label>
                                 <input
                                     id="wa-phone-id"
                                     v-model="form.phone_number_id"
                                     type="text"
                                     required
                                     maxlength="255"
-                                    class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                    class="app-field"
                                 />
                             </div>
                             <div>
-                                <label for="wa-phone" class="mb-1 block text-sm font-medium text-zinc-700">Número (formato E.164)</label>
+                                <label for="wa-phone" class="mb-2 block text-sm font-medium text-[#33483e]">Número (formato E.164)</label>
                                 <input
                                     id="wa-phone"
                                     v-model="form.phone_number"
                                     type="text"
                                     placeholder="+15550783881"
                                     maxlength="40"
-                                    class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                    class="app-field"
                                 />
                             </div>
                             <div>
-                                <label for="wa-name" class="mb-1 block text-sm font-medium text-zinc-700">Nombre (opcional)</label>
+                                <label for="wa-name" class="mb-2 block text-sm font-medium text-[#33483e]">Nombre (opcional)</label>
                                 <input
                                     id="wa-name"
                                     v-model="form.display_name"
                                     type="text"
                                     maxlength="255"
-                                    class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                    class="app-field"
                                 />
                             </div>
                             <div class="sm:col-span-2">
-                                <label for="wa-token" class="mb-1 block text-sm font-medium text-zinc-700">
+                                <label for="wa-token" class="mb-2 block text-sm font-medium text-[#33483e]">
                                     Access token (se guarda cifrado, nunca se muestra)
                                 </label>
                                 <input
@@ -294,7 +295,7 @@ onMounted(load);
                                     type="password"
                                     required
                                     autocomplete="off"
-                                    class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                    class="app-field"
                                 />
                             </div>
                         </div>
@@ -303,7 +304,7 @@ onMounted(load);
                             <button
                                 type="submit"
                                 :disabled="connecting"
-                                class="rounded-md bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                                class="app-button app-button--primary"
                             >
                                 {{ connecting ? 'Conectando...' : 'Conectar' }}
                             </button>

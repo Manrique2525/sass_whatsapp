@@ -13,25 +13,25 @@ const resend = (): void => {
 
 <template>
     <AuthLayout title="Verifica tu email">
-        <div v-if="status" class="mb-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <div v-if="status" class="app-alert app-alert--success mb-4">
             {{ status }}
         </div>
 
         <div class="space-y-4">
-            <p class="text-sm text-zinc-600">
+            <p class="text-sm leading-6 text-[#60766a]">
                 Te hemos enviado un enlace de verificación. Revisa tu bandeja de entrada.
             </p>
 
             <button
                 type="button"
-                class="w-full rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                class="app-button app-button--primary w-full"
                 @click="resend"
             >
                 Reenviar enlace de verificación
             </button>
 
             <form method="post" action="/logout" class="text-center">
-                <button type="submit" class="text-sm text-zinc-500 hover:underline">Cerrar sesión</button>
+                <button type="submit" class="text-sm font-medium text-[#71877b] hover:text-[#0b8f5a] hover:underline">Cerrar sesión</button>
             </form>
         </div>
     </AuthLayout>

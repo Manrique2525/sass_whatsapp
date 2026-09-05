@@ -167,7 +167,7 @@ watch(tenantId, () => {
     <div class="relative">
         <button
             type="button"
-            class="relative rounded-md p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            class="app-button app-button--secondary relative p-2 text-[#71877b] hover:text-[#10261f]"
             aria-label="Notificaciones"
             @click="openCenter"
         >
@@ -176,7 +176,7 @@ watch(tenantId, () => {
             </svg>
             <span
                 v-if="showBadge"
-                class="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white"
+                class="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#b42318] px-1 text-[10px] font-bold text-white"
             >
                 {{ badgeText }}
             </span>

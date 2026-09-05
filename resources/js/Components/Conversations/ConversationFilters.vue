@@ -4,6 +4,7 @@ import type {
     ConversationStatus,
     TenantMember,
 } from '@/features/conversations/conversationUtils';
+import AppSelect from '@/Components/AppSelect.vue';
 
 const filters = defineModel<ConversationFilters>({ default: () => ({ search: '', status: '', agent_id: '' }) });
 
@@ -36,7 +37,7 @@ function clear(): void {
 
 <template>
     <form
-        class="flex flex-col gap-2 border-b border-zinc-200 bg-white p-3"
+        class="flex flex-col gap-2 border-b border-[#edf2ec] bg-white p-3"
         @submit.prevent="submit"
     >
         <div class="flex gap-2">
@@ -44,11 +45,11 @@ function clear(): void {
                 v-model="filters.search"
                 type="search"
                 placeholder="Buscar por nombre o telefono"
-                class="w-full rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-800"
+                class="app-field px-3 py-1.5"
             />
             <button
                 type="button"
-                class="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
+                class="app-button app-button--secondary px-3 py-1.5"
                 @click="clear"
             >
                 Limpiar
@@ -56,24 +57,21 @@ function clear(): void {
         </div>
 
         <div class="flex gap-2">
-            <select
+            <AppSelect
                 v-model="filters.status"
-                class="flex-1 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700"
-            >
-                <option v-for="option in statusOptions" :key="option.value" :value="option.value">
-                    {{ option.label }}
-                </option>
-            </select>
+                class="flex-1"
+                :options="statusOptions"
+            />
 
-            <select
+            <AppSelect
                 v-model="filters.agent_id"
-                class="flex-1 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700"
-            >
-                <option value="">Todos los agentes</option>
-                <option v-for="member in props.members" :key="member.id" :value="member.user.id">
-                    {{ member.user.name }}
-                </option>
-            </select>
+                class="flex-1"
+                :options="[
+                    { value: '', label: 'Todos los agentes' },
+                    ...props.members.map((member) => ({ value: member.user.id, label: member.user.name })),
+                ]"
+                searchable
+            />
         </div>
     </form>
 </template>

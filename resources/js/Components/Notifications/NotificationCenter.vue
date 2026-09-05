@@ -48,25 +48,25 @@ function handleClick(notification: Notification): void {
 
 <template>
     <div
-        class="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-lg sm:w-96"
+        class="app-card absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden sm:w-96"
         role="dialog"
         aria-label="Centro de notificaciones"
     >
-        <div class="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
-            <h3 class="text-sm font-semibold text-zinc-900">Notificaciones</h3>
+        <div class="flex items-center justify-between border-b border-[#dce8df] px-4 py-3">
+            <h3 class="text-sm font-semibold text-[#10261f]">Notificaciones</h3>
             <div class="flex items-center gap-2">
                 <button
                     v-if="hasUnread"
                     type="button"
                     :disabled="isMarkingAll"
-                    class="text-xs text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+                    class="app-button app-button--secondary px-2 py-1 text-xs text-[#0b8f5a]"
                     @click="emit('markAllRead')"
                 >
                     {{ isMarkingAll ? 'Marcando...' : 'Marcar todas como leídas' }}
                 </button>
                 <button
                     type="button"
-                    class="text-zinc-400 hover:text-zinc-600"
+                    class="app-button app-button--secondary p-1 text-[#71877b]"
                     aria-label="Cerrar"
                     @click="emit('close')"
                 >
@@ -80,14 +80,14 @@ function handleClick(notification: Notification): void {
         <div class="max-h-80 overflow-y-auto">
             <div v-if="isLoading && notifications.length === 0" class="px-4 py-6 text-center">
                 <div class="mx-auto h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-indigo-600" />
-                <p class="mt-2 text-xs text-zinc-500">Cargando notificaciones...</p>
+                <p class="mt-2 text-xs text-[#71877b]">Cargando notificaciones...</p>
             </div>
 
             <div v-else-if="error" class="px-4 py-6 text-center">
-                <p class="text-sm text-red-600">{{ error }}</p>
+                <p class="app-alert app-alert--error text-left">{{ error }}</p>
                 <button
                     type="button"
-                    class="mt-2 text-xs text-indigo-600 hover:text-indigo-800"
+                    class="app-button app-button--secondary mt-2 px-2 py-1 text-xs text-[#0b8f5a]"
                     @click="emit('loadMore')"
                 >
                     Reintentar
@@ -95,15 +95,15 @@ function handleClick(notification: Notification): void {
             </div>
 
             <div v-else-if="isEmpty" class="px-4 py-8 text-center">
-                <p class="text-sm text-zinc-500">No tienes notificaciones.</p>
+                <p class="text-sm text-[#71877b]">No tienes notificaciones.</p>
             </div>
 
             <template v-else>
                 <div
                     v-for="notification in notifications"
                     :key="notification.id"
-                    class="flex cursor-pointer gap-3 border-b border-zinc-100 px-4 py-3 transition-colors hover:bg-zinc-50"
-                    :class="{ 'bg-indigo-50': isUnread(notification) }"
+                    class="flex cursor-pointer gap-3 border-b border-[#edf2ec] px-4 py-3 transition-colors hover:bg-[#f7faf5]"
+                    :class="{ 'bg-[#eef8ed]': isUnread(notification) }"
                     role="button"
                     :tabindex="0"
                     @click="handleClick(notification)"
@@ -113,31 +113,31 @@ function handleClick(notification: Notification): void {
                         <div class="flex items-center gap-2">
                             <span
                                 v-if="isUnread(notification)"
-                                class="inline-block h-2 w-2 flex-shrink-0 rounded-full bg-indigo-600"
+                                class="inline-block h-2 w-2 flex-shrink-0 rounded-full bg-[#0b8f5a]"
                             />
-                            <p class="text-xs font-medium text-zinc-500">
+                            <p class="text-xs font-medium text-[#71877b]">
                                 {{ notificationTypeLabel(notification.type) }}
                             </p>
-                            <span class="text-xs text-zinc-400">{{ formatRelativeTime(notification.created_at) }}</span>
+                            <span class="text-xs text-[#9aaba1]">{{ formatRelativeTime(notification.created_at) }}</span>
                         </div>
-                        <p class="mt-0.5 text-sm font-medium text-zinc-900">{{ notification.title }}</p>
-                        <p class="mt-0.5 text-xs text-zinc-600 line-clamp-2">{{ notification.body }}</p>
+                        <p class="mt-0.5 text-sm font-medium text-[#10261f]">{{ notification.title }}</p>
+                        <p class="mt-0.5 text-xs text-[#64756d] line-clamp-2">{{ notification.body }}</p>
                     </div>
                 </div>
             </template>
         </div>
 
-        <div v-if="hasMore && !isLoading" class="border-t border-zinc-200 px-4 py-2 text-center">
+        <div v-if="hasMore && !isLoading" class="border-t border-[#dce8df] px-4 py-2 text-center">
             <button
                 type="button"
-                class="text-xs text-indigo-600 hover:text-indigo-800"
+                class="app-button app-button--secondary px-2 py-1 text-xs text-[#0b8f5a]"
                 @click="emit('loadMore')"
             >
                 Cargar más
             </button>
         </div>
 
-        <div v-if="isLoading && notifications.length > 0" class="border-t border-zinc-200 px-4 py-2 text-center">
+        <div v-if="isLoading && notifications.length > 0" class="border-t border-[#dce8df] px-4 py-2 text-center">
             <div class="mx-auto h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-indigo-600" />
         </div>
     </div>
