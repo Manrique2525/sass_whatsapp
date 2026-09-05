@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global) · FASE 32 COMPLETADA/PUBLICADA (U1: deterministic message ordering) · FASE 33 COMPLETE + VALIDATED + PUBLISHED (U1-U6) · FASE 34 EN PROGRESO (U1 COMPLETE + VALIDATED LOCAL; U2 COMPLETE + VALIDATED LOCAL; U3 COMPLETE + VALIDATED LOCAL; U4 COMPLETE + VALIDATED LOCAL; U5 COMPLETE + VALIDATED LOCAL; U6 NOT STARTED)**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global) · FASE 32 COMPLETADA/PUBLICADA (U1: deterministic message ordering) · FASE 33 COMPLETE + VALIDATED + PUBLISHED (U1-U6) · FASE 34 COMPLETE + VALIDATED + PUBLISHED (U1-U6)**.
 
 ## Fases
 
@@ -40,8 +40,8 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA
 | 31 | Meta / WhatsApp Cloud API (U1: Provider + config hardening · U2: Webhook authenticity + durable ingestion · U3: Inbound normalization + monotonic status · U4: Outbound delivery ambiguity + care window · U5: Secure media + approved templates · U6: Operations, Observability & Production Readiness) | COMPLETA LOCALMENTE (pendiente revisión) |
 | 32 | Deterministic message ordering (U1: `ORDER BY created_at, id` en inbox + conversación activa + frontend realtime==reload · contract + tests) | COMPLETADA/PUBLICADA |
 | 33 | Self-service provisioning (U1: registro atómico User + workspace + owner + plan free + onboarding post-verificación) | COMPLETE + VALIDATED + PUBLISHED |
-| 34 | Performance | EN PROGRESO (U1 COMPLETE + VALIDATED LOCAL; U2 COMPLETE + VALIDATED LOCAL; U3 COMPLETE + VALIDATED LOCAL; U4 COMPLETE + VALIDATED LOCAL; U5 COMPLETE + VALIDATED LOCAL; U6 NOT STARTED) |
-| 35 | DevOps (Docker, CI/CD) | PENDIENTE |
+| 34 | Performance | COMPLETE + VALIDATED + PUBLISHED (U1-U6) |
+| 35 | DevOps (Docker, CI/CD) | NOT STARTED |
 | 36 | Documentación API (OpenAPI) | PENDIENTE |
 | 37 | Seeders demo | PENDIENTE |
 | 38 | Demo completa | PENDIENTE |
@@ -3477,8 +3477,8 @@ a clientes: el push es publicación de fuente únicamente.
 
 ### U6 — Controlled beta readiness and final go/no-go · COMPLETE + VALIDATED LOCAL
 
-- **Release candidate**: `0e089b720683b65ae300ef6b03720cff4852c8f7`, five local FASE34 commits ahead of
-  `origin/master=1aa1bf03314e116d340f05104f4247297d17e587`; tracked worktree clean. The known malformed
+- **Release candidate**: `ee0781c23acf1e3050a47c22cfb20ba2abedf270`, six FASE34 commits published to
+  `origin/master`; tracked worktree clean. The known malformed
   `storage/logs` artifact remains untracked, untouched and unstaged.
 - **Audit U1-U5**: the five commits after `origin/master` are all FASE34 scope: runtime contract, migration
   and recovery readiness, worker/runtime reliability, external-provider readiness, and observability/security
@@ -3486,8 +3486,9 @@ a clientes: el push es publicación de fuente únicamente.
 - **Final local gates**: backend `2606 passed / 15 skipped`; PostgreSQL `185 passed / 0 failed / 494 assertions`;
   Vitest `592 passed`; fresh E2E `39 passed` with workers=1 and retries=0; typecheck, build, PHPStan, Pint,
   audits, provider boundaries, health/readiness, Compose, Nginx and queue cleanup PASS.
-- **Release artifact**: runtime and web images were built locally from this SHA, labelled with the full
-  Git revision, and checked for runtime logs, test material, `.env` files and repository metadata. No push.
+- **Release artifact**: runtime and web images were built locally from the release candidate, labelled with
+  the full Git revision, and checked for runtime logs, test material, `.env` files and repository metadata.
+  Source publication to `origin/master` passed; no deploy.
 - **Controlled smoke**: landing, registration, verification, login, onboarding, dashboard, inbox, reply,
   flow builder, Knowledge processing/search/isolation/cleanup, analytics, realtime and logout passed. Lead
   behavior is covered by the backend and security suites; no real provider was called.
@@ -3503,4 +3504,4 @@ a clientes: el push es publicación de fuente únicamente.
   monitoring window, roles and rollback/forward-fix triggers. No ADR added; this is an operational policy.
 - **Estado**: U1 **COMPLETE + VALIDATED**. U2 **COMPLETE + VALIDATED**. U3 **COMPLETE + VALIDATED**.
   U4 **COMPLETE + VALIDATED**. U5 **COMPLETE + VALIDATED**. U6 **COMPLETE + VALIDATED**.
-  FASE34 **COMPLETE + VALIDATED LOCAL**. No publicado.
+  FASE34 **COMPLETE + VALIDATED + PUBLISHED**. Source published; no deploy.
