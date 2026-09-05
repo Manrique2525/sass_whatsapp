@@ -3473,4 +3473,34 @@ a clientes: el push es publicación de fuente únicamente.
 - **Documentación**: `docs/runbooks/release-gates.md`, `release-checklist.md`, `rollback.md` y
   `alert-matrix.md`, además de deployment/testing actualizados.
 - **Límites**: no se ejecutó deploy, migración productiva, backup productivo, TLS real ni proveedor
-  externo. U6 permanece **NOT STARTED**.
+  externo. U6 queda evaluada en la siguiente sección.
+
+### U6 — Controlled beta readiness and final go/no-go · COMPLETE + VALIDATED LOCAL
+
+- **Release candidate**: `0e089b720683b65ae300ef6b03720cff4852c8f7`, five local FASE34 commits ahead of
+  `origin/master=1aa1bf03314e116d340f05104f4247297d17e587`; tracked worktree clean. The known malformed
+  `storage/logs` artifact remains untracked, untouched and unstaged.
+- **Audit U1-U5**: the five commits after `origin/master` are all FASE34 scope: runtime contract, migration
+  and recovery readiness, worker/runtime reliability, external-provider readiness, and observability/security
+  release gates. No unrelated commit is in the chain. Code/readiness P0=0 and P1=0.
+- **Final local gates**: backend `2606 passed / 15 skipped`; PostgreSQL `185 passed / 0 failed / 494 assertions`;
+  Vitest `592 passed`; fresh E2E `39 passed` with workers=1 and retries=0; typecheck, build, PHPStan, Pint,
+  audits, provider boundaries, health/readiness, Compose, Nginx and queue cleanup PASS.
+- **Release artifact**: runtime and web images were built locally from this SHA, labelled with the full
+  Git revision, and checked for runtime logs, test material, `.env` files and repository metadata. No push.
+- **Controlled smoke**: landing, registration, verification, login, onboarding, dashboard, inbox, reply,
+  flow builder, Knowledge processing/search/isolation/cleanup, analytics, realtime and logout passed. Lead
+  behavior is covered by the backend and security suites; no real provider was called.
+- **Migration and backup**: U2 rehearsal and disposable restore evidence remain PASS. Production
+  `migrate:status`, production backup freshness and production restore evidence remain `OPS-PENDING`.
+- **Decision**: Free Private Beta **CONDITIONAL GO** only after the controlled-beta prerequisites are
+  evidenced. Paid Beta **NO-GO** because paid business and Stripe operations are not ready. This phase result
+  must not be confused with production launch approval.
+- **Remaining P2**: real brand/favicon, large dashboard Analytics/ApexCharts bundle, optional external Sentry
+  activation, social proof and future paid catalog. These are non-blocking for a small private Free beta only
+  when the release owner explicitly accepts them; production operational gates remain mandatory.
+- **Documentation**: `docs/runbooks/controlled-beta.md` records the final matrices, go-live checklist,
+  monitoring window, roles and rollback/forward-fix triggers. No ADR added; this is an operational policy.
+- **Estado**: U1 **COMPLETE + VALIDATED**. U2 **COMPLETE + VALIDATED**. U3 **COMPLETE + VALIDATED**.
+  U4 **COMPLETE + VALIDATED**. U5 **COMPLETE + VALIDATED**. U6 **COMPLETE + VALIDATED**.
+  FASE34 **COMPLETE + VALIDATED LOCAL**. No publicado.

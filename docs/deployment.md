@@ -317,3 +317,23 @@ backend is configured. `docs/runbooks/rollback.md` separates code/config/provide
 migration rollback and forward-fix. U2's four pending migrations remain documented and must be
 verified with the real target's `php artisan migrate:status` before any future production migration.
 U5 does not deploy, migrate, provision TLS, create backups or activate providers.
+
+## 11. FASE 34 U6: controlled beta decision
+
+The final local release candidate is `0e089b720683b65ae300ef6b03720cff4852c8f7`. The application
+contract, security gates, PostgreSQL suite, frontend, fresh E2E, health/readiness, queue cleanup,
+runtime/web images, Compose syntax and Nginx syntax are locally validated. No production dependency
+is inferred from that result.
+
+Free Private Beta is **CONDITIONAL GO** pending the exact prerequisites in
+`docs/runbooks/controlled-beta.md`: approved domain and TLS, production PostgreSQL/Redis and migration
+status evidence, real mail with sender DNS controls, encrypted database and object-storage backup with
+restore evidence, workers/scheduler/Reverb monitoring, support ownership and approved RPO/RTO. Meta is
+required only when real WhatsApp connectivity is in scope; Stripe is not required and OpenAI may remain
+disabled.
+
+Paid Beta is **NO-GO** until the business approves pricing/currency, paid plans, Stripe ownership and
+catalog, signed webhook/portal operations, refunds, tax, reconciliation, payment-failure handling and
+support ownership. U6 does not activate or call Stripe.
+
+See `docs/runbooks/controlled-beta.md` for the non-deploying go-live, monitoring and rollback checklist.

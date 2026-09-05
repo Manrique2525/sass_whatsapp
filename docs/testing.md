@@ -1,5 +1,21 @@
 # Testing
 
+## FASE 34 U6 - Controlled beta readiness and final go/no-go
+
+The U6 assessment is complete locally for candidate `0e089b720683b65ae300ef6b03720cff4852c8f7`.
+The Free private beta decision is **CONDITIONAL GO**, not a production approval: domain, TLS, real
+mail, production backup/restore, support ownership and business-approved RPO/RTO remain `OPS-PENDING`
+or `BUSINESS-PENDING`. Paid beta is **NO-GO** because paid catalog, pricing, currency, Stripe
+ownership/configuration, reconciliation and payment policies are not approved.
+
+Final evidence: backend `2606 passed / 15 skipped`, PostgreSQL `185 passed / 0 failed / 494 assertions`,
+Vitest `592 passed`, fresh E2E `39 passed` with one worker and zero retries, typecheck/build/PHPStan/Pint
+PASS, Composer audit with no security advisories, npm audit with 0 vulnerabilities, health/readiness
+HTTP 200 and final queue counts all zero. See `docs/runbooks/controlled-beta.md`.
+
+U6 does not deploy, connect to production, run production migrations, inject secrets, change DNS/TLS,
+activate providers or push images.
+
 ## FASE 34 U5 - Observability, security and release gates
 
 The canonical release policy is `docs/runbooks/release-gates.md` and the operator checklist is
