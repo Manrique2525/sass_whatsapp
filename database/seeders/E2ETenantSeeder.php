@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Application\Users\Services\TenantRoleManager;
 use App\Domain\Billing\Enums\SubscriptionStatus;
 use App\Domain\Billing\Models\BillingCustomer;
 use App\Domain\Billing\Models\Plan;
@@ -97,6 +98,23 @@ final class E2ETenantSeeder extends Seeder
             $this->createTenantB($freePlan);
             $this->createOnboardingTenant($freePlan);
         });
+
+        $this->createPlatformAdmin();
+    }
+
+    private function createPlatformAdmin(): void
+    {
+        $user = User::query()->updateOrCreate(
+            ['email' => 'platform-admin@e2e.local'],
+            [
+                'name' => 'E2E Platform Admin',
+                'password' => env('E2E_TEST_PASSWORD', 'e2e-password'),
+                'email_verified_at' => now(),
+                'current_tenant_id' => null,
+            ],
+        );
+
+        app(TenantRoleManager::class)->assignGlobalRole($user, UserRole::SuperAdmin);
     }
 
     private function createE2EPaidPlan(): Plan

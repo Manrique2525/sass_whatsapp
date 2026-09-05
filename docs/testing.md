@@ -20,6 +20,27 @@ must use explicit platform application services, stricter rate limits where appr
 and audit actor, action, subject, target tenant when applicable, request ID, IP, user
 agent, and reason.
 
+### FASE 36 U3 - Read-only Customers/Tenants management
+
+`PlatformCustomerQueryService` is the explicit cross-tenant read boundary. Customer
+index and detail pages use bounded, server-side queries with pagination, parameterized
+search, supported filters, deterministic owner selection, aggregate counts, and no
+tenant context. The list avoids per-row usage resolution; full usage is loaded only on
+detail using the existing `UsageTrackingService` semantics.
+
+Platform responses exclude passwords, tokens, provider credentials, message bodies,
+knowledge contents, and audit payloads. Phone numbers and Stripe subscription IDs are
+masked. U3 contains no POST, PUT, PATCH, DELETE, subscription mutation, plan mutation,
+usage reservation, or usage reset path.
+
+U4 of FASE 36 remains **NOT STARTED**.
+
+Focused tests:
+
+```bash
+php -d memory_limit=512M vendor/bin/pest tests/Feature/Platform
+```
+
 ## FASE 34 U6 - Controlled beta readiness and final go/no-go
 
 The U6 assessment is complete locally for candidate `0e089b720683b65ae300ef6b03720cff4852c8f7`.

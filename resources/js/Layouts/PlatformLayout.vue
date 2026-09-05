@@ -12,6 +12,7 @@ const mobileNavOpen = ref(false);
 
 const navigation = [
     { label: 'Overview', href: '/platform' },
+    { label: 'Customers', href: '/platform/customers' },
 ];
 
 const isActive = (href: string): boolean => page.url === href || page.url.startsWith(`${href}/`);

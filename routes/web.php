@@ -15,6 +15,7 @@ use App\Http\Controllers\Invitations\InvitationWebController;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\LegalController;
 use App\Http\Controllers\OnboardingController;
+use App\Http\Controllers\Platform\PlatformCustomerController;
 use App\Http\Controllers\Platform\PlatformDashboardController;
 use App\Http\Controllers\PublicSeoController;
 use App\Http\Controllers\Settings\AnalyticsSettingsController;
@@ -100,6 +101,8 @@ Route::middleware('auth')->group(function (): void {
     Route::prefix('platform')->middleware(['verified', 'platform.admin'])->group(function (): void {
         Route::get('/', PlatformDashboardController::class)->name('platform.index');
         Route::get('/dashboard', PlatformDashboardController::class)->name('platform.dashboard');
+        Route::get('/customers', [PlatformCustomerController::class, 'index'])->name('platform.customers.index');
+        Route::get('/customers/{tenant}', [PlatformCustomerController::class, 'show'])->name('platform.customers.show');
     });
 
     Route::get('dashboard', DashboardController::class)

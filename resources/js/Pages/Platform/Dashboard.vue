@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { usePage } from '@inertiajs/vue3';
+import { Link } from '@inertiajs/vue3';
 import PlatformLayout from '@/Layouts/PlatformLayout.vue';
 
 const user = usePage().props.auth.user;
@@ -28,6 +29,15 @@ const user = usePage().props.auth.user;
                 <h2 class="mt-2 text-lg font-semibold">Foundation active</h2>
                 <p class="mt-2 text-sm leading-6 text-[#60766a]">Administrative capabilities are being introduced incrementally.</p>
             </div>
+        </section>
+
+        <section class="app-card mt-6 flex flex-wrap items-center justify-between gap-4 p-6">
+            <div>
+                <p class="app-eyebrow">Administration</p>
+                <h2 class="mt-2 text-lg font-semibold">Manage customers</h2>
+                <p class="mt-2 text-sm text-[#60766a]">Review tenant health and account context without entering a tenant.</p>
+            </div>
+            <Link href="/platform/customers" class="app-button app-button--primary">Open Customers</Link>
         </section>
     </PlatformLayout>
 </template>

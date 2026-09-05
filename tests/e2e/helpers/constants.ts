@@ -28,7 +28,7 @@ export const CONVERSATION_REALTIME_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeed4';
 export interface E2EUser {
     email: string;
     name: string;
-    role: 'owner' | 'admin' | 'agent';
+    role: 'owner' | 'admin' | 'agent' | 'super_admin';
     tenantId: string;
     tenantName: string;
     /** Clave del archivo de storageState en tests/e2e/.auth/. */
@@ -36,6 +36,14 @@ export interface E2EUser {
 }
 
 export const USERS: Record<string, E2EUser> = {
+    platformAdmin: {
+        email: 'platform-admin@e2e.local',
+        name: 'E2E Platform Admin',
+        role: 'super_admin',
+        tenantId: '',
+        tenantName: '',
+        storageKey: 'platform-admin',
+    },
     ownerA: {
         email: 'owner@e2e.local',
         name: 'E2E Owner A',
