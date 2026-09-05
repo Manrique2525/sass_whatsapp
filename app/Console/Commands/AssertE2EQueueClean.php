@@ -15,7 +15,7 @@ final class AssertE2EQueueClean extends Command
 {
     protected $signature = 'e2e:assert-queue-clean {--report-only : Reporta el estado sin cambiar el resultado del proceso}';
 
-    protected $description = 'Verifica que las colas E2E default y knowledge están limpias';
+    protected $description = 'Verifica que las colas E2E default, knowledge y analytics están limpias';
 
     public function handle(): int
     {
@@ -26,7 +26,7 @@ final class AssertE2EQueueClean extends Command
         $reserved = 0;
         $delayed = 0;
 
-        foreach (['default', 'knowledge'] as $queue) {
+        foreach (['default', 'knowledge', 'analytics'] as $queue) {
             $pending += (int) Redis::connection()->llen('queues:'.$queue);
             $reserved += (int) Redis::connection()->zcard('queues:'.$queue.':reserved');
             $delayed += (int) Redis::connection()->zcard('queues:'.$queue.':delayed');

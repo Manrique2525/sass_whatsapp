@@ -35,8 +35,9 @@ After a restart, inspect pending, reserved and delayed counts and then inspect
 
 ## Failed Jobs
 
-`queue:failed-summary` reports aggregate queue, count and timestamp only. It never
-reads or prints job payloads. Use `queue:retry <uuid>` only after classifying the
+`queue:failed-summary` reports aggregate queue, allowlisted job class, count and timestamp only.
+It reads no payload fields other than Laravel's validated `displayName` and never prints the
+remaining job payload. Use `queue:retry <uuid>` only after classifying the
 failure and confirming the job is safe to replay; use `queue:forget <uuid>` only with
 an incident record. `queue:flush` is disposable/rehearsal-only unless an incident
 owner explicitly authorizes it.

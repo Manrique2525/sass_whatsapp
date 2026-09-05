@@ -1,5 +1,43 @@
 # Testing
 
+## FASE 34 U5 - Observability, security and release gates
+
+The canonical release policy is `docs/runbooks/release-gates.md` and the operator checklist is
+`docs/runbooks/release-checklist.md`. A release is **NO-GO** with any open P0 or P1. P2 is allowed
+only with documented mitigation and release-owner sign-off. Local validation is never presented as
+production evidence: TLS, actual backup freshness, provider activation, staging E2E, image inspection
+and production `migrate:status` remain `OPS-PENDING` until verified in the target environment.
+
+The tenant-isolation fast gate reuses existing suites rather than duplicating tests:
+
+```bash
+php -d memory_limit=512M vendor/bin/pest tests/Feature/Tenancy tests/Feature/Security
+```
+
+The full backend gate is:
+
+```bash
+php -d memory_limit=512M vendor/bin/pest
+```
+
+PostgreSQL is a release-candidate gate, not a local default gate. Run the canonical `tests/Postgres`
+suite serially with `phpunit.pgsql.xml` against disposable PostgreSQL/Redis, using the current
+commands in this document. The current approved rehearsal evidence is `184 passed / 0 failed`.
+
+Fresh E2E requires `docker compose -f docker-compose.e2e.yml down --volumes --remove-orphans`, a fresh
+stack, `e2e:setup`, `workers=1`, `retries=0`, and a final queue assertion of pending/reserved/delayed/
+failed jobs all zero. The last approved evidence is `39 passed / 0 failed`; it is not reused as a
+production claim.
+
+Release artifacts must use the same full Git SHA for backend image, web image and optional Sentry
+release. Build `runtime` and `web` locally without registry push, inspect that `.env`, credentials,
+backups and runtime logs are absent, and verify the runtime user is `www-data`. Compose configuration
+uses synthetic values only and is deleted after validation.
+
+No external alert backend is claimed as configured. The application contract is structured logs,
+correlation IDs, fail-safe metrics, health/readiness, scheduler heartbeat and queue summaries; see
+`docs/runbooks/alert-matrix.md` for conditions, severities, owners and response runbooks.
+
 ## FASE 34 U4 - Provider readiness boundary
 
 Provider adapters are instantiated without external requests. Tests use Laravel HTTP fakes or

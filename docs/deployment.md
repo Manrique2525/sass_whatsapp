@@ -303,3 +303,17 @@ auto-run migrations from the container entrypoint. The template uses `on-failure
 bad configuration cannot restart forever without alerting. U3 was validated only with
 disposable infrastructure: no production deployment, provider call, capacity claim or
 load test is implied.
+
+## 10. FASE 34 U5: release readiness gate
+
+Before a release candidate is approved, use `docs/runbooks/release-gates.md` and complete
+`docs/runbooks/release-checklist.md`. The release owner must record the full Git SHA, use it for
+both immutable runtime/web image identities and the optional Sentry release, and attach evidence
+for tests, audits, tenant isolation, queues, scheduler, health/readiness, Reverb/TLS, storage,
+backup/restore and rollback. Any P0/P1 is a no-go; P2 requires documented mitigation and sign-off.
+
+`docs/runbooks/alert-matrix.md` defines the alert contract without claiming an external monitoring
+backend is configured. `docs/runbooks/rollback.md` separates code/config/provider rollback from
+migration rollback and forward-fix. U2's four pending migrations remain documented and must be
+verified with the real target's `php artisan migrate:status` before any future production migration.
+U5 does not deploy, migrate, provision TLS, create backups or activate providers.

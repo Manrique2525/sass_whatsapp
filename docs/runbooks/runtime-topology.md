@@ -87,6 +87,7 @@ queue isolation by stopping knowledge/analytics workers: default work continued,
 specialized jobs remained in their Redis queue, and the backlog drained after restart.
 The canonical E2E stack mirrors the queue contract with one worker consuming
 `default,knowledge,analytics`; its final clean run completed 39/39 browser tests.
+The `e2e:assert-queue-clean` guard checks all three queues plus `failed_jobs`.
 
 ## Reverb
 

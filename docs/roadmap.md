@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global) · FASE 32 COMPLETADA/PUBLICADA (U1: deterministic message ordering) · FASE 33 COMPLETE + VALIDATED + PUBLISHED (U1-U6) · FASE 34 EN PROGRESO (U1 COMPLETE + VALIDATED LOCAL; U2 COMPLETE + VALIDATED LOCAL; U3 COMPLETE + VALIDATED LOCAL; U4 COMPLETE + VALIDATED LOCAL; U5 NOT STARTED)**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global) · FASE 32 COMPLETADA/PUBLICADA (U1: deterministic message ordering) · FASE 33 COMPLETE + VALIDATED + PUBLISHED (U1-U6) · FASE 34 EN PROGRESO (U1 COMPLETE + VALIDATED LOCAL; U2 COMPLETE + VALIDATED LOCAL; U3 COMPLETE + VALIDATED LOCAL; U4 COMPLETE + VALIDATED LOCAL; U5 COMPLETE + VALIDATED LOCAL; U6 NOT STARTED)**.
 
 ## Fases
 
@@ -40,7 +40,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA
 | 31 | Meta / WhatsApp Cloud API (U1: Provider + config hardening · U2: Webhook authenticity + durable ingestion · U3: Inbound normalization + monotonic status · U4: Outbound delivery ambiguity + care window · U5: Secure media + approved templates · U6: Operations, Observability & Production Readiness) | COMPLETA LOCALMENTE (pendiente revisión) |
 | 32 | Deterministic message ordering (U1: `ORDER BY created_at, id` en inbox + conversación activa + frontend realtime==reload · contract + tests) | COMPLETADA/PUBLICADA |
 | 33 | Self-service provisioning (U1: registro atómico User + workspace + owner + plan free + onboarding post-verificación) | COMPLETE + VALIDATED + PUBLISHED |
-| 34 | Performance | EN PROGRESO (U1 COMPLETE + VALIDATED LOCAL; U2 COMPLETE + VALIDATED LOCAL; U3 COMPLETE + VALIDATED LOCAL; U4 COMPLETE + VALIDATED LOCAL; U5 NOT STARTED) |
+| 34 | Performance | EN PROGRESO (U1 COMPLETE + VALIDATED LOCAL; U2 COMPLETE + VALIDATED LOCAL; U3 COMPLETE + VALIDATED LOCAL; U4 COMPLETE + VALIDATED LOCAL; U5 COMPLETE + VALIDATED LOCAL; U6 NOT STARTED) |
 | 35 | DevOps (Docker, CI/CD) | PENDIENTE |
 | 36 | Documentación API (OpenAPI) | PENDIENTE |
 | 37 | Seeders demo | PENDIENTE |
@@ -3447,7 +3447,7 @@ a clientes: el push es publicación de fuente únicamente.
 - **Límites**: no se ejecutó producción, no se usaron proveedores reales, no se hizo load test ni se declara capacidad productiva.
 - **Estado**: U3 **COMPLETE + VALIDATED LOCAL**. U4 **COMPLETE + VALIDATED LOCAL**. U5 permanece **NOT STARTED**.
 
-### U4 — Provider readiness and activation contracts · IN PROGRESS
+### U4 — Provider readiness and activation contracts · COMPLETE + VALIDATED LOCAL
 
 - **Boundary**: los adaptadores de Meta, Stripe, OpenAI, Sentry y Mail permanecen inactivos por
   defecto; el arranque no hace llamadas externas y las operaciones sin credenciales fallan cerrado.
@@ -3459,4 +3459,18 @@ a clientes: el push es publicación de fuente únicamente.
 - **Runbooks**: `docs/runbooks/provider-{meta,stripe,openai,sentry,mail}.md` documentan requisitos,
   orden de activación, rotación, rollback y verificaciones contractuales sin usar secretos reales.
 - **Límites**: no se activaron proveedores reales, no se crearon productos/precios Stripe, no se
-  ejecutaron migraciones ni despliegues. U4 continúa hasta completar validación y commit local.
+  ejecutaron migraciones ni despliegues.
+
+### U5 — Observability, security and release gates · COMPLETE + VALIDATED LOCAL
+
+- **Release policy**: se formalizan gates P0/P1 no-go, P2 documentado, integridad Git/SHA, secret
+  scan, auditorías, tenant isolation, migraciones, backups, colas, scheduler, health/readiness,
+  logs, TLS/proxy, storage, proveedores y artefactos inmutables.
+- **Operations**: matrices canónicas para alertas, release, rollback y smoke tests; `default` se
+  trata como cola customer-facing, `knowledge` como aislada y `analytics` como degradación de reporting.
+- **Evidence**: U2 aporta rehearsal PostgreSQL/backup-restore y U3 aporta drills runtime/health/queues/
+  scheduler/Reverb/storage; los requisitos dependientes de staging/producción quedan `OPS-PENDING`.
+- **Documentación**: `docs/runbooks/release-gates.md`, `release-checklist.md`, `rollback.md` y
+  `alert-matrix.md`, además de deployment/testing actualizados.
+- **Límites**: no se ejecutó deploy, migración productiva, backup productivo, TLS real ni proveedor
+  externo. U6 permanece **NOT STARTED**.

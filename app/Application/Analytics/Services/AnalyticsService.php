@@ -290,6 +290,8 @@ final class AnalyticsService
 
     private function computeExactAvgResponseTime(string $tenantId, string $from, string $to): ?int
     {
+        $exclusiveTo = Carbon::parse($to)->addDay()->startOfDay()->toDateTimeString();
+
         $row = DB::selectOne(
             'SELECT AVG(response_time_seconds) as avg_rt
             FROM conversation_metrics
@@ -297,8 +299,8 @@ final class AnalyticsService
               AND response_time_seconds IS NOT NULL
               AND response_time_seconds >= 0
               AND first_response_at >= ?
-              AND first_response_at < DATE(?, "+1 day")',
-            [$tenantId, $from, $to],
+              AND first_response_at < ?',
+            [$tenantId, $from, $exclusiveTo],
         );
 
         if ($row === null || $row->avg_rt === null) {

@@ -8,12 +8,12 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Visibilidad operator de `failed_jobs` SIN tocar el payload (FASE 31 U6).
+ * Visibilidad operator de `failed_jobs` sin imprimir el payload (FASE 31 U6).
  *
- * PII-safe: el payload del job puede contener tenant, phone o contenido, así que
- * este comando jamás lo lee ni imprime. Agrega por queue y expone solo el
- * conteo por día, la última fila y el total. Para detalle de un job concreto el
- * operador usa el retry/forget del framework (queue:retry / queue:failed).
+ * PII-safe: el payload del job puede contener tenant, phone o contenido. Solo se
+ * extrae el `displayName` allowlisted de la envoltura de Laravel; el payload
+ * restante nunca se imprime. Para detalle de un job concreto el operador usa el
+ * retry/forget del framework (queue:retry / queue:failed).
  */
 final class FailedJobsSummaryCommand extends Command
 {
@@ -26,12 +26,29 @@ final class FailedJobsSummaryCommand extends Command
     {
         $total = (int) DB::table('failed_jobs')->count();
 
-        $byQueue = DB::table('failed_jobs')
-            ->select('queue', DB::raw('count(*) as total'), DB::raw('max(failed_at) as last_failed'))
-            ->groupBy('queue')
-            ->orderByDesc('last_failed')
+        $byQueueAndClass = [];
+
+        DB::table('failed_jobs')
+            ->select('queue', 'payload', 'failed_at')
+            ->orderByDesc('failed_at')
             ->get()
-            ->all();
+            ->each(function (object $row) use (&$byQueueAndClass): void {
+                $jobClass = $this->extractJobClass((string) $row->payload);
+                $key = ((string) $row->queue).'|'.$jobClass;
+
+                if (! isset($byQueueAndClass[$key])) {
+                    $byQueueAndClass[$key] = [
+                        'queue' => (string) $row->queue,
+                        'job_class' => $jobClass,
+                        'total' => 0,
+                        'last_failed' => (string) $row->failed_at,
+                    ];
+                }
+
+                $byQueueAndClass[$key]['total']++;
+            });
+
+        $byQueue = array_values($byQueueAndClass);
 
         $daysAgo = (int) config('observability.failed_jobs_retention_days', 30);
         $recent = (int) DB::table('failed_jobs')
@@ -52,16 +69,34 @@ final class FailedJobsSummaryCommand extends Command
 
         foreach ($byQueue as $row) {
             $rowsForTable[] = [
-                (string) $row->queue,
-                (string) $row->total,
-                (string) ($row->last_failed ?? ''),
+                (string) $row['queue'],
+                (string) $row['job_class'],
+                (string) $row['total'],
+                (string) $row['last_failed'],
             ];
         }
 
-        $this->table(['Queue', 'Total', 'Último fallo'], $rowsForTable);
+        $this->table(['Queue', 'Job class', 'Total', 'Último fallo'], $rowsForTable);
 
-        $this->info("Total failed_jobs={$total}; fallos recientes (${daysAgo}d)={$recent}.");
+        $this->info("Total failed_jobs={$total}; fallos recientes ({$daysAgo}d)={$recent}.");
 
         return self::SUCCESS;
+    }
+
+    private function extractJobClass(string $payload): string
+    {
+        try {
+            $decoded = json_decode($payload, true, 32, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return 'unknown';
+        }
+
+        $jobClass = is_array($decoded) ? ($decoded['displayName'] ?? null) : null;
+
+        if (! is_string($jobClass) || ! preg_match('/\A[A-Za-z_][A-Za-z0-9_\\\\]{0,254}\z/', $jobClass)) {
+            return 'unknown';
+        }
+
+        return $jobClass;
     }
 }
