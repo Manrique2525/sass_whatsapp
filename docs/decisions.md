@@ -2,6 +2,13 @@
 
 Formato: problema → decisión → consecuencia. Fechadas y en orden cronológico.
 
+## ADR-129 · Topología runtime y recuperación de workers (FASE 34 U3)
+
+- **Estado**: Aceptado · FASE 34 U3
+- **Contexto**: HTTP, WebSockets, trabajo customer-facing y trabajos largos deben aislarse para que un backlog especializado o una caída no bloquee el resto del producto.
+- **Decisión**: producción usa contenedores separados para Nginx, PHP-FPM, workers `default`/`knowledge`/`analytics`, scheduler y Reverb; PostgreSQL, Redis, S3, SMTP y TLS son externos. `/health` es liveness sin dependencias, `/ready` comprueba DB/Redis/queue, y Redis heartbeat informa la salud del scheduler. Los servicios usan `on-failure:5`; Nginx resuelve Reverb mediante Docker DNS. `ProcessKnowledgeDocument` y embeddings usan `knowledge` explícitamente.
+- **Consecuencias**: los backlogs se escalan y recuperan por dominio. El scheduler no debe escalarse horizontalmente sin lock compartido. La capacidad productiva queda pendiente de load testing; el rehearsal y los procedimientos están en `docs/runbooks/runtime-topology.md` y `docs/runbooks/worker-recovery.md`.
+
 ## ADR-034 · Contrato explícito para el runtime de producción
 
 - **Estado**: Aceptado · FASE 34 U1

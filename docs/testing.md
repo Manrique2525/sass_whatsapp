@@ -2270,3 +2270,16 @@ Esto NO es un wait-condition flaky ni carga de assets (assets ~0.1–0.5ms).
   about` y `migrate:status` verificaron el estado pre-U2 esperado. Restore medido: ~701 ms en dataset sintético.
 - No hubo cambios de esquema ni migraciones en producción, ni contacto con proveedores reales. RPO/RTO son objetivos pendientes
   de aprobación y drill.
+
+## FASE 34 U3 — Runtime, health y recuperación (VALIDADA LOCALMENTE)
+
+- Compose rehearsal: `docker compose -f docker-compose.runtime-rehearsal.yml config --quiet` PASS; stack aislado con PostgreSQL/pgvector, Redis autenticado, MinIO y Mailpit.
+- Health drill: `/health=200` durante caída de DB/Redis; `/ready=503`; recuperación posterior `/ready=200`.
+- Queue drill: `default`, `knowledge` y `analytics` procesaron jobs reales; backlogs especializados quedaron aislados durante la parada de su worker y drenaron después del reinicio.
+- Scheduler drill: heartbeat stale detectado con umbral sintético de 5s y recuperado después de reiniciar el scheduler.
+- Reverb/Nginx: handshake permitido alcanzó `101 Switching Protocols`; origin no autorizado fue rechazado; resolver Docker permite reemplazo del contenedor.
+- Storage/mail: MinIO privado upload/read PASS, acceso anónimo rechazado, fallo sin fallback y recuperación PASS; correo fake visible en Mailpit.
+- Seguridad: `queue:failed-summary` agrega únicamente queue/count/timestamp y no expone payloads; se corrigió el acceso de filas Query Builder (`stdClass`).
+- E2E final tras `docker compose -f docker-compose.e2e.yml down --volumes --remove-orphans`, rebuild y `e2e:setup`: **39 passed / 0 failed**, 1 worker, 0 retries, ~2.3 min. Flow Builder, Inbox, Reply, Knowledge y Handoff pasaron individualmente y en la suite completa.
+- El worker E2E consume `default,knowledge,analytics`; Knowledge procesó los tres ciclos con el worker real sin revertir el routing de producción.
+- Límites: rehearsal local únicamente; no producción, migraciones productivas, proveedores reales ni load test.

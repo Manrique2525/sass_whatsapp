@@ -79,6 +79,10 @@ COPY --from=vendor /app/vendor ./vendor
 COPY --from=frontend /app/public/build ./public/build
 COPY . .
 
+# Do not ship development-only package manifests from the source tree into the
+# production image; artisan workers must boot from the production vendor set.
+RUN rm -f bootstrap/cache/*.php
+
 RUN mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views \
     && chown -R www-data:www-data storage bootstrap/cache public \
     && chmod -R ug+rw storage bootstrap/cache

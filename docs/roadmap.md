@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global) · FASE 32 COMPLETADA/PUBLICADA (U1: deterministic message ordering) · FASE 33 COMPLETE + VALIDATED + PUBLISHED (U1-U6) · FASE 34 EN PROGRESO (U1 COMPLETE + VALIDATED LOCAL; U2 COMPLETE + VALIDATED LOCAL; U3 NOT STARTED)**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global) · FASE 32 COMPLETADA/PUBLICADA (U1: deterministic message ordering) · FASE 33 COMPLETE + VALIDATED + PUBLISHED (U1-U6) · FASE 34 EN PROGRESO (U1 COMPLETE + VALIDATED LOCAL; U2 COMPLETE + VALIDATED LOCAL; U3 COMPLETE + VALIDATED LOCAL; U4 NOT STARTED)**.
 
 ## Fases
 
@@ -40,7 +40,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA
 | 31 | Meta / WhatsApp Cloud API (U1: Provider + config hardening · U2: Webhook authenticity + durable ingestion · U3: Inbound normalization + monotonic status · U4: Outbound delivery ambiguity + care window · U5: Secure media + approved templates · U6: Operations, Observability & Production Readiness) | COMPLETA LOCALMENTE (pendiente revisión) |
 | 32 | Deterministic message ordering (U1: `ORDER BY created_at, id` en inbox + conversación activa + frontend realtime==reload · contract + tests) | COMPLETADA/PUBLICADA |
 | 33 | Self-service provisioning (U1: registro atómico User + workspace + owner + plan free + onboarding post-verificación) | COMPLETE + VALIDATED + PUBLISHED |
-| 34 | Performance | EN PROGRESO (U1 COMPLETE + VALIDATED LOCAL; U2 COMPLETE + VALIDATED LOCAL; U3 NOT STARTED) |
+| 34 | Performance | EN PROGRESO (U1 COMPLETE + VALIDATED LOCAL; U2 COMPLETE + VALIDATED LOCAL; U3 COMPLETE + VALIDATED LOCAL; U4 NOT STARTED) |
 | 35 | DevOps (Docker, CI/CD) | PENDIENTE |
 | 36 | Documentación API (OpenAPI) | PENDIENTE |
 | 37 | Seeders demo | PENDIENTE |
@@ -3433,3 +3433,16 @@ a clientes: el push es publicación de fuente únicamente.
 - **Límites**: no se ejecutó producción, no se validó tráfico real ni PITR, y RPO 15 min/RTO 30 min son objetivos pendientes
   de aprobación y drills operativos.
 - **Estado**: U2 **COMPLETE + VALIDATED LOCAL**. U3 permanece **NOT STARTED**.
+
+### U3 — Runtime topology, health y recuperación de workers · COMPLETE + VALIDATED LOCAL
+
+- **Topología**: Compose productivo separado por proceso: Nginx, PHP-FPM, workers `default`/`knowledge`/`analytics`, scheduler y Reverb; PostgreSQL, Redis, S3, SMTP y TLS son dependencias externas.
+- **Rehearsal**: `docker-compose.runtime-rehearsal.yml` levanta dependencias PostgreSQL/pgvector, Redis autenticado, MinIO privado y Mailpit con volúmenes y credenciales desechables.
+- **Readiness**: `/health` permanece disponible con DB/Redis caídos; `/ready` devuelve `503` y se recupera a `200`. Scheduler heartbeat stale se detecta sin convertirlo en un falso fallo de dependencia.
+- **Colas**: workers especializados consumen sólo sus colas; los backlogs `knowledge` y `analytics` permanecen aislados y drenan tras reinicio. Embedding materialization usa explícitamente `knowledge`.
+- **Recuperación**: healthchecks, `on-failure:5`, graceful queue restart documentado y recovery drill de worker/Reverb. Nginx resuelve Reverb por DNS Docker para reemplazos de contenedor.
+- **Storage/mail**: upload/read privado S3-compatible, fallo de MinIO sin fallback público/local y recuperación; correo fake visible en Mailpit.
+- **Seguridad**: failed-job summary agregado sin payload/PII; origins Reverb normalizados a hostname y wildcard prohibido en producción.
+- **Documentación**: `docs/runbooks/runtime-topology.md`, `docs/runbooks/worker-recovery.md` y ADR-129.
+- **Límites**: no se ejecutó producción, no se usaron proveedores reales, no se hizo load test ni se declara capacidad productiva.
+- **Estado**: U3 **COMPLETE + VALIDATED LOCAL**. U4 permanece **NOT STARTED**.

@@ -52,9 +52,9 @@ final class FailedJobsSummaryCommand extends Command
 
         foreach ($byQueue as $row) {
             $rowsForTable[] = [
-                (string) $row['queue'],
-                (string) $row['total'],
-                (string) ($row['last_failed'] ?? ''),
+                (string) $row->queue,
+                (string) $row->total,
+                (string) ($row->last_failed ?? ''),
             ];
         }
 

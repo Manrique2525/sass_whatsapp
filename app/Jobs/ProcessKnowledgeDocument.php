@@ -118,7 +118,8 @@ final class ProcessKnowledgeDocument implements ShouldBeUnique, ShouldQueue
         $document->refresh();
 
         if ($document->status === KnowledgeDocumentStatus::Ready && $document->chunk_count > 0) {
-            MaterializeKnowledgeEmbeddings::dispatch($this->tenantId, $this->documentId);
+            MaterializeKnowledgeEmbeddings::dispatch($this->tenantId, $this->documentId)
+                ->onQueue('knowledge');
         }
     }
 

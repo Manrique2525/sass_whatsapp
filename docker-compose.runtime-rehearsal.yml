@@ -1,0 +1,240 @@
+name: whatsapp-saas-u3-runtime
+
+# Disposable production-like topology for FASE34 U3. This file deliberately uses
+# local credentials and isolated named volumes; it is not a production template.
+x-runtime-env: &runtime-env
+  APP_ENV: production
+  APP_DEBUG: "false"
+  APP_KEY: base64:+zpag1xP5OdIwuztzBdFMC+OGEWfjCYIjVdc1HT1cOw=
+  APP_URL: https://u3.invalid
+  DB_CONNECTION: pgsql
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_DATABASE: whatsapp_saas_u3
+  DB_USERNAME: u3
+  DB_PASSWORD: u3-postgres-password
+  REDIS_CLIENT: phpredis
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: u3-redis-password
+  REDIS_DB: "0"
+  REDIS_CACHE_DB: "1"
+  REDIS_PREFIX: u3_runtime_
+  REDIS_CACHE_CONNECTION: cache
+  REDIS_QUEUE_CONNECTION: default
+  CACHE_STORE: redis
+  CACHE_PREFIX: u3_cache_
+  QUEUE_CONNECTION: redis
+  SESSION_DRIVER: redis
+  SESSION_SECURE_COOKIE: "true"
+  SESSION_ENCRYPT: "true"
+  SESSION_HTTP_ONLY: "true"
+  SESSION_SAME_SITE: lax
+  BROADCAST_CONNECTION: reverb
+  REVERB_SERVER_HOST: 0.0.0.0
+  REVERB_SERVER_PORT: "8080"
+  REVERB_APP_ID: u3-runtime
+  REVERB_APP_KEY: u3-runtime-key
+  REVERB_APP_SECRET: u3-runtime-secret
+  REVERB_HOST: u3.invalid
+  REVERB_PORT: "18080"
+  REVERB_SCHEME: https
+  REVERB_ALLOWED_ORIGINS: http://localhost:18080,https://u3.invalid
+  TRUSTED_PROXIES: 10.0.0.0/8
+  FILESYSTEM_DISK: s3
+  KNOWLEDGE_STORAGE_DISK: minio
+  AWS_ACCESS_KEY_ID: u3-minio-access
+  AWS_SECRET_ACCESS_KEY: u3-minio-secret
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_BUCKET: whatsapp-saas-u3
+  AWS_ENDPOINT: http://minio:9000
+  AWS_USE_PATH_STYLE_ENDPOINT: "true"
+  MAIL_MAILER: smtp
+  MAIL_HOST: smtp-u3
+  MAIL_PORT: "1025"
+  MAIL_FROM_ADDRESS: no-reply@u3-runtime.local
+  MAIL_FROM_NAME: WhatsApp SaaS U3
+  SENTRY_LARAVEL_DSN: ""
+  SCHEDULER_HEARTBEAT_MAX_AGE: "5"
+  LOG_STACK: json
+  LOG_LEVEL: warning
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: whatsapp_saas_u3
+      POSTGRES_USER: u3
+      POSTGRES_PASSWORD: u3-postgres-password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U u3 -d whatsapp_saas_u3"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [runtime]
+    volumes: [u3_postgres_data:/var/lib/postgresql/data]
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--requirepass", "u3-redis-password", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "u3-redis-password", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [runtime]
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: u3-minio-access
+      MINIO_ROOT_PASSWORD: u3-minio-secret
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/minio/health/live"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [runtime]
+    volumes: [u3_minio_data:/data]
+
+  minio-init:
+    image: minio/mc:latest
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["mc alias set local http://minio:9000 u3-minio-access u3-minio-secret && mc mb --ignore-existing local/whatsapp-saas-u3"]
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks: [runtime]
+    restart: "no"
+
+  mailpit:
+    image: axllent/mailpit:latest
+    networks:
+      runtime:
+        aliases: [smtp-u3]
+
+  app:
+    image: ${U3_APP_IMAGE:-whatsapp-saas-u3-runtime:review}
+    environment: *runtime-env
+    command: ["php-fpm", "-F"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "php", "healthcheck.php"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [runtime]
+    restart: on-failure:5
+
+  web:
+    image: ${U3_WEB_IMAGE:-whatsapp-saas-u3-web:review}
+    depends_on:
+      app:
+        condition: service_healthy
+      reverb:
+        condition: service_healthy
+    ports: ["127.0.0.1:18080:80"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/health | grep -q '\"status\":\"ok\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [runtime]
+    restart: on-failure:5
+
+  worker-default:
+    image: ${U3_APP_IMAGE:-whatsapp-saas-u3-runtime:review}
+    environment: *runtime-env
+    command: ["php", "artisan", "queue:work", "redis", "--queue=default", "--sleep=1", "--tries=3", "--timeout=120", "--max-time=3600"]
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f '[a]rtisan queue:work.*--queue=default' >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks: [runtime]
+    restart: on-failure:5
+
+  worker-knowledge:
+    image: ${U3_APP_IMAGE:-whatsapp-saas-u3-runtime:review}
+    environment: *runtime-env
+    command: ["php", "artisan", "queue:work", "redis", "--queue=knowledge", "--sleep=1", "--tries=3", "--timeout=300", "--max-time=3600"]
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f '[a]rtisan queue:work.*--queue=knowledge' >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks: [runtime]
+    restart: on-failure:5
+
+  worker-analytics:
+    image: ${U3_APP_IMAGE:-whatsapp-saas-u3-runtime:review}
+    environment: *runtime-env
+    command: ["php", "artisan", "queue:work", "redis", "--queue=analytics", "--sleep=1", "--tries=3", "--timeout=300", "--max-time=3600"]
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f '[a]rtisan queue:work.*--queue=analytics' >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks: [runtime]
+    restart: on-failure:5
+
+  scheduler:
+    image: ${U3_APP_IMAGE:-whatsapp-saas-u3-runtime:review}
+    environment: *runtime-env
+    command: ["php", "artisan", "schedule:work"]
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f '[a]rtisan schedule:work' >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks: [runtime]
+    restart: on-failure:5
+
+  reverb:
+    image: ${U3_APP_IMAGE:-whatsapp-saas-u3-runtime:review}
+    environment: *runtime-env
+    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080", "--debug"]
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f '[a]rtisan reverb:start' >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks: [runtime]
+    restart: on-failure:5
+
+volumes:
+  u3_postgres_data:
+  u3_minio_data:
+
+networks:
+  runtime:
+    driver: bridge

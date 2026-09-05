@@ -38,6 +38,16 @@ try {
 try {
     $client = new Redis;
     $client->connect(getenv('REDIS_HOST') ?: 'redis', (int) (getenv('REDIS_PORT') ?: 6379), 3);
+    $redisUsername = getenv('REDIS_USERNAME');
+    $redisPassword = getenv('REDIS_PASSWORD');
+    if ($redisPassword !== false && $redisPassword !== '') {
+        $authenticated = $redisUsername !== false && $redisUsername !== ''
+            ? $client->auth([$redisUsername, $redisPassword])
+            : $client->auth($redisPassword);
+        if ($authenticated !== true) {
+            throw new RuntimeException('AUTH failed');
+        }
+    }
     if ($client->ping() !== true) {
         throw new RuntimeException('PING failed');
     }

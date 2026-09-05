@@ -238,3 +238,23 @@ Recovery is performed into a new database first and validated before cutover. Fo
 `docs/runbooks/backup-restore.md`; do not restore over the source database or delete
 the source before the incident owner approves it. U2 did not execute production
 migrations, PITR or provider operations.
+
+## 9. FASE 34 U3: runtime and worker release gate
+
+Production is deployed as independent `web`, `app`, `worker-default`, `worker-knowledge`,
+`worker-analytics`, `scheduler` and `reverb` services. PostgreSQL, Redis, S3-compatible
+storage, SMTP and TLS are external infrastructure. The Compose template defaults to
+`.env.production`; `PRODUCTION_ENV_FILE` may point to an explicitly managed alternate
+file for validation or deployment. Use `docs/runbooks/runtime-topology.md`
+and `docs/runbooks/worker-recovery.md`.
+
+Before enabling traffic, provide `.env.production` from the secret manager with
+`LOG_STACK=json`, `LOG_LEVEL=warning`, explicit Reverb origins, authenticated Redis,
+private S3 and real SMTP. Do not use Mailpit or wildcard origins. Run
+`docker compose -f docker-compose.production.yml config --quiet`, confirm no internal
+ports are published, and wait for `/health=200`, `/ready=200`, healthy workers and a
+current scheduler heartbeat. Use `php artisan queue:restart` for code reloads; never
+auto-run migrations from the container entrypoint. The template uses `on-failure:5` so
+bad configuration cannot restart forever without alerting. U3 was validated only with
+disposable infrastructure: no production deployment, provider call, capacity claim or
+load test is implied.

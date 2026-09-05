@@ -493,7 +493,8 @@ test('EMB-JOB-06: dispatches from ProcessKnowledgeDocument after ready with chun
 
     Queue::assertPushed(MaterializeKnowledgeEmbeddings::class, function ($job) use ($tenant, $doc) {
         return $job->tenantId === $tenant->id
-            && $job->documentId === $doc->id;
+            && $job->documentId === $doc->id
+            && $job->queue === 'knowledge';
     });
 })->group('EMB-JOB');
 

@@ -28,7 +28,13 @@ use App\Http\Controllers\Settings\KnowledgeSettingsController;
 use App\Http\Controllers\Settings\LeadSettingsController;
 use App\Http\Controllers\Settings\UserSettingsController;
 use App\Http\Controllers\Settings\WhatsAppSettingsController;
+use App\Http\Middleware\HandleInertiaRequests;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Cookie\Middleware\EncryptCookies;
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 Route::get('/', LandingController::class)->name('landing');
 Route::get('/privacy', [LegalController::class, 'privacy'])->name('legal.privacy');
@@ -36,8 +42,17 @@ Route::get('/terms', [LegalController::class, 'terms'])->name('legal.terms');
 Route::get('/sitemap.xml', [PublicSeoController::class, 'sitemap'])->name('seo.sitemap');
 Route::get('/robots.txt', [PublicSeoController::class, 'robots'])->name('seo.robots');
 
-Route::get('/health', HealthController::class);
-Route::get('/ready', [HealthController::class, 'ready']);
+$probeMiddleware = [
+    AddQueuedCookiesToResponse::class,
+    EncryptCookies::class,
+    HandleInertiaRequests::class,
+    ShareErrorsFromSession::class,
+    StartSession::class,
+    VerifyCsrfToken::class,
+];
+
+Route::get('/health', HealthController::class)->withoutMiddleware($probeMiddleware);
+Route::get('/ready', [HealthController::class, 'ready'])->withoutMiddleware($probeMiddleware);
 
 Route::get('invitations/{token}', [InvitationWebController::class, 'show'])
     ->middleware('throttle:invitation')
