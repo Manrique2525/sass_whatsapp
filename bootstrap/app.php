@@ -8,6 +8,7 @@ use App\Domain\Billing\Exceptions\SubscriptionNotActiveException;
 use App\Domain\Billing\Exceptions\SubscriptionNotFoundException;
 use App\Domain\Billing\Exceptions\TenantQuotaExceededException;
 use App\Domain\WhatsApp\Exceptions\WhatsAppException;
+use App\Http\Middleware\EnsurePlatformAdmin;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\RequestCorrelationId;
 use App\Http\Middleware\SecurityHeaders;
@@ -54,6 +55,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'tenant' => TenantMiddleware::class,
+            'platform.admin' => EnsurePlatformAdmin::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

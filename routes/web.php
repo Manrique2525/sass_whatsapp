@@ -15,6 +15,7 @@ use App\Http\Controllers\Invitations\InvitationWebController;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\LegalController;
 use App\Http\Controllers\OnboardingController;
+use App\Http\Controllers\Platform\PlatformDashboardController;
 use App\Http\Controllers\PublicSeoController;
 use App\Http\Controllers\Settings\AnalyticsSettingsController;
 use App\Http\Controllers\Settings\BillingSettingsController;
@@ -95,6 +96,11 @@ Route::middleware('auth')->group(function (): void {
         ->name('onboarding');
 
     Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
+
+    Route::prefix('platform')->middleware(['verified', 'platform.admin'])->group(function (): void {
+        Route::get('/', PlatformDashboardController::class)->name('platform.index');
+        Route::get('/dashboard', PlatformDashboardController::class)->name('platform.dashboard');
+    });
 
     Route::get('dashboard', DashboardController::class)
         ->middleware('verified')

@@ -25,32 +25,35 @@ final class HandleInertiaRequests extends Middleware
         $tenantOptions = [];
         $role = null;
         $permissions = [];
+        $isPlatformRoute = $request->is('platform') || $request->is('platform/*');
 
         if ($user !== null) {
-            /** @var array<int, Tenant> $tenants */
-            $tenants = $user->tenants()
-                ->orderBy('name')
-                ->get()
-                ->all();
+            if (! $isPlatformRoute) {
+                /** @var array<int, Tenant> $tenants */
+                $tenants = $user->tenants()
+                    ->orderBy('name')
+                    ->get()
+                    ->all();
 
-            $currentTenantId = $user->current_tenant_id;
+                $currentTenantId = $user->current_tenant_id;
 
-            foreach ($tenants as $tenant) {
-                $tenantOptions[] = [
-                    'id' => $tenant->id,
-                    'name' => $tenant->name,
-                    'slug' => $tenant->slug,
-                    'status' => $tenant->status->value,
-                    'is_current' => $tenant->id === $currentTenantId,
-                ];
-            }
+                foreach ($tenants as $tenant) {
+                    $tenantOptions[] = [
+                        'id' => $tenant->id,
+                        'name' => $tenant->name,
+                        'slug' => $tenant->slug,
+                        'status' => $tenant->status->value,
+                        'is_current' => $tenant->id === $currentTenantId,
+                    ];
+                }
 
-            if ($currentTenantId !== null && $user->belongsToTenantById($currentTenantId)) {
-                $role = $user->roleForTenant($currentTenantId)?->value;
+                if ($currentTenantId !== null && $user->belongsToTenantById($currentTenantId)) {
+                    $role = $user->roleForTenant($currentTenantId)?->value;
 
-                /** @var Tenant $currentTenant */
-                $currentTenant = Tenant::query()->find($currentTenantId);
-                $permissions = $this->authorization->permissionsForTenant($user, $currentTenant);
+                    /** @var Tenant $currentTenant */
+                    $currentTenant = Tenant::query()->find($currentTenantId);
+                    $permissions = $this->authorization->permissionsForTenant($user, $currentTenant);
+                }
             }
         }
 
@@ -63,7 +66,7 @@ final class HandleInertiaRequests extends Middleware
                     'email' => $user->email,
                 ] : null,
                 'tenants' => $tenantOptions,
-                'current_tenant_id' => $user?->current_tenant_id,
+                'current_tenant_id' => $isPlatformRoute ? null : $user?->current_tenant_id,
                 'current_role' => $role,
                 'permissions' => $permissions,
                 'is_super_admin' => $user?->isSuperAdmin() ?? false,

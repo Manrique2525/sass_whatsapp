@@ -1,5 +1,25 @@
 # Testing
 
+## FASE 36 U2 - Platform Admin boundary
+
+Platform Admin uses the existing global `super_admin` role through the dedicated
+`platform.admin` middleware. Platform routes use `auth`, `verified`, and the platform
+middleware, but never `tenant`. The platform shell deliberately receives no tenant
+options, active tenant, or tenant permissions. Tenant Owner/Admin/Agent roles remain
+denied, including users who are tenant members but not global super admins.
+
+Focused test:
+
+```bash
+php -d memory_limit=512M vendor/bin/pest tests/Feature/Platform/PlatformBoundaryTest.php
+```
+
+U2 does not add migrations, global tenant queries, platform mutations, or MFA. MFA is
+required before production use of Platform Admin. Future sensitive platform mutations
+must use explicit platform application services, stricter rate limits where appropriate,
+and audit actor, action, subject, target tenant when applicable, request ID, IP, user
+agent, and reason.
+
 ## FASE 34 U6 - Controlled beta readiness and final go/no-go
 
 The U6 assessment is complete locally for candidate `0e089b720683b65ae300ef6b03720cff4852c8f7`.

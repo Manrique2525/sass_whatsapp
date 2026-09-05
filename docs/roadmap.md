@@ -42,7 +42,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA
 | 33 | Self-service provisioning (U1: registro atómico User + workspace + owner + plan free + onboarding post-verificación) | COMPLETE + VALIDATED + PUBLISHED |
 | 34 | Performance | COMPLETE + VALIDATED + PUBLISHED (U1-U6) |
 | 35 | DevOps (Docker, CI/CD) | NOT STARTED |
-| 36 | Documentación API (OpenAPI) | PENDIENTE |
+| 36 | Platform Administration & SaaS Backoffice (U1: Architecture Discovery, U2: Platform Boundary & Authorization) | U2 EN PROGRESO |
 | 37 | Seeders demo | PENDIENTE |
 | 38 | Demo completa | PENDIENTE |
 

@@ -2,6 +2,27 @@
 
 Formato: problema → decisión → consecuencia. Fechadas y en orden cronológico.
 
+## ADR-130 · Dedicated Platform Administration Boundary (FASE 36 U2)
+
+- **Estado**: Aceptado · FASE 36 U2
+- **Contexto**: La plataforma necesita una superficie administrativa global sin convertir el
+  rol global `super_admin` en un bypass de las reglas tenant-scoped. Los roles `owner`, `admin`
+  y `agent` deben conservar exactamente su comportamiento actual.
+- **Decisión**: Se reutiliza el rol global `super_admin`, identificado mediante el sentinel UUID
+  `00000000-0000-0000-0000-000000000000`, pero se autoriza mediante el middleware dedicado
+  `EnsurePlatformAdmin` en el namespace `/platform`. Estas rutas usan `auth` y `verified`, no
+  usan `TenantMiddleware` y no fijan `TenantContext`. Las consultas globales futuras vivirán en
+  servicios de plataforma explícitos y revisables; no se permite un bypass implícito en policies
+  tenant ni el uso amplio de `withoutGlobalScopes()`. La asignación técnica existente se mantiene
+  en `TenantRoleManager::assignGlobalRole()`; no se expone una UI pública para crear
+  super-admins.
+- **Consecuencias**: El acceso Platform Admin es independiente de la membresía o del tenant
+  activo. El shell global no muestra selector de tenant ni recibe props tenant-specific. Las
+  rutas tenant, `TenantMiddleware`, `BelongsToTenant`, billing, planes, suscripciones y usage no
+  cambian. No se auditan simples page views en U2; toda mutación futura debe registrar actor,
+  acción, subject, `tenant_id` cuando aplique, request ID, IP, user agent y razón para acciones
+  sensibles. MFA queda pendiente y es obligatoria antes de uso productivo.
+
 ## ADR-129 · Topología runtime y recuperación de workers (FASE 34 U3)
 
 - **Estado**: Aceptado · FASE 34 U3
