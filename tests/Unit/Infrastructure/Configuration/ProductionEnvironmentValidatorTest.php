@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Infrastructure\Configuration\ProductionEnvironmentValidator;
+use App\Providers\AppServiceProvider;
 
 function validProductionConfiguration(): void
 {
@@ -45,6 +46,7 @@ function validProductionConfiguration(): void
         ],
         'mail.default' => 'smtp',
         'mail.mailers.smtp.host' => 'smtp.example.test',
+        'mail.mailers.smtp.scheme' => 'tls',
         'mail.from.address' => 'no-reply@example.test',
         'mail.from.name' => 'WhatsApp SaaS',
     ]);
@@ -67,4 +69,37 @@ test('production configuration rejects debug and wildcard proxy/origin defaults'
 
     expect(fn () => (new ProductionEnvironmentValidator)->validate())
         ->toThrow(InvalidArgumentException::class);
+});
+
+test('production configuration rejects local or unencrypted SMTP', function (): void {
+    validProductionConfiguration();
+    config([
+        'mail.mailers.smtp.host' => '127.0.0.1',
+        'mail.mailers.smtp.scheme' => null,
+    ]);
+
+    expect(fn () => (new ProductionEnvironmentValidator)->validate())
+        ->toThrow(InvalidArgumentException::class, 'MAIL_HOST must be a remote delivery provider');
+});
+
+test('production configuration rejects SMTP without encryption', function (): void {
+    validProductionConfiguration();
+    config(['mail.mailers.smtp.scheme' => null]);
+
+    expect(fn () => (new ProductionEnvironmentValidator)->validate())
+        ->toThrow(InvalidArgumentException::class, 'MAIL_SCHEME must be tls or smtps');
+});
+
+test('Mailpit remains available outside production', function (): void {
+    foreach (['local', 'e2e'] as $environment) {
+        config([
+            'app.env' => $environment,
+            'mail.default' => 'smtp',
+            'mail.mailers.smtp.host' => 'mailpit',
+            'mail.mailers.smtp.scheme' => null,
+        ]);
+
+        expect(fn () => (new AppServiceProvider(app()))->boot())
+            ->not->toThrow(InvalidArgumentException::class);
+    }
 });

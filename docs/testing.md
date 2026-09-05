@@ -1,5 +1,26 @@
 # Testing
 
+## FASE 34 U4 - Provider readiness boundary
+
+Provider adapters are instantiated without external requests. Tests use Laravel HTTP fakes or
+the E2E-only provider bindings; `Http::preventStrayRequests()` remains the network boundary for
+the deterministic E2E environment. Blank optional credentials keep the application bootable, but
+the first provider operation fails closed with a safe domain exception and no outbound request.
+
+Production configuration is stricter: SMTP must be a remote host and use `tls` or `smtps`; local,
+loopback and Mailpit hosts are rejected. Meta webhook verification/signatures require the global
+App Secret and verify token, while tenant access tokens remain encrypted tenant data. Stripe
+requires its secret for API operations and its webhook secret for event verification. OpenAI chat
+and embedding calls independently reject a missing API key. Sentry remains DSN-gated and its
+backend/frontend scrubbers are covered without sending telemetry.
+
+U4 activation validation is contract-only. It does not create Stripe products/prices, call Meta,
+OpenAI or Sentry, send production mail, run migrations, or require repository/provider secrets.
+
+Final U4 evidence: backend `2605 passed / 15 skipped / 0 failed` (full Pest run with the repository
+`512M` memory allowance); focused provider/config suite `125 passed`; PHPStan PASS; Pint PASS;
+frontend typecheck PASS; frontend build PASS; `git diff --check` PASS. Provider real calls: `0`.
+
 ## FASE 31 U1 - Meta provider and configuration hardening
 
 U1 keeps Meta calls behind `WhatsAppProviderInterface` and tests the real

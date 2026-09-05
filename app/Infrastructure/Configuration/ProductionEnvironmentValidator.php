@@ -115,12 +115,18 @@ final class ProductionEnvironmentValidator
             $errors[] = 'MAIL_MAILER must be a delivery provider';
         }
 
-        if ($mailer === 'smtp' && strtolower((string) config('mail.mailers.smtp.host')) === 'mailpit') {
-            $errors[] = 'MAIL_HOST must not be Mailpit';
-        }
-
         if ($mailer === 'smtp') {
-            $this->requireValue($errors, 'MAIL_HOST', config('mail.mailers.smtp.host'));
+            $mailHost = strtolower(trim((string) config('mail.mailers.smtp.host')));
+            $this->requireValue($errors, 'MAIL_HOST', $mailHost);
+
+            if (in_array($mailHost, ['localhost', '127.0.0.1', '::1', 'mailpit'], true)
+                || str_ends_with($mailHost, '.local')) {
+                $errors[] = 'MAIL_HOST must be a remote delivery provider';
+            }
+
+            if (! in_array(strtolower((string) config('mail.mailers.smtp.scheme')), ['tls', 'smtps'], true)) {
+                $errors[] = 'MAIL_SCHEME must be tls or smtps';
+            }
         }
 
         $this->requireValue($errors, 'MAIL_FROM_ADDRESS', config('mail.from.address'));

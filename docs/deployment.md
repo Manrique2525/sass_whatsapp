@@ -121,7 +121,14 @@ WHATSAPP_VERIFY_TOKEN=
 WHATSAPP_MAX_ATTEMPTS=3
 
 OPENAI_API_KEY=
-OPENAI_MODEL=gpt-4o-mini
+AI_PROVIDER=openai
+AI_MODEL=gpt-4o-mini
+AI_TIMEOUT=15
+AI_MAX_RETRIES=1
+AI_MAX_TOKENS=500
+AI_EMBEDDING_PROVIDER=openai
+AI_EMBEDDING_MODEL=text-embedding-3-small
+AI_EMBEDDING_DIMENSIONS=1536
 
 AWS_ACCESS_KEY_ID=minio
 AWS_SECRET_ACCESS_KEY=minio123
@@ -130,9 +137,47 @@ AWS_BUCKET=whatsapp-saas
 AWS_ENDPOINT=http://minio:9000   # vacío en producción
 
 SENTRY_LARAVEL_DSN=
+SENTRY_ENVIRONMENT=production
+SENTRY_RELEASE=
+SENTRY_SAMPLE_RATE=1
+SENTRY_TRACES_SAMPLE_RATE=0
+SENTRY_PROFILES_SAMPLE_RATE=0
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
+MAIL_MAILER=smtp
+MAIL_HOST=
+MAIL_PORT=587
+MAIL_SCHEME=tls
+MAIL_USERNAME=
+MAIL_PASSWORD=
+MAIL_FROM_ADDRESS=
+MAIL_FROM_NAME="WhatsApp SaaS"
 ```
+
+### 4.1 Provider activation boundary
+
+Provider credentials are injected through the secret manager and are never committed. The
+application resolves provider adapters without making network calls during boot. Activation is
+conditional: Meta requires `WHATSAPP_APP_SECRET` and `WHATSAPP_VERIFY_TOKEN` plus a tenant WABA
+connection; OpenAI requires `OPENAI_API_KEY` and is still subject to the tenant AI entitlement;
+Stripe requires both `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` and is not needed for the
+Free-only beta; Sentry is DSN-gated and optional; production mail is mandatory and must use a
+remote SMTP/transactional provider with `MAIL_SCHEME=tls` or `smtps`.
+
+Business/operations inputs remain pending and are not invented here: Meta business verification/WABA/phone/app
+ownership; Stripe account, paid-plan catalog, currency, refund/tax policy; mail sender domain and support email;
+OpenAI account/billing ownership; and Sentry organization/project ownership. Domain, DNS, TLS, SPF, DKIM and DMARC
+operations remain external prerequisites.
+
+Missing credentials fail closed at the provider boundary. No provider readiness check performs a
+real external request during deploy or CI. Follow the provider-specific runbooks before enabling
+the corresponding tenant or route:
+
+- `docs/runbooks/provider-meta.md`
+- `docs/runbooks/provider-stripe.md`
+- `docs/runbooks/provider-openai.md`
+- `docs/runbooks/provider-sentry.md`
+- `docs/runbooks/provider-mail.md`
 
 ## 5. CI/CD (GitHub Actions, FASE 34)
 
