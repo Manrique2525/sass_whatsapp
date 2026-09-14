@@ -17,6 +17,7 @@ use App\Http\Controllers\LegalController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\Platform\PlatformCustomerController;
 use App\Http\Controllers\Platform\PlatformDashboardController;
+use App\Http\Controllers\Platform\PlatformPlanController;
 use App\Http\Controllers\PublicSeoController;
 use App\Http\Controllers\Settings\AnalyticsSettingsController;
 use App\Http\Controllers\Settings\BillingSettingsController;
@@ -103,6 +104,12 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/dashboard', PlatformDashboardController::class)->name('platform.dashboard');
         Route::get('/customers', [PlatformCustomerController::class, 'index'])->name('platform.customers.index');
         Route::get('/customers/{tenant}', [PlatformCustomerController::class, 'show'])->name('platform.customers.show');
+        Route::get('/plans', [PlatformPlanController::class, 'index'])->name('platform.plans.index');
+        Route::get('/plans/create', [PlatformPlanController::class, 'create'])->name('platform.plans.create');
+        Route::post('/plans', [PlatformPlanController::class, 'store'])->name('platform.plans.store');
+        Route::get('/plans/{plan}', [PlatformPlanController::class, 'show'])->name('platform.plans.show');
+        Route::get('/plans/{plan}/edit', [PlatformPlanController::class, 'edit'])->name('platform.plans.edit');
+        Route::patch('/plans/{plan}', [PlatformPlanController::class, 'update'])->name('platform.plans.update');
     });
 
     Route::get('dashboard', DashboardController::class)

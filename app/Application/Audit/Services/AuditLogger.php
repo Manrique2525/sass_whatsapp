@@ -25,11 +25,13 @@ final class AuditLogger
         string|int|null $subjectId = null,
         ?int $actorUserId = null,
         ?string $tenantId = null,
+        bool $platform = false,
     ): AuditLog {
         $audit = new AuditLog;
 
         $audit->actor_user_id = $actorUserId ?? Auth::id();
-        $audit->tenant_id = $tenantId ?? TenantContext::id();
+        // Platform actions are global even when a stale tenant context exists.
+        $audit->tenant_id = $platform ? null : ($tenantId ?? TenantContext::id());
         $audit->action = $action;
         $audit->subject_type = $subjectType;
         $audit->subject_id = $subjectId;

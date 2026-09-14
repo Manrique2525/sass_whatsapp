@@ -33,12 +33,32 @@ knowledge contents, and audit payloads. Phone numbers and Stripe subscription ID
 masked. U3 contains no POST, PUT, PATCH, DELETE, subscription mutation, plan mutation,
 usage reservation, or usage reset path.
 
-U4 of FASE 36 remains **NOT STARTED**.
+### FASE 36 U4 - Platform Admin Plans catalog
+
+The global plans catalog is managed at `/platform/plans` by `super_admin` only. Create and
+update operations use an explicit application service and transactions; there is no delete
+route. The existing `plans` schema is used unchanged. The Free plan remains active with zero
+prices and slug `free`, and all mutations produce global platform audit entries with safe
+before/after metadata. Active and past-due subscription counts are read-only impact data;
+subscriptions, usage records/reservations and tenant context are never mutated or used for
+reservation/reset operations.
+
+Prices are direct monthly/yearly catalog values. The schema has no currency field or
+`PlanPrice` table, and U4 performs no Stripe network operation. `ai_enabled` is the only
+configurable feature entitlement; limits use the closed `UsageCategory` enum.
+
+U4 is **COMPLETE + VALIDATED LOCAL**. Validation includes the focused Platform Plans E2E suite
+(3 passed) and the full E2E suite (45 passed) after a fresh `e2e:setup`. The full PHP suite was
+attempted but is currently blocked by the existing 128 MB CLI memory limit in
+`DocxTextExtractorTest.php:165`; the focused U4 Feature suite passes (6 tests, 61 assertions).
+U5 remains **NOT STARTED**.
 
 Focused tests:
 
 ```bash
 php -d memory_limit=512M vendor/bin/pest tests/Feature/Platform
+npx playwright test tests/e2e/platform/plans.spec.ts
+npm run test:e2e
 ```
 
 ## FASE 34 U6 - Controlled beta readiness and final go/no-go
