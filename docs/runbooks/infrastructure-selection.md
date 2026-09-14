@@ -2,32 +2,53 @@
 
 ## Status
 
-This phase is open. It records the production selection contract and recommendations;
-no provider, region, domain or owner decision has been approved yet. Provider-specific
-features, regions and pricing must be verified before purchase.
+This phase is open. The initial Free Private Beta defaults below are approved by the
+owner. Provider, region, domain, access and operational ownership details remain
+pending. Provider-specific features, regions and pricing must be verified before
+purchase.
+
+## Approved Free Beta Defaults
+
+- Free Private Beta: **APPROVED**, controlled cohort of 5-10 tenants.
+- Paid Beta: **DEFERRED / NO-GO**; Stripe remains disabled.
+- AI/OpenAI: **DISABLED** initially; implementation remains available for later gated activation.
+- Knowledge: **ENABLED**, with a maximum upload size of 10 MB.
+- `worker-knowledge`: one replica initially with a recommended 512 MB PHP memory limit.
+- WhatsApp: **SUPPORTED / CONDITIONAL**; live Meta connectivity is not required for beta start.
+- Reverb/realtime: **ENABLED**, one private replica with WSS through ingress only.
+- Compute: managed container platform, 2 vCPU/4 GB minimum and approximately 4 vCPU/8 GB preferred across services.
+- Process topology: one replica for `web`, `app`, `worker-default`, `worker-knowledge`, `worker-analytics` and `reverb`; exactly one `scheduler` replica.
+- PostgreSQL: managed PostgreSQL 16 with pgvector, encryption, TLS and automated backups; PITR where supported.
+- Redis: managed, authenticated, private, TLS where supported, single node initially, existing cache/queue separation preserved.
+- Storage: private S3-compatible storage using `tenant/{tenant_id}/`; object versioning enabled where practical.
+- SMTP: transactional provider with TLS and verified sender domain; Mailpit remains local only.
+- Recovery: RPO 15 minutes and RTO 30 minutes as operational targets, not SLAs.
+- Backups: provider PITR window where practical, daily logical database backups and object retention target of 30 days, quarterly restore drills.
+- Observability: centralized platform logs required; Sentry recommended and conditional on account/project setup.
+- Security: Platform MFA, HTTPS, secure cookies, explicit trusted proxies, explicit Reverb origins, no auto-migrations and no startup key generation.
 
 ## Owner Decision Record
 
 | Decision | Current value | Recommendation (not approved) |
 |---|---|---|
-| Hosting category | TBD | Managed container platform |
+| Hosting category | Managed container platform | Managed container platform |
 | Provider | TBD | Select after capability and region verification |
 | Region | TBD | Closest practical region to primary customers with required managed services |
 | Application domain | TBD | `app.<production-domain>` |
 | Marketing domain | TBD | Same domain or separate `www` domain |
 | DNS owner | TBD | Owner with controlled DNS and TLS access |
-| Initial tenants | TBD | 5-10 |
-| Messages/day | TBD | Measure and size from beta traffic |
-| Concurrent users | TBD | Measure and size from beta traffic |
-| WhatsApp in Free Beta | TBD | ON only after Meta prerequisites are ready |
-| AI in Free Beta | TBD | OFF initially |
-| Knowledge in Free Beta | TBD | ON, with current 10 MB limit |
-| Reverb in Free Beta | TBD | ON if realtime UI is included |
-| Knowledge upload max | 10 MB current implementation | KEEP 10 MB initially |
-| RPO | 15 minutes candidate | Approve only if PITR/backup evidence supports it |
-| RTO | 30 minutes candidate | Conditional on an exercised operational process |
-| Database retention | TBD | 14-30 days, subject to cost and policy |
-| Object-storage retention | TBD | Versioning enabled, retention policy approved |
+| Initial tenants | 5-10 approved | 5-10 |
+| Messages/day | Up to approximately 10,000 planning assumption | Measure and size from beta traffic |
+| Concurrent users | Low/moderate beta usage approved | Measure and size from beta traffic |
+| WhatsApp in Free Beta | Supported, activation conditional | ON only after Meta prerequisites are ready |
+| AI in Free Beta | Disabled approved | OFF initially |
+| Knowledge in Free Beta | Enabled approved | ON, with current 10 MB limit |
+| Reverb in Free Beta | Enabled approved | ON if realtime UI is included |
+| Knowledge upload max | 10 MB approved | KEEP 10 MB initially |
+| RPO | 15 minutes target approved | Approve only if PITR/backup evidence supports it |
+| RTO | 30 minutes target approved | Conditional on an exercised operational process |
+| Database retention | 30 days initial target approved | 14-30 days, subject to cost and policy |
+| Object-storage retention | 30 days initial target; versioning approved | Versioning enabled, retention policy approved |
 | Support email | TBD | Required before beta |
 | Technical owner | TBD | Required before beta |
 | Incident owner | TBD | Required before beta |

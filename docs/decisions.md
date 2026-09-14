@@ -1,5 +1,22 @@
 # Decisiones de arquitectura (ADRs)
 
+## ADR-135 · Free Private Beta infrastructure defaults (FASE 40)
+
+- **Estado**: Aprobado parcialmente · detalles de target pendientes.
+- **Decisión**: El primer Free Private Beta será privado y controlado, con 5-10
+  tenants. Paid Beta queda diferido/no-go y Stripe deshabilitado. AI/OpenAI queda
+  deshabilitado inicialmente. Knowledge queda habilitado con límite de 10 MB y un
+  worker inicial de 512 MB; Reverb queda habilitado con una réplica privada; WhatsApp
+  queda soportado pero su activación es condicional a la preparación de Meta.
+- **Infraestructura**: Se aprueba como categoría una plataforma de contenedores
+  administrada, con PostgreSQL 16 + pgvector y Redis administrados, storage S3 privado,
+  SMTP TLS y una réplica inicial por proceso, salvo scheduler exactamente uno. RPO de
+  15 minutos, RTO de 30 minutos y retención inicial de 30 días son objetivos operativos,
+  no SLA.
+- **Pendiente**: proveedor, región, dominios, DNS, accesos, soporte, ownership técnico
+  e incidentes, y si WhatsApp debe estar live el día uno. No se provisiona hasta cerrar
+  esos datos.
+
 ## ADR-134 · Production upload limit decision pending (FASE 39)
 
 - **Estado**: Pendiente de decisión del propietario.

@@ -46,7 +46,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA
 | 37 | Functional manual QA & commercial readiness | COMPLETE + VALIDATED + PUBLISHED (Free private beta CONDITIONAL GO; paid beta NO-GO) |
 | 38 | Demo completa | PENDIENTE |
 | 39 | Production Contract Hardening | COMPLETE + VALIDATED + PUBLISHED |
-| 40 | Infrastructure Selection & Owner Decisions | OPEN (owner approval pending) |
+| 40 | Infrastructure Selection & Owner Decisions | OPEN (defaults approved; provider/domain/access pending) |
 
 ## Definición de DONE
 
