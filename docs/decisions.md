@@ -2,6 +2,20 @@
 
 Formato: problema → decisión → consecuencia. Fechadas y en orden cronológico.
 
+## ADR-132 · Platform global dashboard read boundary (FASE 36 U6)
+
+- **Estado**: Aceptado · FASE 36 U6
+- **Contexto**: Platform Admin necesita una vista operativa global para observar el estado del SaaS,
+  sin convertir los modelos tenant-scoped en un bypass implícito ni exponer contenido sensible.
+- **Decisión**: Se crea `PlatformDashboardQueryService` como servicio de lectura explícito, con
+  agregados cross-tenant acotados mediante query builder y sin fijar `TenantContext`. El payload se
+  limita a conteos, distribuciones, usage del periodo actual, estado de WhatsApp, clientes recientes,
+  auditoría reciente y alertas. MRR, llamadas a proveedores y datos de contenido quedan fuera.
+- **Consecuencias**: El dashboard puede operar aunque el super-admin no tenga tenant activo o membresía.
+  Cada métrica tiene una definición server-side determinista; los joins PostgreSQL entre identificadores
+  de tipos distintos requieren casts explícitos. Futuras métricas globales deben añadirse al servicio y
+  cubrirse con tests de autorización, aislamiento y ausencia de datos sensibles.
+
 ## ADR-131 · Platform subscription administration boundary (FASE 36 U5)
 
 - **Estado**: Aceptado · FASE 36 U5

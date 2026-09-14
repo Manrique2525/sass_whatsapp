@@ -67,6 +67,33 @@ PHPStan, Pint, typecheck, build, and a fresh full E2E suite (47 passed). The log
 also corrected to use HTTP 303 after the POST so the landing page receives unauthenticated
 Inertia props consistently.
 
+### FASE 36 U6 - Global platform dashboard
+
+`PlatformDashboardQueryService` is the explicit cross-tenant read boundary for the global dashboard.
+It uses aggregate query-builder reads without `TenantContext`, and returns only operational metadata:
+tenant/user/membership counts, subscription status and provider distributions, current-period usage,
+WhatsApp connection state, recent customers, recent audit activity and actionable alerts. MRR is not
+shown because the current catalog has no reliable commercial currency/contract semantics. No provider
+network calls, tenant mutation, usage reset, quota override or migration is introduced.
+
+Metric definitions are deterministic: tenants and users are database row counts; memberships count
+active `tenant_users`; active subscriptions exclude soft-deleted rows and use the `active` status;
+usage is summed from current-period records; WhatsApp configured/connected counts use account rows and
+the `connected` status; customer and audit widgets are bounded recent lists with sensitive values omitted.
+PostgreSQL audit joins explicitly cast the varchar subject identifier to UUID when correlating subscriptions.
+
+U6 is **COMPLETE + VALIDATED LOCAL**. Validation includes the focused dashboard/boundary Feature suites
+(12 tests, 93 assertions), focused Vitest (2 tests), full backend (2632 passed, 15 skipped), full Vitest
+(597 passed), PHPStan, Pint, typecheck, build, and a fresh full E2E suite (49 passed, one worker, zero retries).
+
+Focused tests:
+
+```bash
+php -d memory_limit=512M vendor/bin/pest tests/Feature/Platform/PlatformDashboardTest.php tests/Feature/Platform/PlatformBoundaryTest.php
+npm run test -- resources/js/Pages/Platform/dashboard.test.ts
+npx playwright test tests/e2e/platform/dashboard.spec.ts
+```
+
 Focused tests:
 
 ```bash
