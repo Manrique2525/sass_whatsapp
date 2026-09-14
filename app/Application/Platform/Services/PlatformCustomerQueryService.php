@@ -140,7 +140,16 @@ final class PlatformCustomerQueryService
 
         $audit = DB::table('audit_logs')
             ->leftJoin('users', 'users.id', '=', 'audit_logs.actor_user_id')
-            ->where('audit_logs.tenant_id', $tenantId)
+            ->where(function (Builder $auditQuery) use ($tenantId, $subscription): void {
+                $auditQuery->where('audit_logs.tenant_id', $tenantId);
+                if ($subscription !== null) {
+                    $auditQuery->orWhere(function (Builder $platformAudit) use ($subscription): void {
+                        $platformAudit->whereNull('audit_logs.tenant_id')
+                            ->where('audit_logs.action', 'platform.subscription.plan_changed')
+                            ->where('audit_logs.subject_id', $subscription->id);
+                    });
+                }
+            })
             ->select([
                 'audit_logs.id',
                 'audit_logs.action',

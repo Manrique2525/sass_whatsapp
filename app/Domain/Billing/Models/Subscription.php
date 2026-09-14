@@ -104,4 +104,9 @@ final class Subscription extends Model
 
         return $status === SubscriptionStatus::Active;
     }
+
+    public function isProviderManaged(): bool
+    {
+        return $this->stripe_subscription_id !== null;
+    }
 }

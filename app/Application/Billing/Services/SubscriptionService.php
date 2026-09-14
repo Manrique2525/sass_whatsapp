@@ -11,11 +11,15 @@ use App\Domain\Billing\Exceptions\PlanNotFoundException;
 use App\Domain\Billing\Exceptions\SubscriptionNotFoundException;
 use App\Domain\Billing\Models\Plan;
 use App\Domain\Billing\Models\Subscription;
+use App\Domain\Tenants\Enums\TenantStatus;
+use App\Domain\Tenants\Exceptions\PermissionDeniedException;
+use App\Domain\Tenants\Exceptions\TenantNotActiveException;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Enums\TenantPermission;
 use App\Domain\Users\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Subscription lifecycle management (FASE 23 U3, ADR-090).
@@ -198,6 +202,85 @@ final class SubscriptionService
             );
 
             return $subscription->fresh('plan');
+        });
+    }
+
+    /**
+     * Change a local/manual subscription from the global Platform Admin boundary.
+     *
+     * Provider-managed subscriptions are deliberately rejected: changing only the
+     * local plan would diverge from the provider's subscription and price.
+     */
+    public function changePlanAsPlatformAdmin(
+        User $actor,
+        Tenant $tenant,
+        string $planId,
+        string $reason,
+    ): Subscription {
+        if (! $actor->isSuperAdmin()) {
+            throw new PermissionDeniedException('Solo un Platform Super Admin puede cambiar suscripciones.');
+        }
+
+        if ($tenant->status !== TenantStatus::Active) {
+            throw new TenantNotActiveException('El tenant no está activo.');
+        }
+
+        $plan = Plan::query()->whereKey($planId)->first();
+
+        if ($plan === null || ! $plan->is_active) {
+            throw ValidationException::withMessages(['plan_id' => 'The target plan must be active and available.']);
+        }
+
+        $reason = trim($reason);
+        if ($reason === '') {
+            throw ValidationException::withMessages(['reason' => 'A reason is required for an administrative plan change.']);
+        }
+
+        return DB::transaction(function () use ($actor, $tenant, $plan, $reason): Subscription {
+            $subscription = Subscription::query()
+                ->withoutTenantScope()
+                ->where('tenant_id', $tenant->id)
+                ->where('status', SubscriptionStatus::Active)
+                ->latest()
+                ->lockForUpdate()
+                ->first();
+
+            if ($subscription === null) {
+                throw new SubscriptionNotFoundException(
+                    "No active subscription found for tenant [{$tenant->id}].",
+                );
+            }
+
+            if ($subscription->isProviderManaged()) {
+                throw ValidationException::withMessages([
+                    'plan_id' => 'This subscription is managed externally and cannot be changed locally.',
+                ]);
+            }
+
+            if ($subscription->plan_id === $plan->id) {
+                throw ValidationException::withMessages(['plan_id' => 'The tenant is already on this plan.']);
+            }
+
+            $fromPlan = $subscription->plan()->firstOrFail();
+            $subscription->update(['plan_id' => $plan->id]);
+            $tenant->update(['plan_id' => $plan->id]);
+
+            $this->auditLogger->record(
+                action: 'platform.subscription.plan_changed',
+                data: [
+                    'tenant_id' => $tenant->id,
+                    'subscription_id' => $subscription->id,
+                    'from_plan' => ['id' => $fromPlan->id, 'slug' => $fromPlan->slug],
+                    'to_plan' => ['id' => $plan->id, 'slug' => $plan->slug],
+                    'reason' => $reason,
+                ],
+                subjectType: Subscription::class,
+                subjectId: $subscription->id,
+                actorUserId: $actor->id,
+                platform: true,
+            );
+
+            return $subscription->fresh(['plan', 'tenant']);
         });
     }
 

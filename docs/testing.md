@@ -51,7 +51,28 @@ U4 is **COMPLETE + VALIDATED LOCAL**. Validation includes the focused Platform P
 (3 passed) and the full E2E suite (45 passed) after a fresh `e2e:setup`. The full PHP suite was
 attempted but is currently blocked by the existing 128 MB CLI memory limit in
 `DocxTextExtractorTest.php:165`; the focused U4 Feature suite passes (6 tests, 61 assertions).
-U5 remains **NOT STARTED**.
+
+### FASE 36 U5 - Subscription administration and usage visibility
+
+Platform subscription administration is restricted to `super_admin` through the existing
+platform boundary. The index, detail, usage and impact preview are read-only except for the
+explicit local plan-change action. Changes require an active plan, a non-empty reason, reject
+same-plan changes, block provider-managed subscriptions, update the canonical subscription and
+the denormalized tenant plan inside a transaction, and write a global audit entry. No Stripe
+network operation, cancellation, usage reset, quota override or tenant context is introduced.
+
+U5 is **COMPLETE + VALIDATED LOCAL**. Validation includes the focused U5 Feature suite (4 tests,
+64 assertions), full backend (2628 passed, 15 skipped, 7785 assertions), Vitest (595 passed),
+PHPStan, Pint, typecheck, build, and a fresh full E2E suite (47 passed). The logout redirect was
+also corrected to use HTTP 303 after the POST so the landing page receives unauthenticated
+Inertia props consistently.
+
+Focused tests:
+
+```bash
+php -d memory_limit=512M vendor/bin/pest tests/Feature/Platform/PlatformSubscriptionsTest.php
+npx playwright test tests/e2e/platform/subscriptions.spec.ts
+```
 
 Focused tests:
 

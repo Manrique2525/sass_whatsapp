@@ -2,6 +2,17 @@
 
 Formato: problema → decisión → consecuencia. Fechadas y en orden cronológico.
 
+## ADR-131 · Platform subscription administration boundary (FASE 36 U5)
+
+- **Estado**: Aceptado · FASE 36 U5
+- **Decisión**: La administración de suscripciones desde Platform Admin queda limitada a
+  `super_admin`, con consultas cross-tenant explícitas y un único caso de uso para cambios de
+  plan local. El cambio exige razón, plan activo y bloqueo de suscripciones gestionadas por el
+  proveedor; actualiza la suscripción canónica y el cache `tenants.plan_id` dentro de una
+  transacción y registra auditoría global.
+- **Fuera de alcance**: llamadas Stripe, cancelación, reset de usage, overrides de cuotas y
+  selección de tenant. Usage y preview son siempre read-only.
+
 ## ADR-130 · Dedicated Platform Administration Boundary (FASE 36 U2)
 
 - **Estado**: Aceptado · FASE 36 U2

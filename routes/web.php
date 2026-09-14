@@ -18,6 +18,7 @@ use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\Platform\PlatformCustomerController;
 use App\Http\Controllers\Platform\PlatformDashboardController;
 use App\Http\Controllers\Platform\PlatformPlanController;
+use App\Http\Controllers\Platform\PlatformSubscriptionController;
 use App\Http\Controllers\PublicSeoController;
 use App\Http\Controllers\Settings\AnalyticsSettingsController;
 use App\Http\Controllers\Settings\BillingSettingsController;
@@ -110,6 +111,11 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/plans/{plan}', [PlatformPlanController::class, 'show'])->name('platform.plans.show');
         Route::get('/plans/{plan}/edit', [PlatformPlanController::class, 'edit'])->name('platform.plans.edit');
         Route::patch('/plans/{plan}', [PlatformPlanController::class, 'update'])->name('platform.plans.update');
+        Route::get('/subscriptions', [PlatformSubscriptionController::class, 'index'])->name('platform.subscriptions.index');
+        Route::get('/subscriptions/{subscription}', [PlatformSubscriptionController::class, 'show'])->name('platform.subscriptions.show');
+        Route::get('/customers/{tenant}/subscription/edit', [PlatformSubscriptionController::class, 'edit'])->name('platform.customers.subscription.edit');
+        Route::get('/customers/{tenant}/subscription/preview', [PlatformSubscriptionController::class, 'preview'])->name('platform.customers.subscription.preview');
+        Route::patch('/customers/{tenant}/subscription/plan', [PlatformSubscriptionController::class, 'updatePlan'])->name('platform.customers.subscription.plan');
     });
 
     Route::get('dashboard', DashboardController::class)
