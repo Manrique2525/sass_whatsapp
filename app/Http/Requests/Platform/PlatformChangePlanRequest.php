@@ -24,6 +24,7 @@ final class PlatformChangePlanRequest extends FormRequest
         return [
             'plan_id' => ['required', 'uuid'],
             'reason' => ['required', 'string', 'min:3', 'max:1000'],
+            'current_password' => ['required', 'current_password:web'],
         ];
     }
 }

@@ -73,6 +73,7 @@ final class HandleInertiaRequests extends Middleware
             ],
             'flash' => [
                 'status' => session('status'),
+                'recovery_codes' => session('recovery_codes'),
             ],
         ];
     }

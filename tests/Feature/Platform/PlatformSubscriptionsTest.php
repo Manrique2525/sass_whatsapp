@@ -29,7 +29,7 @@ function u5_platform_admin(): User
     $user = User::factory()->create();
     app(TenantRoleManager::class)->assignGlobalRole($user, UserRole::SuperAdmin);
 
-    return $user->fresh();
+    return authenticated_platform_admin($user);
 }
 
 function u5_subscription_fixture(bool $providerManaged = false): array
@@ -103,6 +103,7 @@ test('platform admin changes local plan through canonical service with reason, i
     $this->actingAs($admin)->patch('/platform/customers/'.$tenant->id.'/subscription/plan', [
         'plan_id' => $target->id,
         'reason' => 'Customer requested a controlled downgrade',
+        'current_password' => 'password',
     ])->assertRedirect('/platform/customers/'.$tenant->id);
 
     expect($subscription->fresh()->plan_id)->toBe($target->id)
@@ -123,14 +124,14 @@ test('platform plan changes reject same, inactive, missing reason, and provider-
     [$tenant, $subscription, , $target] = u5_subscription_fixture();
     $admin = u5_platform_admin();
 
-    $this->actingAs($admin)->patch('/platform/customers/'.$tenant->id.'/subscription/plan', ['plan_id' => $subscription->plan_id, 'reason' => 'No-op'])->assertSessionHasErrors('plan_id');
-    $this->actingAs($admin)->patch('/platform/customers/'.$tenant->id.'/subscription/plan', ['plan_id' => $target->id])->assertSessionHasErrors('reason');
+    $this->actingAs($admin)->patch('/platform/customers/'.$tenant->id.'/subscription/plan', ['plan_id' => $subscription->plan_id, 'reason' => 'No-op', 'current_password' => 'password'])->assertSessionHasErrors('plan_id');
+    $this->actingAs($admin)->patch('/platform/customers/'.$tenant->id.'/subscription/plan', ['plan_id' => $target->id, 'current_password' => 'password'])->assertSessionHasErrors('reason');
 
     $inactive = Plan::factory()->inactive()->create();
-    $this->actingAs($admin)->patch('/platform/customers/'.$tenant->id.'/subscription/plan', ['plan_id' => $inactive->id, 'reason' => 'Try inactive'])->assertSessionHasErrors('plan_id');
+    $this->actingAs($admin)->patch('/platform/customers/'.$tenant->id.'/subscription/plan', ['plan_id' => $inactive->id, 'reason' => 'Try inactive', 'current_password' => 'password'])->assertSessionHasErrors('plan_id');
 
     $subscription->update(['stripe_subscription_id' => 'sub_provider_123456']);
-    $this->actingAs($admin)->patch('/platform/customers/'.$tenant->id.'/subscription/plan', ['plan_id' => $target->id, 'reason' => 'Try provider managed'])->assertSessionHasErrors('plan_id');
+    $this->actingAs($admin)->patch('/platform/customers/'.$tenant->id.'/subscription/plan', ['plan_id' => $target->id, 'reason' => 'Try provider managed', 'current_password' => 'password'])->assertSessionHasErrors('plan_id');
     expect($subscription->fresh()->plan_id)->not->toBe($target->id);
 });
 
@@ -142,7 +143,7 @@ test('platform subscription operations enforce global authorization and transact
         $user = User::factory()->create();
         make_tenant_member($user, $tenant, $role);
         $this->actingAs($user)->get('/platform/subscriptions')->assertForbidden();
-        $this->actingAs($user)->patch('/platform/customers/'.$tenant->id.'/subscription/plan', ['plan_id' => $target->id, 'reason' => 'Unauthorized'])->assertForbidden();
+        $this->actingAs($user)->patch('/platform/customers/'.$tenant->id.'/subscription/plan', ['plan_id' => $target->id, 'reason' => 'Unauthorized', 'current_password' => 'password'])->assertForbidden();
     }
 
     $admin = u5_platform_admin();
@@ -151,7 +152,7 @@ test('platform subscription operations enforce global authorization and transact
     });
 
     $this->withoutExceptionHandling();
-    expect(fn () => $this->actingAs($admin)->patch('/platform/customers/'.$tenant->id.'/subscription/plan', ['plan_id' => $target->id, 'reason' => 'Rollback test']))
+    expect(fn () => $this->actingAs($admin)->patch('/platform/customers/'.$tenant->id.'/subscription/plan', ['plan_id' => $target->id, 'reason' => 'Rollback test', 'current_password' => 'password']))
         ->toThrow(RuntimeException::class);
     expect($subscription->fresh()->plan_id)->not->toBe($target->id)
         ->and($tenant->fresh()->plan_id)->toBe($subscription->plan_id);

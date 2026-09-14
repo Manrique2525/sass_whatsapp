@@ -27,7 +27,7 @@ function dashboard_platform_admin(): User
     $user = User::factory()->create();
     app(TenantRoleManager::class)->assignGlobalRole($user, UserRole::SuperAdmin);
 
-    return $user->fresh();
+    return authenticated_platform_admin($user);
 }
 
 function dashboard_plan(string $slug, bool $active = true): Plan

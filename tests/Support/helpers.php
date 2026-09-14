@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Application\Flows\Services\FlowEngine;
 use App\Application\Messages\Services\MessageService;
+use App\Application\Platform\Services\PlatformMfaService;
 use App\Domain\Billing\Enums\SubscriptionStatus;
 use App\Domain\Billing\Models\Plan;
 use App\Domain\Billing\Models\Subscription;
@@ -32,6 +33,23 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
+use OTPHP\TOTP;
+
+function authenticated_platform_admin(User $user): User
+{
+    $enrollment = app(PlatformMfaService::class)->beginEnrollment($user);
+    $totp = TOTP::createFromSecret($enrollment['secret']);
+    $totp->setPeriod(30);
+    $totp->setDigits(6);
+    $totp->setDigest('sha1');
+    app(PlatformMfaService::class)->confirmEnrollment($user, $totp->now());
+    test()->withSession([
+        'platform_mfa_verified_user_id' => $user->id,
+        'platform_mfa_verified_at' => now()->timestamp,
+    ]);
+
+    return $user->fresh();
+}
 
 function ai_enabled_tenant(array $attributes = []): Tenant
 {

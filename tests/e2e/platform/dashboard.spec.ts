@@ -10,7 +10,7 @@ test.describe('Platform Dashboard (FASE 36 U6)', () => {
     test.describe('super admin', () => {
         test.use({ storageState: `tests/e2e/.auth/${platformAdmin.storageKey}.json` });
 
-        test('can review global metrics and operational widgets', async ({ page }) => {
+    test('can review global metrics and operational widgets', async ({ page }) => {
             await page.goto('/platform', { waitUntil: 'domcontentloaded', timeout: 60_000 });
             await expect(page.getByRole('heading', { name: 'Operations overview' })).toBeVisible();
             await expect(page.getByText('Customers', { exact: true }).first()).toBeVisible();
@@ -22,6 +22,13 @@ test.describe('Platform Dashboard (FASE 36 U6)', () => {
             await page.getByRole('link', { name: 'Subscriptions', exact: true }).click();
             await expect(page).toHaveURL(/\/platform\/subscriptions$/);
         });
+
+        test('can review security status', async ({ page }) => {
+            await page.goto('/platform/security');
+            await expect(page.getByRole('heading', { name: 'Multi-factor authentication' })).toBeVisible();
+            await expect(page.getByText('MFA enabled', { exact: true })).toBeVisible();
+        });
+
     });
 
     test.describe('tenant admin', () => {

@@ -46,6 +46,7 @@ final class AuthenticatedSessionController extends Controller
         Auth::login($user, $request->boolean('remember'));
 
         $request->session()->regenerate();
+        $request->session()->forget(['platform_mfa_verified_user_id', 'platform_mfa_pending_secret']);
 
         return redirect()->intended(route('dashboard'));
     }
@@ -53,6 +54,8 @@ final class AuthenticatedSessionController extends Controller
     public function destroy(Request $request): RedirectResponse
     {
         Auth::guard('web')->logout();
+
+        $request->session()->forget(['platform_mfa_verified_user_id', 'platform_mfa_pending_secret']);
 
         $request->session()->invalidate();
 

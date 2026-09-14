@@ -15,6 +15,7 @@ const navigation = [
     { label: 'Customers', href: '/platform/customers' },
     { label: 'Plans', href: '/platform/plans' },
     { label: 'Subscriptions', href: '/platform/subscriptions' },
+    { label: 'Security', href: '/platform/security' },
 ];
 
 const isActive = (href: string): boolean => page.url === href || page.url.startsWith(`${href}/`);

@@ -23,7 +23,7 @@ function platform_plan_admin(): User
     $user = User::factory()->create();
     app(TenantRoleManager::class)->assignGlobalRole($user, UserRole::SuperAdmin);
 
-    return $user->fresh();
+    return authenticated_platform_admin($user);
 }
 
 function valid_platform_plan(string $slug = 'starter'): array
@@ -32,7 +32,7 @@ function valid_platform_plan(string $slug = 'starter'): array
         'slug' => $slug, 'name' => 'Starter', 'description' => 'Starter plan', 'is_active' => true,
         'price_monthly' => '12.00', 'price_yearly' => '120.00', 'stripe_price_id_monthly' => null,
         'stripe_price_id_yearly' => null, 'limits' => ['messages' => 100, 'ai_tokens' => 1000, 'contacts' => 50, 'flow_executions' => 10, 'users' => 3, 'knowledge_documents' => 2],
-        'features' => ['ai_enabled' => false], 'sort_order' => 1,
+        'features' => ['ai_enabled' => false], 'sort_order' => 1, 'current_password' => 'password',
     ];
 }
 

@@ -18,6 +18,7 @@ use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\Platform\PlatformCustomerController;
 use App\Http\Controllers\Platform\PlatformDashboardController;
 use App\Http\Controllers\Platform\PlatformPlanController;
+use App\Http\Controllers\Platform\PlatformSecurityController;
 use App\Http\Controllers\Platform\PlatformSubscriptionController;
 use App\Http\Controllers\PublicSeoController;
 use App\Http\Controllers\Settings\AnalyticsSettingsController;
@@ -100,7 +101,14 @@ Route::middleware('auth')->group(function (): void {
 
     Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 
-    Route::prefix('platform')->middleware(['verified', 'platform.admin'])->group(function (): void {
+    Route::prefix('platform')->middleware(['verified', 'platform.admin', 'platform.mfa'])->group(function (): void {
+        Route::get('/security', [PlatformSecurityController::class, 'show'])->name('platform.security');
+        Route::post('/security/enroll', [PlatformSecurityController::class, 'start'])->middleware('throttle:auth-password')->name('platform.security.enroll');
+        Route::post('/security/enroll/confirm', [PlatformSecurityController::class, 'confirm'])->middleware('throttle:auth-password')->name('platform.security.enroll.confirm');
+        Route::get('/security/challenge', [PlatformSecurityController::class, 'show'])->name('platform.security.challenge');
+        Route::post('/security/challenge', [PlatformSecurityController::class, 'challenge'])->middleware('throttle:auth-password')->name('platform.security.challenge.store');
+        Route::post('/security/disable', [PlatformSecurityController::class, 'disable'])->middleware('throttle:auth-password')->name('platform.security.disable');
+        Route::post('/security/recovery-codes', [PlatformSecurityController::class, 'regenerate'])->middleware('throttle:auth-password')->name('platform.security.recovery-codes');
         Route::get('/', PlatformDashboardController::class)->name('platform.index');
         Route::get('/dashboard', PlatformDashboardController::class)->name('platform.dashboard');
         Route::get('/customers', [PlatformCustomerController::class, 'index'])->name('platform.customers.index');

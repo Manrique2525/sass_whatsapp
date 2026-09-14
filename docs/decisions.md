@@ -1,5 +1,16 @@
 # Decisiones de arquitectura (ADRs)
 
+## ADR-133 · Platform administration MFA (FASE 36 U7)
+
+- **Estado**: Aceptado · FASE 36 U7
+- **Decisión**: Las credenciales globales viven en `platform_mfa_credentials`, fuera de cualquier
+  `TenantScope`. El secreto usa cast `encrypted`; los códigos de recuperación solo se guardan como
+  hashes. OTPHP se fija a SHA-1, 6 dígitos, 30 segundos y leeway de 30 segundos, con URI `otpauth`
+  local. La inscripción queda pendiente hasta validar TOTP.
+- **Seguridad**: El backoffice exige una marca de sesión server-side ligada al usuario y la elimina
+  al cerrar sesión. Recuperación usa transacción con `lockForUpdate`; desactivar/regenerar exige
+  contraseña actual y TOTP o recuperación. Auditoría global nunca contiene secretos.
+
 Formato: problema → decisión → consecuencia. Fechadas y en orden cronológico.
 
 ## ADR-132 · Platform global dashboard read boundary (FASE 36 U6)

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { USERS } from '../helpers/constants';
+import { PASSWORD, USERS } from '../helpers/constants';
 
 test.describe('Platform Subscriptions (FASE 36 U5)', () => {
     test.describe('super admin', () => {
@@ -16,6 +16,7 @@ test.describe('Platform Subscriptions (FASE 36 U5)', () => {
             await page.getByRole('option', { name: /E2E Checkout/ }).click();
             await expect(page.getByText('Impact preview', { exact: true })).toBeVisible();
             await page.getByLabel('Reason for change').fill('E2E administrative adjustment');
+            await page.getByLabel('Current password').fill(PASSWORD);
             page.once('dialog', (dialog) => dialog.accept());
             await page.getByRole('button', { name: 'Confirm plan change' }).click();
             await expect(page).toHaveURL(/\/platform\/customers\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1$/);

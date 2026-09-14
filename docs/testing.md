@@ -1,5 +1,13 @@
 # Testing
 
+## FASE 36 U7 - Platform Admin MFA
+
+Platform administration requires a server-session MFA assertion after login; remember-me never
+creates that assertion. Tests provision `platform_mfa_credentials` and set
+`platform_mfa_verified_user_id` when exercising protected backoffice pages. Coverage includes
+encrypted secrets, hashed one-time recovery codes, pending enrollment, TOTP leeway, challenge,
+logout, password-plus-factor disable/regeneration, and the global authorization boundary.
+
 ## FASE 36 U2 - Platform Admin boundary
 
 Platform Admin uses the existing global `super_admin` role through the dedicated
@@ -14,8 +22,8 @@ Focused test:
 php -d memory_limit=512M vendor/bin/pest tests/Feature/Platform/PlatformBoundaryTest.php
 ```
 
-U2 does not add migrations, global tenant queries, platform mutations, or MFA. MFA is
-required before production use of Platform Admin. Future sensitive platform mutations
+U2 does not add migrations, global tenant queries, or platform mutations. MFA is
+required before production use of Platform Admin. Sensitive platform mutations
 must use explicit platform application services, stricter rate limits where appropriate,
 and audit actor, action, subject, target tenant when applicable, request ID, IP, user
 agent, and reason.

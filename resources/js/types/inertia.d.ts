@@ -26,6 +26,7 @@ declare module '@inertiajs/core' {
         };
         flash: {
             status?: string;
+            recovery_codes?: string[];
         };
         errors: Record<string, string>;
     }

@@ -12,7 +12,7 @@ const form = useForm({
     is_active: props.plan?.is_active ?? true, price_monthly: props.plan?.price_monthly ?? '0.00', price_yearly: props.plan?.price_yearly ?? '0.00',
     stripe_price_id_monthly: props.plan?.stripe_price_id_monthly ?? '', stripe_price_id_yearly: props.plan?.stripe_price_id_yearly ?? '',
     limits: Object.fromEntries(categories.map((key) => [key, props.plan?.limits?.[key] ?? (props.mode === 'edit' ? null : 0)])),
-    features: { ai_enabled: props.plan?.features?.ai_enabled ?? false }, sort_order: props.plan?.sort_order ?? 0, reason: '',
+    features: { ai_enabled: props.plan?.features?.ai_enabled ?? false }, sort_order: props.plan?.sort_order ?? 0, reason: '', current_password: '',
 });
 const submit = (): void => { props.mode === 'create' ? form.post('/platform/plans') : form.patch(`/platform/plans/${props.plan?.id}`); };
 const error = (key: string): string | undefined => (form.errors as Record<string, string>)[key];
@@ -39,7 +39,8 @@ const setUnlimited = (category: string, event: Event): void => {
             </section>
              <section class="app-card p-6"><h2 class="text-lg font-semibold">Limits</h2><p class="mt-1 text-sm text-[#60766a]">Changes affect all active and past-due subscribers on this plan. Existing data is never deleted.</p><div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><label v-for="category in categories" :key="category"><span class="app-label">{{ labels[category] }}</span><input v-model="form.limits[category]" type="number" min="0" class="app-input" :required="form.limits[category] !== null" :disabled="props.plan?.slug === 'free' || form.limits[category] === null" /><span class="mt-2 flex items-center gap-2 text-xs text-[#60766a]"><input type="checkbox" :checked="form.limits[category] === null" :disabled="props.plan?.slug === 'free'" @change="setUnlimited(category, $event)" /> Unlimited</span></label></div></section>
             <section class="app-card flex items-center justify-between gap-4 p-6"><div><h2 class="text-lg font-semibold">AI feature</h2><p class="mt-1 text-sm text-[#60766a]">The only configurable feature entitlement is `ai_enabled`.</p></div><label class="flex items-center gap-3"><input v-model="form.features.ai_enabled" type="checkbox" class="h-5 w-5 rounded border-[#b9cabe] text-[#0b8f5a]" /><span class="text-sm font-medium">AI enabled</span></label></section>
-             <label v-if="props.mode === 'edit'"><span class="app-label">Reason for change</span><textarea v-model="form.reason" class="app-input min-h-20" placeholder="Required for pricing, feature, limit, or status changes." /><p class="app-error">{{ error('reason') }}</p></label>
+              <label v-if="props.mode === 'edit'"><span class="app-label">Reason for change</span><textarea v-model="form.reason" class="app-input min-h-20" placeholder="Required for pricing, feature, limit, or status changes." /><p class="app-error">{{ error('reason') }}</p></label>
+              <label v-if="props.mode === 'edit'"><span class="app-label">Current password</span><input v-model="form.current_password" type="password" autocomplete="current-password" class="app-input" required /><p class="app-error">{{ error('current_password') }}</p></label>
              <div class="flex justify-end"><button type="submit" class="app-button app-button--primary" :disabled="form.processing">{{ props.mode === 'create' ? 'Create plan' : 'Save changes' }}</button></div>
         </form>
     </PlatformLayout>

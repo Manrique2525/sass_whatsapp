@@ -19,6 +19,7 @@ use App\Domain\Messages\Models\Message;
 use App\Domain\Tenants\Enums\TenantStatus;
 use App\Domain\Tenants\Models\Tenant;
 use App\Domain\Users\Enums\UserRole;
+use App\Domain\Users\Models\PlatformMfaCredential;
 use App\Domain\Users\Models\User;
 use App\Domain\WhatsApp\Enums\PhoneNumberStatus;
 use App\Domain\WhatsApp\Enums\WhatsAppAccountStatus;
@@ -27,6 +28,7 @@ use App\Infrastructure\Testing\E2EEnvironmentGuard;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 /**
  * Fixtures deterministas del entorno E2E (FASE 30, ADR-110).
@@ -115,6 +117,13 @@ final class E2ETenantSeeder extends Seeder
         );
 
         app(TenantRoleManager::class)->assignGlobalRole($user, UserRole::SuperAdmin);
+
+        PlatformMfaCredential::query()->updateOrCreate(['user_id' => $user->id], [
+            'secret' => 'JBSWY3DPEHPK3PXP',
+            'recovery_codes' => [Hash::make('E2E-RECOVERY-001'), Hash::make('E2E-RECOVERY-002')],
+            'enabled_at' => now(),
+            'recovery_codes_generated_at' => now(),
+        ]);
     }
 
     private function createE2EPaidPlan(): Plan

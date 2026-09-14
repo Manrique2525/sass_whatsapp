@@ -22,7 +22,7 @@ function u3_platform_admin(): User
     $user = User::factory()->create();
     app(TenantRoleManager::class)->assignGlobalRole($user, UserRole::SuperAdmin);
 
-    return $user->fresh();
+    return authenticated_platform_admin($user);
 }
 
 function u3_customer(string $name, string $ownerEmail, string $planId, string $subscriptionStatus = 'active'): Tenant
@@ -61,8 +61,8 @@ test('platform customer index is paginated, searchable, filtered, and bounded', 
         ->where('customers.0.owner.email', 'owner@acme.test')
         ->where('customers.0.subscription_status', 'active'));
 
-    // Auth/shared props plus the bounded list query; tenant count must not add N+1 queries.
-    expect(count(DB::getQueryLog()))->toBeLessThanOrEqual(5);
+    // Auth/shared props, MFA boundary, and the bounded list query; tenant count must not add N+1 queries.
+    expect(count(DB::getQueryLog()))->toBeLessThanOrEqual(6);
     DB::disableQueryLog();
 });
 

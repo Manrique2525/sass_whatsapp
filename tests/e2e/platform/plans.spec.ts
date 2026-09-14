@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { USERS } from '../helpers/constants';
+import { PASSWORD, USERS } from '../helpers/constants';
 
 test.describe('Platform Plans (FASE 36 U4)', () => {
     test.use({ storageState: `tests/e2e/.auth/${USERS.platformAdmin.storageKey}.json` });
@@ -25,6 +25,7 @@ test.describe('Platform Plans (FASE 36 U4)', () => {
 
         await page.getByRole('link', { name: 'Edit plan' }).click();
         await page.getByLabel('Reason for change').fill('Enable AI for E2E validation');
+        await page.getByLabel('Current password').fill(PASSWORD);
         await page.getByRole('checkbox', { name: 'AI enabled' }).check();
         await page.locator('section').filter({ hasText: 'Limits' }).locator('input[type="number"]').first().fill('250');
         await page.getByRole('button', { name: 'Save changes' }).click();

@@ -20,7 +20,7 @@ function make_platform_admin(): User
     $user = User::factory()->create();
     app(TenantRoleManager::class)->assignGlobalRole($user, UserRole::SuperAdmin);
 
-    return $user->fresh();
+    return authenticated_platform_admin($user);
 }
 
 test('guest cannot access the platform boundary', function (): void {
