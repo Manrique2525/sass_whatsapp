@@ -33,6 +33,43 @@ Production services are `web`, `app`, `worker-default`, `worker-knowledge`,
 `worker-analytics`, `scheduler` and `reverb`. The production Compose template exposes
 only the web listener; app/FPM, workers, scheduler and Reverb have no host ports.
 
+## Production Process Contract
+
+| Process | Beta count | Public | Memory contract | Scaling |
+|---|---:|---|---|---|
+| `web` (Nginx) | 1 | ingress only | container port `80`; host bind configurable | scale with app |
+| `app` (PHP-FPM) | 1 | no | `memory_limit=256M` baseline | independent |
+| `worker-default` | 1 | no | `256M` baseline; timeout `120s` | by customer-facing queue lag |
+| `worker-knowledge` | 1 | no | `512M` recommended for document work | by document backlog/duration |
+| `worker-analytics` | 1 | no | `256M` baseline; timeout `300s` | by batch backlog/duration |
+| `scheduler` | 1 | no | `256M` baseline | exactly one logical replica |
+| `reverb` | 1 | ingress WebSocket path only | `256M` baseline | by active connections |
+
+The managed-platform contract routes ingress to the Nginx container on port `80` and
+requires it to listen on `0.0.0.0` inside the container. `WEB_BIND_HOST` and `WEB_PORT`
+only configure the host-level Compose mapping and are not required by a managed
+platform, whose service port mapping supplies the external `PORT` contract.
+
+The public surface is the ingress/web service only. PHP-FPM, workers, scheduler,
+Reverb, PostgreSQL and Redis remain private. Reverb is reached through Nginx `/app/`
+and is not directly published.
+
+Production must run exactly one `scheduler` replica. Every current scheduled command
+uses `withoutOverlapping()`; `onOneServer()` is not used. This is safe only while the
+scheduler remains a single logical replica. Horizontal scheduler scaling requires a
+separate shared-leader-lock decision and verification.
+
+The production worker commands are:
+
+- `default`: `queue:work redis --queue=default --sleep=1 --tries=3 --timeout=120`.
+- `knowledge`: `queue:work redis --queue=knowledge --sleep=1 --tries=3 --timeout=300`.
+- `analytics`: `queue:work redis --queue=analytics --sleep=1 --tries=3 --timeout=300`.
+
+Deployments use graceful worker restart/drain and `queue:restart`; no worker runs
+document extraction on the customer-facing `default` queue. Failed-job inspection
+must use the aggregate, payload-redacting command documented in
+`worker-recovery.md`.
+
 ## Disposable Validation
 
 Use only the local rehearsal file. It provides isolated PostgreSQL, authenticated
@@ -108,6 +145,49 @@ origin. No real browser/provider connection was used.
 - The rehearsal wrote/read a private MinIO object, denied anonymous access, failed safely while MinIO was stopped, and recovered after restart.
 - Production SMTP is required by the validator. Mailpit is allowed only in the rehearsal; verification/reset mail was sent to disposable Mailpit.
 - Redis is authenticated and separates cache DB 1 from default/queue DB 0, with explicit prefixes. Reverb horizontal scaling remains disabled until a later topology decision.
+
+## Upload Limit Matrix
+
+| Layer/use | Current limit | Source | Status |
+|---|---:|---|---|
+| Knowledge Laravel request/validator | `10 MB` | `config/knowledge.php` | current application policy |
+| PHP `upload_max_filesize` | `20M` | `docker/php/php.ini` | above Knowledge policy |
+| PHP `post_max_size` | `20M` | `docker/php/php.ini` | above Knowledge policy |
+| Nginx `client_max_body_size` | `25m` | `docker/nginx/production.conf` | above PHP policy |
+| WhatsApp non-document media | `10 MB` transport cap | `config/whatsapp.php` | current global cap |
+| WhatsApp document media | `100 MB` transport cap | `config/whatsapp.php` | current document cap |
+| Object storage | provider/bucket policy | external dependency | must be verified before activation |
+
+The repository currently has no single application limit of `20 MB` for Knowledge;
+the implementation is `10 MB`, despite the earlier infrastructure blueprint's
+general-upload wording. This phase does not change the product limit. Owner decision
+is required between keeping Knowledge at `20 MB` as the intended general policy,
+raising it, or maintaining separate Knowledge and WhatsApp media limits. The decision
+affects memory, worker concurrency, object storage, request timeout, malware scanning
+and user experience.
+
+## Environment And Security Contract
+
+For Free Beta, core required variables are `APP_ENV`, `APP_DEBUG`, `APP_KEY`, `APP_URL`,
+`APP_IMAGE`, `WEB_IMAGE`, `LOG_CHANNEL`, database variables, Redis variables,
+`CACHE_STORE`, `QUEUE_CONNECTION`, session security variables, `TRUSTED_PROXIES`,
+Reverb variables, S3 variables and SMTP variables. `LOG_CHANNEL=json` sends structured
+JSON to stderr; local file logging remains available through local channels.
+
+Meta variables are conditional on WhatsApp activation. OpenAI variables are disabled
+unless explicitly approved and entitled. Stripe variables are disabled for Free-only
+beta. Sentry variables are optional/recommended and DSN-gated. Production has no
+default secrets, does not generate `APP_KEY`, and does not run migrations on startup.
+
+Set `TRUSTED_PROXIES` to the ingress's explicit IP/CIDR ranges. Do not use `*` without
+documented single-load-balancer justification. HTTPS, `SESSION_SECURE_COOKIE=true`,
+HttpOnly cookies and the configured SameSite policy are required. Reverb origins must
+be explicit; wildcard production origins are rejected.
+
+Production images are immutable: no source bind mounts, runtime Composer/npm install,
+runtime build, or automatic migrations. `APP_IMAGE` and `WEB_IMAGE` are separate
+runtime and Nginx image references built from the Dockerfile targets `runtime` and
+`web`; deploy immutable Git-SHA or release tags, never only `latest`.
 
 ## Capacity And Pooling
 

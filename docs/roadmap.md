@@ -1,6 +1,6 @@
 # Roadmap
 
-Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global) · FASE 32 COMPLETADA/PUBLICADA (U1: deterministic message ordering) · FASE 33 COMPLETE + VALIDATED + PUBLISHED (U1-U6) · FASE 34 COMPLETE + VALIDATED + PUBLISHED (U1-U6) · FASE 36 COMPLETE + VALIDATED + PUBLISHED (U1-U8) · FASE 37 COMPLETE + VALIDATED + PUBLISHED (FREE CONDITIONAL GO / PAID NO-GO)**.
+Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA · FASE 26 COMPLETADA · FASE 27 COMPLETADA · FASE 28 COMPLETADA · FASE 29 COMPLETADA · FASE 30 COMPLETADA (U1/U2/U3/U4/U5-A/U5-B/U5-C/U5-D/U5-E COMPLETADAS) · FASE 31 COMPLETA LOCALMENTE (U1/U2/U3/U4/U5/U6; pendiente revisión global) · FASE 32 COMPLETADA/PUBLICADA (U1: deterministic message ordering) · FASE 33 COMPLETE + VALIDATED + PUBLISHED (U1-U6) · FASE 34 COMPLETE + VALIDATED + PUBLISHED (U1-U6) · FASE 36 COMPLETE + VALIDATED + PUBLISHED (U1-U8) · FASE 37 COMPLETE + VALIDATED + PUBLISHED (FREE CONDITIONAL GO / PAID NO-GO) · FASE 39 COMPLETE + VALIDATED LOCAL (Production Contract Hardening)**.
 
 ## Fases
 
@@ -45,6 +45,7 @@ Estado general: **FASE 23 COMPLETADA · FASE 24 COMPLETADA · FASE 25 COMPLETADA
 | 36 | Platform Administration & SaaS Backoffice (U1: Architecture Discovery, U2: Platform Boundary & Authorization, U3: Customers/Tenants read-only management, U4: Plans catalog CRUD, U5: Subscription administration and usage visibility, U6: Global dashboard and operational overview, U7: Platform Admin MFA security hardening, U8: Final integration and publication readiness) | COMPLETE + VALIDATED + PUBLISHED (U1-U8) |
 | 37 | Functional manual QA & commercial readiness | COMPLETE + VALIDATED + PUBLISHED (Free private beta CONDITIONAL GO; paid beta NO-GO) |
 | 38 | Demo completa | PENDIENTE |
+| 39 | Production Contract Hardening | COMPLETE + VALIDATED LOCAL (no publicada) |
 
 ## Definición de DONE
 

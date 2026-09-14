@@ -52,6 +52,7 @@ x-runtime-env: &runtime-env
   MAIL_MAILER: smtp
   MAIL_HOST: smtp-u3
   MAIL_PORT: "1025"
+  MAIL_SCHEME: tls
   MAIL_FROM_ADDRESS: no-reply@u3-runtime.local
   MAIL_FROM_NAME: WhatsApp SaaS U3
   SENTRY_LARAVEL_DSN: ""

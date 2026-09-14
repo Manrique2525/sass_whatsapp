@@ -1,5 +1,19 @@
 # Decisiones de arquitectura (ADRs)
 
+## ADR-134 · Production upload limit decision pending (FASE 39)
+
+- **Estado**: Pendiente de decisión del propietario.
+- **Problema**: La implementación actual limita los uploads de Knowledge a `10 MB`,
+  PHP permite `20M`, Nginx `25m` y la descarga de documentos de WhatsApp admite hasta
+  `100 MB`. La política anterior de infraestructura describió `20 MB` como límite
+  general sin reflejar el valor efectivo de Knowledge.
+- **Opciones**: mantener Knowledge en `20 MB` como política general prevista; elevar
+  Knowledge; o mantener límites separados para Knowledge y media documental de
+  WhatsApp.
+- **Consecuencia**: La decisión cambia memoria y concurrencia del worker `knowledge`,
+  almacenamiento, tiempos de request/procesamiento, malware scanning y UX. No se
+  cambia ningún límite en FASE 39 sin aprobación explícita.
+
 ## ADR-133 · Platform administration MFA (FASE 36 U7)
 
 - **Estado**: Aceptado · FASE 36 U7
