@@ -1,5 +1,20 @@
 # Testing
 
+## FASE 36 U8 - Final integration and publication readiness
+
+The final FASE 36 regression validates all 51 Playwright journeys with one worker and no retries.
+The onboarding plan assertion waits for the existing asynchronous subscription read; it does not
+alter product copy or introduce an E2E-only plan. The canonical plan remains `plans.slug = free`
+with the catalog name `Free`. Platform MFA session verification normalizes the persisted user ID
+type before comparison, preserving the server-side challenge contract.
+
+Final evidence:
+
+- `php -d memory_limit=512M vendor/bin/pest`: 2636 passed, 15 skipped.
+- `npm run test`: 597 passed.
+- `npm run test:e2e`: 51 passed with `--workers=1 --retries=0`.
+- `phpstan`, Pint, typecheck, build, Composer validation and Composer audit pass.
+
 ## FASE 36 U7 - Platform Admin MFA
 
 Platform administration requires a server-session MFA assertion after login; remember-me never

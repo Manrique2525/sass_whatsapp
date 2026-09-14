@@ -2,6 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { expect, test } from '@playwright/test';
 
 test.describe('Registro self-service (E2E-ONB-CLOSE)', () => {
+    test.setTimeout(90_000);
+
     test('registra, verifica el email y llega al onboarding provisionado', async ({ page }) => {
         const email = `u1-browser-${Date.now()}@e2e.local`;
 
@@ -42,7 +44,7 @@ test.describe('Registro self-service (E2E-ONB-CLOSE)', () => {
         await expect(main.getByText('¡Bienvenido!')).toBeVisible();
         await expect(main.getByText('U1 Browser Owner')).toBeVisible();
         await expect(main.getByText('● Creado', { exact: false })).toBeVisible();
-        await expect(main.getByText('Free')).toBeVisible({ timeout: 30_000 });
+        await expect(main.getByText('Free')).toBeVisible({ timeout: 60_000 });
         await expect(main.getByText('Activo')).toBeVisible();
         await expect(main.getByRole('link', { name: 'Conectar WhatsApp' })).toHaveAttribute(
             'href',

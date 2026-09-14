@@ -57,7 +57,7 @@ Formato: problema → decisión → consecuencia. Fechadas y en orden cronológi
   rutas tenant, `TenantMiddleware`, `BelongsToTenant`, billing, planes, suscripciones y usage no
   cambian. No se auditan simples page views en U2; toda mutación futura debe registrar actor,
   acción, subject, `tenant_id` cuando aplique, request ID, IP, user agent y razón para acciones
-  sensibles. MFA queda pendiente y es obligatoria antes de uso productivo.
+  sensibles. MFA es obligatoria para el acceso Platform Admin y se implementa en U7.
 
 ## ADR-129 · Topología runtime y recuperación de workers (FASE 34 U3)
 
@@ -3918,3 +3918,15 @@ una pantalla de upload/search en el frontend.
   - La migración 2 requiere una ventana controlada y `lock_timeout`; un retry limpio es preferible a esperar indefinidamente.
   - El rollback destructivo no es la corrección por defecto; se prefiere forward fix o restore aislado cuando ya existen datos.
   - El procedimiento completo, responsabilidades y evidencias quedan en los dos runbooks de `docs/runbooks/`.
+## ADR-134 - FASE 36 final integration closure
+
+- **Estado**: Aceptado - FASE 36 U8
+- **Contexto**: La regresion final de Playwright dejaba el onboarding esperando el plan mientras
+  la lectura asincrona de la suscripcion terminaba. La investigacion tambien encontro que el
+  challenge MFA podia volver al challenge cuando el tipo del ID de usuario persistido diferia del
+  tipo del modelo autenticado.
+- **Decision**: Mantener el catalogo canonico del plan `free` y ampliar unicamente el timeout del
+  journey E2E de onboarding para cubrir su lectura asincrona. Normalizar a string ambos IDs en la
+  comparacion del assertion MFA; no se relaja la autorizacion ni se mueve el challenge a cliente.
+- **Consecuencias**: El producto no recibe copy o ramas especificas para E2E. La suite final queda
+  reproducible con estado E2E fresco, y el acceso Platform conserva MFA server-side.
