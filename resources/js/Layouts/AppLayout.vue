@@ -27,13 +27,13 @@ const navigation = computed(() => [
     { label: 'Flujos', href: '/settings/flows', permission: 'flows.view' },
     { label: 'FAQs', href: '/settings/faq', permission: 'faqs.view' },
     { label: 'Leads', href: '/settings/leads', permission: 'leads.view' },
-    { label: 'Knowledge', href: '/settings/knowledge', permission: 'knowledge.view' },
+    { label: 'Conocimiento', href: '/settings/knowledge', permission: 'knowledge.view' },
     { label: 'Contactos', href: '/settings/contacts', permission: 'contacts.view' },
-    { label: 'Analytics', href: '/settings/analytics', permission: 'analytics.view' },
+    { label: 'Analítica', href: '/settings/analytics', permission: 'analytics.view' },
     { label: 'Usuarios', href: '/settings/users', permission: 'users.view' },
     { label: 'Perfil de negocio', href: '/settings/business-profile', permission: 'business_profile.view' },
     { label: 'WhatsApp', href: '/settings/whatsapp', permission: 'whatsapp.view' },
-    { label: 'Billing', href: '/settings/billing', permission: 'billing.view' },
+    { label: 'Facturación', href: '/settings/billing', permission: 'billing.view' },
 ].filter((item) => item.permission === null || can(item.permission)));
 
 const isActive = (href: string): boolean => page.url === href || page.url.startsWith(`${href}/`);

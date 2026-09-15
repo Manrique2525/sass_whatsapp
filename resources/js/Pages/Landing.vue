@@ -3,9 +3,13 @@ import { Head, Link, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import MarketingLayout from '@/Layouts/MarketingLayout.vue';
 import Reveal from '@/Components/Marketing/Reveal.vue';
+import PublicPricing from '@/Components/Marketing/PublicPricing.vue';
 import { trackMarketingEvent } from '@/features/marketing/marketingAnalytics';
 
-interface FreePlan {
+interface PublicPlan {
+    description: string | null;
+    priceMonthly: string;
+    priceYearly: string;
     name: string;
     slug: string;
     limits: {
@@ -18,15 +22,17 @@ interface FreePlan {
     aiIncluded: boolean;
 }
 
-const props = defineProps<{ freePlan: FreePlan }>();
+const pageProps = defineProps<{ plans: PublicPlan[] }>();
+const freePlan = computed(() => pageProps.plans.find((plan) => plan.slug === 'free') ?? pageProps.plans[0]);
+const props = { plans: pageProps.plans, get freePlan() { return freePlan.value; } };
 const page = usePage();
 const isAuthenticated = computed(() => Boolean(page.props.auth.user));
 const planLimitItems = computed(() => [
-    { limit: props.freePlan.limits.messages, label: 'mensajes' },
-    { limit: props.freePlan.limits.contacts, label: 'contactos' },
-    { limit: props.freePlan.limits.flowExecutions, label: 'ejecuciones de flows' },
-    { limit: props.freePlan.limits.users, label: 'usuarios' },
-    { limit: props.freePlan.limits.knowledgeDocuments, label: 'documentos de conocimiento' },
+    { limit: freePlan.value?.limits.messages, label: 'mensajes' },
+    { limit: freePlan.value?.limits.contacts, label: 'contactos' },
+    { limit: freePlan.value?.limits.flowExecutions, label: 'ejecuciones de flows' },
+    { limit: freePlan.value?.limits.users, label: 'usuarios' },
+    { limit: freePlan.value?.limits.knowledgeDocuments, label: 'documentos de conocimiento' },
 ]);
 
 const benefits = [
@@ -166,6 +172,7 @@ const faqs = [
         <section id="faq" class="bg-[#f7f8f3] py-20 sm:py-28"><div class="mx-auto max-w-3xl px-5 sm:px-8"><Reveal><p class="eyebrow">Preguntas frecuentes</p><h2 class="section-title">Lo importante, sin letra pequeña.</h2></Reveal><div class="mt-10 divide-y divide-[#dce5dd] border-y border-[#dce5dd]"><details v-for="faq in faqs" :key="faq[0]" class="group py-5"><summary class="flex cursor-pointer list-none items-center justify-between gap-5 text-base font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-[#10261f]">{{ faq[0] }}<span class="text-xl font-normal text-[#0b8f5a] transition group-open:rotate-45">+</span></summary><p class="max-w-2xl pt-3 text-sm leading-6 text-[#64756d]">{{ faq[1] }}</p></details></div></div></section>
 
          <section class="bg-[#10261f] px-5 py-20 text-center text-white sm:px-8 sm:py-28"><Reveal><p class="eyebrow eyebrow--dark">Tu próxima conversación empieza aquí</p><h2 class="mx-auto mt-4 max-w-3xl text-4xl font-semibold tracking-[-0.055em] sm:text-6xl">Haz que cada mensaje cuente.</h2><p class="mx-auto mt-5 max-w-lg text-base leading-7 text-[#a9beb0]">Organiza tu atención, automatiza lo que puedas y deja que tu equipo se concentre en lo que importa.</p><Link v-if="isAuthenticated" href="/dashboard" class="mt-9 inline-flex items-center gap-3 rounded-full bg-[#b7f36b] px-7 py-3.5 text-sm font-bold text-[#10261f] transition hover:-translate-y-0.5 hover:bg-[#c9fa8c] focus:outline-none focus:ring-2 focus:ring-[#b7f36b] focus:ring-offset-2 focus:ring-offset-[#10261f]" @click="trackMarketingEvent('landing_cta_clicked', { location: 'final_cta', destination: ctaDestination })">Ir al panel <span aria-hidden="true">↗</span></Link><Link v-else href="/register" class="mt-9 inline-flex items-center gap-3 rounded-full bg-[#b7f36b] px-7 py-3.5 text-sm font-bold text-[#10261f] transition hover:-translate-y-0.5 hover:bg-[#c9fa8c] focus:outline-none focus:ring-2 focus:ring-[#b7f36b] focus:ring-offset-2 focus:ring-offset-[#10261f]" @click="trackMarketingEvent('landing_cta_clicked', { location: 'final_cta', destination: ctaDestination })">Empezar gratis <span aria-hidden="true">↗</span></Link></Reveal></section>
+        <PublicPricing :plans="pageProps.plans" :is-authenticated="isAuthenticated" />
     </MarketingLayout>
 </template>
 

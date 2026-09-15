@@ -12,15 +12,16 @@ final class LandingController extends Controller
 {
     public function __invoke(): Response
     {
-        $plan = Plan::query()
-            ->where('slug', 'free')
+        $plans = Plan::query()
             ->where('is_active', true)
-            ->firstOrFail();
-
-        return Inertia::render('Landing', [
-            'freePlan' => [
-                'name' => $plan->name,
+            ->orderBy('sort_order')
+            ->get()
+            ->map(static fn (Plan $plan): array => [
                 'slug' => $plan->slug,
+                'name' => $plan->name,
+                'description' => $plan->description,
+                'priceMonthly' => (string) $plan->price_monthly,
+                'priceYearly' => (string) $plan->price_yearly,
                 'limits' => [
                     'messages' => $plan->getLimit('messages'),
                     'contacts' => $plan->getLimit('contacts'),
@@ -29,7 +30,12 @@ final class LandingController extends Controller
                     'knowledgeDocuments' => $plan->getLimit('knowledge_documents'),
                 ],
                 'aiIncluded' => $plan->hasFeature('ai_enabled'),
-            ],
+            ])
+            ->values()
+            ->all();
+
+        return Inertia::render('Landing', [
+            'plans' => $plans,
         ]);
     }
 }

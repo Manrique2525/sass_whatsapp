@@ -83,6 +83,7 @@ const trackCta = (location: 'navbar', destination: 'register' | 'dashboard'): vo
                 <div id="marketing-menu" class="hidden items-center gap-8 lg:flex">
                     <a href="#funciones" class="marketing-nav-link">Funciones</a>
                     <a href="#plan" class="marketing-nav-link">Plan</a>
+                    <a href="#precios" class="marketing-nav-link">Precios</a>
                     <a href="#como-funciona" class="marketing-nav-link">Cómo funciona</a>
                     <a href="#seguridad" class="marketing-nav-link">Seguridad</a>
                     <a href="#faq" class="marketing-nav-link">FAQ</a>
@@ -101,6 +102,7 @@ const trackCta = (location: 'navbar', destination: 'register' | 'dashboard'): vo
                 <div class="mx-auto flex max-w-7xl flex-col gap-4">
                     <a href="#funciones" class="marketing-mobile-link" @click="closeMenu(false)">Funciones</a>
                     <a href="#plan" class="marketing-mobile-link" @click="closeMenu(false)">Plan</a>
+                    <a href="#precios" class="marketing-mobile-link" @click="closeMenu(false)">Precios</a>
                     <a href="#como-funciona" class="marketing-mobile-link" @click="closeMenu(false)">Cómo funciona</a>
                     <a href="#seguridad" class="marketing-mobile-link" @click="closeMenu(false)">Seguridad</a>
                     <a href="#faq" class="marketing-mobile-link" @click="closeMenu(false)">FAQ</a>
@@ -129,7 +131,7 @@ const trackCta = (location: 'navbar', destination: 'register' | 'dashboard'): vo
                     <p class="mt-3 max-w-sm text-sm leading-6 text-[#64756d]">Conversaciones más claras. Equipos más rápidos. Negocios que no dejan oportunidades en visto.</p>
                 </div>
                 <div class="grid gap-6 text-sm sm:grid-cols-3 sm:gap-10">
-                    <div><p class="font-semibold text-[#10261f]">Producto</p><div class="mt-3 grid gap-2 text-[#64756d]"><a href="#funciones" class="hover:text-[#0b8f5a]">Funciones</a><a href="#seguridad" class="hover:text-[#0b8f5a]">Seguridad</a><a href="#faq" class="hover:text-[#0b8f5a]">FAQ</a></div></div>
+                    <div><p class="font-semibold text-[#10261f]">Producto</p><div class="mt-3 grid gap-2 text-[#64756d]"><a href="#funciones" class="hover:text-[#0b8f5a]">Funciones</a><a href="#precios" class="hover:text-[#0b8f5a]">Precios</a><a href="#seguridad" class="hover:text-[#0b8f5a]">Seguridad</a><a href="#faq" class="hover:text-[#0b8f5a]">FAQ</a></div></div>
                     <div><p class="font-semibold text-[#10261f]">Cuenta</p><div class="mt-3 grid gap-2 text-[#64756d]"><Link v-if="page.props.auth.user" href="/dashboard" class="hover:text-[#0b8f5a]">Ir al panel</Link><template v-else><Link href="/register" class="hover:text-[#0b8f5a]">Crear cuenta</Link><Link href="/login" class="hover:text-[#0b8f5a]">Iniciar sesión</Link></template></div></div>
                     <div><p class="font-semibold text-[#10261f]">Legal</p><div class="mt-3 grid gap-2 text-[#64756d]"><Link href="/privacy" class="hover:text-[#0b8f5a]">Privacidad</Link><Link href="/terms" class="hover:text-[#0b8f5a]">Términos</Link></div></div>
                 </div>
