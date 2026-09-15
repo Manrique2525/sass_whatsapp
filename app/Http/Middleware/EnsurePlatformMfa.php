@@ -29,8 +29,8 @@ final class EnsurePlatformMfa
         }
         $verifiedAt = $request->session()->get('platform_mfa_verified_at');
         $verified = (string) $request->session()->get('platform_mfa_verified_user_id') === (string) $user->id
-            && is_int($verifiedAt)
-            && Carbon::createFromTimestamp($verifiedAt)->greaterThan(now()->subMinutes(15));
+            && is_numeric($verifiedAt)
+            && Carbon::createFromTimestamp((int) $verifiedAt)->greaterThan(now()->subMinutes(15));
 
         if (! $verified) {
             return redirect()->route('platform.security.challenge');

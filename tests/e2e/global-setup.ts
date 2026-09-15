@@ -38,7 +38,7 @@ export default async function globalSetup(): Promise<void> {
 
             if (key === 'platformAdmin') {
                 await page.goto('/platform/security/challenge', { waitUntil: 'domcontentloaded' });
-                await page.getByRole('textbox', { name: 'TOTP or recovery code', exact: true }).fill('E2E-RECOVERY-001');
+                await page.getByPlaceholder('TOTP or recovery code', { exact: true }).fill('E2E-RECOVERY-001');
                 await page.getByRole('button', { name: 'Continue' }).click();
                 await page.waitForURL('**/platform/dashboard', { timeout: 60_000, waitUntil: 'commit' });
             }

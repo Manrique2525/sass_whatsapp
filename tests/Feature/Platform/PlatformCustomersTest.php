@@ -9,8 +9,10 @@ use App\Domain\Users\Enums\UserRole;
 use App\Domain\Users\Models\User;
 use App\Infrastructure\Tenancy\TenantContext;
 use Database\Seeders\RolesAndPermissionsSeeder;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
@@ -197,4 +199,83 @@ test('platform customer reads ignore stale tenant context', function (): void {
     } finally {
         TenantContext::clear();
     }
+});
+
+test('platform admin creates a Free customer with an owner and sends activation mail', function (): void {
+    Notification::fake();
+    $free = Plan::factory()->create(['slug' => 'free', 'name' => 'Free']);
+    $admin = u3_platform_admin();
+
+    $response = $this->actingAs($admin)->post('/platform/customers', [
+        'tenant_name' => 'Demo Barbería',
+        'owner_name' => 'Demo Owner',
+        'owner_email' => 'owner.demo@local.test',
+    ]);
+
+    $response->assertRedirect();
+    $owner = User::query()->where('email', 'owner.demo@local.test')->firstOrFail();
+    $tenant = Tenant::query()->where('name', 'Demo Barbería')->firstOrFail();
+
+    expect($tenant->tenantUsers()->where('user_id', $owner->id)->where('role', UserRole::Owner)->exists())->toBeTrue()
+        ->and(DB::table('subscriptions')->where('tenant_id', $tenant->id)->where('plan_id', $free->id)->where('status', 'active')->exists())->toBeTrue()
+        ->and($admin->tenantUsers()->where('tenant_id', $tenant->id)->exists())->toBeFalse()
+        ->and($owner->email_verified_at)->toBeNull();
+
+    Notification::assertSentTo($owner, VerifyEmail::class);
+    expect(DB::table('audit_logs')->where('action', 'platform.customer.created')->where('actor_user_id', $admin->id)->exists())->toBeTrue();
+});
+
+test('platform admin requires explicit confirmation before attaching an existing owner', function (): void {
+    Plan::factory()->create(['slug' => 'free', 'name' => 'Free']);
+    $admin = u3_platform_admin();
+    $owner = User::factory()->create(['email' => 'existing-owner@local.test']);
+
+    $this->actingAs($admin)->post('/platform/customers', [
+        'tenant_name' => 'Existing Owner Tenant',
+        'owner_name' => 'Existing Owner',
+        'owner_email' => $owner->email,
+    ])->assertSessionHasErrors('owner_email');
+
+    expect(Tenant::query()->where('name', 'Existing Owner Tenant')->exists())->toBeFalse();
+
+    $this->actingAs($admin)->post('/platform/customers', [
+        'tenant_name' => 'Existing Owner Tenant',
+        'owner_name' => 'Existing Owner',
+        'owner_email' => $owner->email,
+        'confirm_existing_owner' => true,
+    ])->assertRedirect();
+
+    expect($owner->fresh()->tenantUsers()->where('role', UserRole::Owner)->count())->toBe(1)
+        ->and(User::query()->where('email', $owner->email)->count())->toBe(1);
+});
+
+test('platform admin can suspend and reactivate a tenant without deleting data', function (): void {
+    $admin = u3_platform_admin();
+    $tenant = Tenant::factory()->create(['status' => 'active']);
+
+    $this->actingAs($admin)->post('/platform/customers/'.$tenant->id.'/suspend', [
+        'confirm' => true,
+        'reason' => 'Customer requested a temporary pause',
+    ])->assertRedirect();
+    expect($tenant->fresh()->status->value)->toBe('suspended');
+
+    $this->actingAs($admin)->post('/platform/customers/'.$tenant->id.'/reactivate', [
+        'confirm' => true,
+        'reason' => 'Customer is ready to resume',
+    ])->assertRedirect();
+    expect($tenant->fresh()->status->value)->toBe('active')
+        ->and(DB::table('audit_logs')->whereIn('action', ['platform.tenant.suspended', 'platform.tenant.reactivated'])->count())->toBe(2);
+});
+
+test('platform admin can repair a missing subscription with the canonical Free plan', function (): void {
+    $free = Plan::factory()->create(['slug' => 'free', 'name' => 'Free']);
+    $admin = u3_platform_admin();
+    $tenant = Tenant::factory()->create(['plan_id' => null]);
+
+    $this->actingAs($admin)->post('/platform/customers/'.$tenant->id.'/subscription/free', ['confirm' => true])->assertRedirect();
+
+    expect(DB::table('subscriptions')->where('tenant_id', $tenant->id)->where('plan_id', $free->id)->where('status', 'active')->exists())->toBeTrue();
+
+    $this->actingAs($admin)->post('/platform/customers/'.$tenant->id.'/subscription/free', ['confirm' => true])->assertRedirect();
+    expect(DB::table('subscriptions')->where('tenant_id', $tenant->id)->whereNull('deleted_at')->count())->toBe(1);
 });

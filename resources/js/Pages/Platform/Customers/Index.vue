@@ -96,7 +96,7 @@ const badgeClass = (value: string | null): string => ({
                 <h1 class="mt-2 text-3xl font-semibold tracking-[-0.04em]">Customers</h1>
                 <p class="mt-2 text-sm text-[#60766a]">A read-only view of every tenant in the platform.</p>
             </div>
-            <p class="text-sm text-[#71877b]" data-testid="customers-total">{{ props.pagination.total }} customers</p>
+            <div class="flex items-center gap-4"><p class="text-sm text-[#71877b]" data-testid="customers-total">{{ props.pagination.total }} customers</p><Link href="/platform/customers/create" class="app-button app-button--primary">Create customer</Link></div>
         </div>
 
         <section class="app-card mt-6 p-4 sm:p-5">

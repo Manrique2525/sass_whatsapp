@@ -43,7 +43,7 @@ final class ProvisionNewWorkspace
      * transacción orquestada por el controller para que el alta del usuario y
      * el alta del workspace sean atómicas.
      */
-    public function provision(User $user): Tenant
+    public function provision(User $user, ?string $workspaceName = null): Tenant
     {
         $freePlan = Plan::query()->where('slug', 'free')->where('is_active', true)->first();
 
@@ -51,7 +51,7 @@ final class ProvisionNewWorkspace
             throw new PlanNotFoundException('El plan free no está disponible en el catálogo.');
         }
 
-        $tenant = $this->createTenantWithSlug($user, $freePlan);
+        $tenant = $this->createTenantWithSlug($user, $freePlan, $workspaceName);
 
         $this->createOwnerSubscription($tenant, $freePlan);
         $this->makeOwner($user, $tenant);
@@ -68,12 +68,12 @@ final class ProvisionNewWorkspace
         return $tenant->fresh();
     }
 
-    private function createTenantWithSlug(User $user, Plan $freePlan): Tenant
+    private function createTenantWithSlug(User $user, Plan $freePlan, ?string $workspaceName = null): Tenant
     {
         // Workspace name derivado del usuario: "Mi espacio" + nombre. Se omite
         // para no presumir género/idioma; lo importante es que derive del nombre
         // y sea estable entre runs.
-        $workspaceName = trim($user->name);
+        $workspaceName = trim($workspaceName ?? $user->name);
 
         $baseSlug = Str::slug($workspaceName);
         $slug = $baseSlug !== '' ? $baseSlug : 'workspace';

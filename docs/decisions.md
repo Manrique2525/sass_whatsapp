@@ -1,5 +1,18 @@
 # Decisiones de arquitectura (ADRs)
 
+## ADR-136 · Platform Admin assisted customer operations (FASE 42)
+
+- **Estado**: Completa y validada localmente.
+- **Decisión**: El backoffice Platform puede provisionar un tenant activo con Owner y suscripción
+  Free, suspender/reactivar tenants y enviar recuperación de acceso sin entrar en el contexto del
+  tenant. El Platform Admin nunca recibe membresía tenant ni permisos tenant implícitos.
+- **Seguridad**: Todas las mutaciones requieren autenticación, email verificado, MFA Platform y
+  CSRF. El Owner nuevo recibe verificación y password reset por correo; no se muestran contraseñas
+  ni tokens. La asociación de un usuario existente exige confirmación explícita.
+- **Consecuencia**: La alta asistida comparte `ProvisionNewWorkspace` con el registro público,
+  conserva transacciones, plan Free obligatorio y provider local. Impersonation, Inbox global,
+  usuarios globales y planes pagados permanecen fuera de alcance.
+
 ## ADR-135 · Free Private Beta infrastructure defaults (FASE 40)
 
 - **Estado**: Aprobado parcialmente · detalles de target pendientes.

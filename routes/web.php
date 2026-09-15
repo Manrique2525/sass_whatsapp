@@ -112,7 +112,14 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/', PlatformDashboardController::class)->name('platform.index');
         Route::get('/dashboard', PlatformDashboardController::class)->name('platform.dashboard');
         Route::get('/customers', [PlatformCustomerController::class, 'index'])->name('platform.customers.index');
+        Route::get('/customers/create', [PlatformCustomerController::class, 'create'])->name('platform.customers.create');
+        Route::post('/customers', [PlatformCustomerController::class, 'store'])->name('platform.customers.store');
         Route::get('/customers/{tenant}', [PlatformCustomerController::class, 'show'])->name('platform.customers.show');
+        Route::post('/customers/{tenant}/suspend', [PlatformCustomerController::class, 'suspend'])->name('platform.customers.suspend');
+        Route::post('/customers/{tenant}/reactivate', [PlatformCustomerController::class, 'reactivate'])->name('platform.customers.reactivate');
+        Route::post('/customers/{tenant}/owner/resend-verification', [PlatformCustomerController::class, 'resendVerification'])->middleware('throttle:auth-password')->name('platform.customers.owner.verification');
+        Route::post('/customers/{tenant}/owner/send-password-reset', [PlatformCustomerController::class, 'sendPasswordReset'])->middleware('throttle:auth-password')->name('platform.customers.owner.password-reset');
+        Route::post('/customers/{tenant}/subscription/free', [PlatformCustomerController::class, 'createFreeSubscription'])->name('platform.customers.subscription.free');
         Route::get('/plans', [PlatformPlanController::class, 'index'])->name('platform.plans.index');
         Route::get('/plans/create', [PlatformPlanController::class, 'create'])->name('platform.plans.create');
         Route::post('/plans', [PlatformPlanController::class, 'store'])->name('platform.plans.store');

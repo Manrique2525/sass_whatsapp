@@ -78,6 +78,7 @@ final class PlatformCustomerQueryService
                 'users.id',
                 'users.name',
                 'users.email',
+                'users.email_verified_at',
                 'tenant_users.role',
                 'tenant_users.status',
                 'tenant_users.joined_at',
@@ -89,6 +90,7 @@ final class PlatformCustomerQueryService
                 'id' => (int) $member->id,
                 'name' => $member->name,
                 'email' => $member->email,
+                'email_verified' => $member->email_verified_at !== null,
                 'role' => $member->role,
                 'status' => $member->status,
                 'joined_at' => $member->joined_at,
@@ -228,6 +230,7 @@ final class PlatformCustomerQueryService
             ->selectSub($this->ownerQuery()->select('owners.id'), 'owner_id')
             ->selectSub($this->ownerQuery()->select('owners.name'), 'owner_name')
             ->selectSub($this->ownerQuery()->select('owners.email'), 'owner_email')
+            ->selectSub($this->ownerQuery()->select('owners.email_verified_at'), 'owner_email_verified_at')
             ->selectSub($this->countQuery('tenant_users', 'tenant_users.tenant_id', "tenant_users.status = 'active'"), 'users_count')
             ->selectSub($this->countQuery('contacts', 'contacts.tenant_id', 'contacts.deleted_at IS NULL'), 'contacts_count')
             ->selectSub($this->countQuery('conversations', 'conversations.tenant_id', 'conversations.deleted_at IS NULL'), 'conversations_count')
@@ -327,6 +330,7 @@ final class PlatformCustomerQueryService
             'owner' => $row->owner_id !== null ? [
                 'name' => $row->owner_name,
                 'email' => $row->owner_email,
+                'email_verified' => $row->owner_email_verified_at !== null,
             ] : null,
             'plan' => $row->plan_id !== null ? [
                 'id' => $row->plan_id,

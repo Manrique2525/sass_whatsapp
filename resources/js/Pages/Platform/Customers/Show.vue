@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Link, usePage } from '@inertiajs/vue3';
+import { Link, useForm, usePage } from '@inertiajs/vue3';
 import PlatformLayout from '@/Layouts/PlatformLayout.vue';
 
 interface Customer {
@@ -9,7 +9,7 @@ interface Customer {
     status: string;
     created_at: string;
     updated_at: string;
-    owner: { id: number; name: string; email: string } | null;
+    owner: { id: number; name: string; email: string; email_verified: boolean } | null;
     plan: { id: string; name: string; slug: string } | null;
     subscription: {
         id: string;
@@ -41,6 +41,12 @@ const label = (value: string | null): string => ({
 }[value ?? ''] ?? value ?? 'Not available');
 
 const maskLimit = (limit: number | null): string => limit === null ? 'Unlimited' : limit.toLocaleString();
+const action = (url: string, message: string, requiresReason = false): void => {
+    if (!window.confirm(message)) return;
+    const reason = requiresReason ? window.prompt('Reason for this administrative action:')?.trim() : undefined;
+    if (requiresReason && !reason) return;
+    useForm({ confirm: true, reason: reason ?? '' }).post(url);
+};
 </script>
 
 <template>
@@ -48,12 +54,12 @@ const maskLimit = (limit: number | null): string => limit === null ? 'Unlimited'
         <Link href="/platform/customers" class="text-sm font-semibold text-[#0b8f5a] hover:text-[#10261f]">← Back to Customers</Link>
         <div class="mt-5 flex flex-wrap items-start justify-between gap-4">
             <div><p class="app-eyebrow">Customer detail</p><h1 class="mt-2 text-3xl font-semibold tracking-[-0.04em]">{{ props.customer.name }}</h1><p class="mt-2 text-sm text-[#71877b]">{{ props.customer.slug }} · Created {{ formatDate(props.customer.created_at) }}</p></div>
-            <span class="rounded-full bg-[#eff9e8] px-3 py-1.5 text-xs font-semibold text-[#176b42]">{{ label(props.customer.status) }}</span>
+            <div class="flex flex-wrap items-center gap-3"><span class="rounded-full px-3 py-1.5 text-xs font-semibold" :class="props.customer.status === 'suspended' ? 'bg-red-50 text-red-700' : 'bg-[#eff9e8] text-[#176b42]'">{{ label(props.customer.status) }}</span><button v-if="props.customer.status === 'active'" type="button" class="app-button app-button--secondary" @click="action(`/platform/customers/${props.customer.id}/suspend`, 'Suspend this tenant? Users lose operational access, data is preserved, and the subscription remains.', true)">Suspend tenant</button><button v-else type="button" class="app-button app-button--primary" @click="action(`/platform/customers/${props.customer.id}/reactivate`, 'Reactivate this tenant?', true)">Reactivate tenant</button></div>
         </div>
 
         <section class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div class="app-card p-5"><p class="app-eyebrow">Owner</p><p class="mt-2 font-semibold">{{ props.customer.owner?.name ?? 'No owner' }}</p><p class="mt-1 break-all text-sm text-[#71877b]">{{ props.customer.owner?.email ?? '—' }}</p></div>
-            <div class="app-card p-5"><p class="app-eyebrow">Plan</p><p class="mt-2 font-semibold">{{ props.customer.plan?.name ?? 'No subscription' }}</p><p class="mt-1 text-sm text-[#71877b]">{{ label(props.customer.subscription?.status ?? null) }}</p><Link v-if="props.customer.subscription" :href="`/platform/customers/${props.customer.id}/subscription/edit`" class="mt-3 inline-block text-sm font-semibold text-[#0b8f5a]">Change plan</Link></div>
+            <div class="app-card p-5"><p class="app-eyebrow">Owner</p><p class="mt-2 font-semibold">{{ props.customer.owner?.name ?? 'No owner' }}</p><p class="mt-1 break-all text-sm text-[#71877b]">{{ props.customer.owner?.email ?? '—' }}</p><p v-if="props.customer.owner" class="mt-2 text-xs font-semibold" :class="props.customer.owner.email_verified ? 'text-[#176b42]' : 'text-amber-700'">Email {{ props.customer.owner.email_verified ? 'verified' : 'not verified' }}</p><div v-if="props.customer.owner" class="mt-4 flex flex-wrap gap-2"><button v-if="!props.customer.owner.email_verified" type="button" class="app-button app-button--secondary" @click="action(`/platform/customers/${props.customer.id}/owner/resend-verification`, 'Resend the owner verification email?')">Resend verification</button><button v-else type="button" class="app-button app-button--secondary" @click="action(`/platform/customers/${props.customer.id}/owner/send-password-reset`, 'Send a password reset email to the owner?')">Send password reset</button></div></div>
+            <div class="app-card p-5"><p class="app-eyebrow">Plan</p><p class="mt-2 font-semibold">{{ props.customer.plan?.name ?? 'No subscription' }}</p><p class="mt-1 text-sm text-[#71877b]">{{ label(props.customer.subscription?.status ?? null) }}</p><Link v-if="props.customer.subscription" :href="`/platform/customers/${props.customer.id}/subscription/edit`" class="mt-3 inline-block text-sm font-semibold text-[#0b8f5a]">Change plan</Link><button v-else type="button" class="mt-3 block text-sm font-semibold text-[#0b8f5a]" @click="action(`/platform/customers/${props.customer.id}/subscription/free`, 'Create the canonical Free subscription for this tenant?')">Create Free subscription</button></div>
             <div class="app-card p-5"><p class="app-eyebrow">Users</p><p class="mt-2 text-2xl font-semibold">{{ props.customer.metrics.users }}</p><p class="mt-1 text-sm text-[#71877b]">Active members</p></div>
             <div class="app-card p-5"><p class="app-eyebrow">Last activity</p><p class="mt-2 font-semibold">{{ formatDate(props.customer.metrics.last_activity_at) }}</p><p class="mt-1 text-sm text-[#71877b]">Conversation activity</p></div>
         </section>
