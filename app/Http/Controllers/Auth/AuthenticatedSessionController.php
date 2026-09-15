@@ -48,6 +48,14 @@ final class AuthenticatedSessionController extends Controller
         $request->session()->regenerate();
         $request->session()->forget(['platform_mfa_verified_user_id', 'platform_mfa_pending_secret']);
 
+        if ($user->isSuperAdmin()) {
+            // Platform access has its own authorization and MFA boundary; a
+            // tenant intended URL must not override it for global admins.
+            $request->session()->forget('url.intended');
+
+            return redirect()->route('platform.index');
+        }
+
         return redirect()->intended(route('dashboard'));
     }
 

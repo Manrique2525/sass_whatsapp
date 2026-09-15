@@ -13,13 +13,13 @@ test.describe('Platform Dashboard (FASE 36 U6)', () => {
     test('can review global metrics and operational widgets', async ({ page }) => {
             await page.goto('/platform', { waitUntil: 'domcontentloaded', timeout: 60_000 });
             await expect(page.getByRole('heading', { name: 'Operations overview' })).toBeVisible();
-            await expect(page.getByText('Customers', { exact: true }).first()).toBeVisible();
+            await expect(page.getByText('Clientes', { exact: true }).first()).toBeVisible();
             await expect(page.getByText('New customers', { exact: true })).toBeVisible();
             await expect(page.getByText('E2E Tenant A', { exact: true }).first()).toBeVisible();
             await expect(page.getByText('Recent platform activity', { exact: true })).toBeVisible();
             await expect(page.locator('a[href^="/platform/customers/"]').filter({ hasText: 'E2E Tenant A' }).first()).toBeVisible();
             await expect(page.locator('a[href^="/platform/plans/"]').filter({ hasText: 'Free' }).first()).toBeVisible();
-            await page.getByRole('link', { name: 'Subscriptions', exact: true }).click();
+            await page.getByRole('link', { name: 'Suscripciones', exact: true }).click();
             await expect(page).toHaveURL(/\/platform\/subscriptions$/);
         });
 

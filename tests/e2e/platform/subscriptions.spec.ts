@@ -7,7 +7,7 @@ test.describe('Platform Subscriptions (FASE 36 U5)', () => {
 
         test('can review subscriptions, preview and apply a local plan change', async ({ page }) => {
             await page.goto('/platform/subscriptions');
-            await expect(page.getByRole('heading', { name: 'Subscriptions', exact: true })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Subscriptions', exact: true })).toBeVisible();
             await expect(page.getByRole('link', { name: 'E2E Tenant A', exact: true })).toBeVisible();
             await page.getByRole('link', { name: 'E2E Tenant A', exact: true }).click();
             await page.getByRole('link', { name: 'Change plan' }).first().click();

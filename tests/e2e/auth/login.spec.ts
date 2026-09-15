@@ -18,6 +18,11 @@ test.describe('Login (E2E-AUTH-LOGIN)', () => {
         await expect(page.getByText(`Hola, ${owner.name}`)).toBeVisible();
     });
 
+    test('login de super admin redirige a Platform y activa el challenge MFA', async ({ page }) => {
+        await loginViaUi(page, USERS.platformAdmin.email, PASSWORD);
+        await expect(page).toHaveURL(/\/platform\/security\/challenge$/);
+    });
+
     test('tras el login se muestra el tenant activo', async ({ page }) => {
         await loginViaUi(page, owner.email, PASSWORD);
         await expectDashboard(page);

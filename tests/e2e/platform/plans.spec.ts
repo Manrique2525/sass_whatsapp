@@ -8,7 +8,7 @@ test.describe('Platform Plans (FASE 36 U4)', () => {
         await page.goto('/platform/plans');
         await expect(page.getByRole('heading', { name: 'Plans', exact: true })).toBeVisible();
         await expect(page.getByRole('link', { name: 'Free', exact: true })).toBeVisible();
-        await page.getByTestId('platform-navigation').getByRole('link', { name: 'Plans' }).click();
+        await page.getByTestId('platform-navigation').getByRole('link', { name: 'Planes' }).click();
         await page.getByRole('link', { name: 'Create plan' }).click();
         await expect(page).toHaveURL(/\/platform\/plans\/create$/);
         await expect(page.getByRole('heading', { name: 'Create plan', exact: true })).toBeVisible();

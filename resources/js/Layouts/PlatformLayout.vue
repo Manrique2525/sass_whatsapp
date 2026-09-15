@@ -11,11 +11,11 @@ const page = usePage();
 const mobileNavOpen = ref(false);
 
 const navigation = [
-    { label: 'Overview', href: '/platform' },
-    { label: 'Customers', href: '/platform/customers' },
-    { label: 'Plans', href: '/platform/plans' },
-    { label: 'Subscriptions', href: '/platform/subscriptions' },
-    { label: 'Security', href: '/platform/security' },
+    { label: 'Resumen', href: '/platform' },
+    { label: 'Clientes', href: '/platform/customers' },
+    { label: 'Planes', href: '/platform/plans' },
+    { label: 'Suscripciones', href: '/platform/subscriptions' },
+    { label: 'Seguridad', href: '/platform/security' },
 ];
 
 const isActive = (href: string): boolean => page.url === href || page.url.startsWith(`${href}/`);
@@ -35,7 +35,7 @@ const logout = (): void => {
                         <span class="hidden sm:inline">WhatsApp SaaS</span>
                     </Link>
                     <span class="rounded-full border border-[#b7f36b] bg-[#eff9e8] px-2.5 py-1 text-[10px] font-bold tracking-[0.14em] text-[#176b42]">
-                        PLATFORM ADMIN
+                        ADMINISTRADOR DE PLATAFORMA
                     </span>
                 </div>
 

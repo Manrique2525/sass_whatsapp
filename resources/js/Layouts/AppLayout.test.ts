@@ -31,26 +31,26 @@ describe('authenticated navigation', () => {
             'whatsapp.view', 'billing.view',
         ];
         const wrapper = mountLayout();
-        expect(wrapper.get('[data-testid="authenticated-navigation"]').text()).toContain('Knowledge');
+        expect(wrapper.get('[data-testid="authenticated-navigation"]').text()).toContain('Conocimiento');
         expect(wrapper.text()).toContain('Usuarios');
-        expect(wrapper.text()).toContain('Billing');
+        expect(wrapper.text()).toContain('Facturación');
     });
 
     it('shows admin billing read access without using manage permission', () => {
         auth.permissions = ['conversations.view', 'flows.view', 'knowledge.view', 'billing.view'];
         const wrapper = mountLayout();
-        expect(wrapper.text()).toContain('Billing');
-        expect(wrapper.text()).toContain('Knowledge');
+        expect(wrapper.text()).toContain('Facturación');
+        expect(wrapper.text()).toContain('Conocimiento');
     });
 
     it('keeps agent navigation free of admin-only surfaces', () => {
         auth.permissions = ['conversations.view', 'flows.view', 'faqs.view', 'leads.view', 'knowledge.view', 'contacts.view', 'business_profile.view', 'whatsapp.view'];
         const wrapper = mountLayout();
         expect(wrapper.text()).toContain('Conversaciones');
-        expect(wrapper.text()).toContain('Knowledge');
+        expect(wrapper.text()).toContain('Conocimiento');
         expect(wrapper.text()).not.toContain('Usuarios');
-        expect(wrapper.text()).not.toContain('Analytics');
-        expect(wrapper.text()).not.toContain('Billing');
+        expect(wrapper.text()).not.toContain('Analítica');
+        expect(wrapper.text()).not.toContain('Facturación');
     });
 
     it('marks the current route and closes the mobile menu with Escape', async () => {

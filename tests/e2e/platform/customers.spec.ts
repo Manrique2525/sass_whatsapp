@@ -11,7 +11,7 @@ test.describe('Platform Customers (FASE 36 U3)', () => {
         test('can open platform and review customers', async ({ page }) => {
             await page.goto('/platform');
             await expect(page.getByText('Platform Admin', { exact: true })).toBeVisible();
-            await page.getByTestId('platform-navigation').getByRole('link', { name: 'Customers' }).click();
+        await page.getByTestId('platform-navigation').getByRole('link', { name: 'Clientes' }).click();
             await expect(page).toHaveURL(/\/platform\/customers$/);
             await expect(page.getByRole('link', { name: 'E2E Tenant A', exact: true }).first()).toBeVisible();
             await expect(page.getByRole('link', { name: 'E2E Tenant B', exact: true }).first()).toBeVisible();

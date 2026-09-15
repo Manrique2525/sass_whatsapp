@@ -34,7 +34,11 @@ export default async function globalSetup(): Promise<void> {
             const page = await context.newPage();
 
             await loginViaUi(page, user.email, PASSWORD);
-            await expectDashboard(page);
+            if (key === 'platformAdmin') {
+                await page.waitForURL('**/platform/security/challenge', { timeout: 60_000, waitUntil: 'commit' });
+            } else {
+                await expectDashboard(page);
+            }
 
             if (key === 'platformAdmin') {
                 await page.goto('/platform/security/challenge', { waitUntil: 'domcontentloaded' });
