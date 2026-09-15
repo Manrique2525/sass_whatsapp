@@ -47,6 +47,58 @@ final class ProvisionPlatformAdmin
         });
     }
 
+    /**
+     * Provisions the deterministic local-only development administrator.
+     *
+     * @return array{user: User, created: bool}
+     */
+    public function provisionLocal(string $name, string $email, string $password): array
+    {
+        if (! app()->environment('local')) {
+            throw new \RuntimeException('This operation may only run in the local environment.');
+        }
+
+        return DB::transaction(function () use ($name, $email, $password): array {
+            $email = mb_strtolower(trim($email));
+            $user = User::query()->where('email', $email)->first();
+            $created = $user === null;
+
+            if ($user === null) {
+                $user = User::query()->create([
+                    'name' => trim($name),
+                    'email' => $email,
+                    'password' => $password,
+                ]);
+                $user->forceFill(['email_verified_at' => now()])->save();
+            } else {
+                $user->forceFill([
+                    'name' => trim($name),
+                    'password' => $password,
+                    'email_verified_at' => $user->email_verified_at ?? now(),
+                ])->save();
+            }
+
+            $this->roles->assignGlobalRole($user, UserRole::SuperAdmin);
+            $this->audit->record(
+                action: 'platform.admin.local_provisioned',
+                data: [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'environment' => 'local',
+                    'source' => 'artisan',
+                    'created' => $created,
+                ],
+                subjectType: User::class,
+                subjectId: $user->id,
+                actorUserId: null,
+                tenantId: null,
+                platform: true,
+            );
+
+            return ['user' => $user->fresh() ?? $user, 'created' => $created];
+        });
+    }
+
     private function record(string $action, User $user): void
     {
         $this->audit->record(

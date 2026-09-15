@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Domain\Tenants\Models\Tenant;
+use App\Domain\Users\Enums\TenantMembershipStatus;
 use App\Domain\Users\Enums\UserRole;
 use App\Domain\Users\Models\PlatformMfaCredential;
 use App\Domain\Users\Models\User;
@@ -131,6 +133,72 @@ test('requires MFA after email verification before platform access', function ()
 test('rejects non-interactive execution', function (): void {
     $this->artisan('platform-admin:create --no-interaction')
         ->expectsOutputToContain('requires an interactive terminal')
+        ->assertExitCode(1);
+
+    expect(User::query()->count())->toBe(0);
+});
+
+test('local command creates a verified global admin without tenant or MFA', function (): void {
+    $this->app->detectEnvironment(fn (): string => 'local');
+
+    $this->artisan('local:platform-admin')
+        ->expectsOutputToContain('LOCAL DEVELOPMENT CREDENTIALS ONLY')
+        ->expectsOutputToContain('CREATED')
+        ->assertExitCode(0);
+
+    $user = User::query()->where('email', 'platform-admin@local.test')->firstOrFail();
+
+    expect($user->isSuperAdmin())->toBeTrue()
+        ->and($user->hasVerifiedEmail())->toBeTrue()
+        ->and($user->tenantUsers()->count())->toBe(0)
+        ->and($user->platformMfaCredential)->toBeNull()
+        ->and(Hash::check('local-platform-admin-password', (string) $user->getRawOriginal('password')))->toBeTrue();
+
+    $audit = DB::table('audit_logs')->where('action', 'platform.admin.local_provisioned')->first();
+    expect($audit)->not->toBeNull()
+        ->and((string) $audit->data)->not->toContain('local-platform-admin-password');
+});
+
+test('local command is idempotent and resets only the synthetic local account password', function (): void {
+    $this->app->detectEnvironment(fn (): string => 'local');
+
+    $user = User::factory()->unverified()->create([
+        'name' => 'Old Local Name',
+        'email' => 'platform-admin@local.test',
+        'password' => 'old-password',
+    ]);
+    $user->tenantUsers()->create([
+        'tenant_id' => Tenant::factory()->create()->id,
+        'role' => UserRole::Owner,
+        'status' => TenantMembershipStatus::Active,
+    ]);
+
+    $this->artisan('local:platform-admin')
+        ->expectsOutputToContain('UPDATED/ALREADY EXISTS')
+        ->assertExitCode(0);
+
+    $user->refresh();
+    expect($user->name)->toBe('Local Platform Admin')
+        ->and($user->isSuperAdmin())->toBeTrue()
+        ->and($user->hasVerifiedEmail())->toBeTrue()
+        ->and($user->tenantUsers()->count())->toBe(1)
+        ->and($user->platformMfaCredential)->toBeNull()
+        ->and(Hash::check('local-platform-admin-password', (string) $user->getRawOriginal('password')))->toBeTrue();
+});
+
+test('local command rejects non-local environments before touching the database', function (): void {
+    $this->artisan('local:platform-admin')
+        ->expectsOutputToContain('may only run in the local environment')
+        ->assertExitCode(1);
+
+    expect(User::query()->count())->toBe(0);
+});
+
+test('local command rejects production without a bypass', function (): void {
+    $this->app->detectEnvironment(fn (): string => 'production');
+
+    $this->artisan('local:platform-admin')
+        ->expectsOutputToContain('may only run in the local environment')
         ->assertExitCode(1);
 
     expect(User::query()->count())->toBe(0);
