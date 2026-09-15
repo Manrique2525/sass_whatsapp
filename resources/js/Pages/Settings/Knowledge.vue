@@ -70,7 +70,7 @@ onMounted(load);
 <template>
     <AppLayout :user="user">
         <div class="app-card relative overflow-hidden p-6 sm:p-8">
-            <div><p class="app-eyebrow">Respuestas con IA</p><h1 class="mt-2 text-2xl font-semibold tracking-tight text-[#10261f]">Knowledge</h1><p class="mt-2 text-sm leading-6 text-[#71877b]">Organiza documentos que tus flujos pueden consultar.</p></div>
+            <div><p class="app-eyebrow">Respuestas con IA</p><h1 class="mt-2 text-2xl font-semibold tracking-tight text-[#10261f]">Base de conocimiento</h1><p class="mt-2 text-sm leading-6 text-[#71877b]">Organiza documentos que tus flujos pueden consultar.</p></div>
         </div>
         <p v-if="error" class="app-alert app-alert--error mt-6">{{ error }}</p>
         <p v-if="success" class="app-alert app-alert--success mt-6">{{ success }}</p>
